@@ -1278,6 +1278,12 @@ export class DocumentDetailComponent
     )
   }
 
+  // RKC: Check if user is superuser to restrict PDF editor access to admins only
+  get userIsSuperuser(): boolean {
+    return this.permissionsService.isSuperUser()
+  }
+  // /end RKC edit
+
   filterDocuments(items: ObjectWithId[] | NgbDateStruct[], type?: DataType) {
     const filterRules: FilterRule[] = items.flatMap((i) => {
       if (i.hasOwnProperty('year')) {

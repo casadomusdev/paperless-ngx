@@ -1458,14 +1458,42 @@ class SavedViewViewSet(ModelViewSet, PassUserMixin):
 
     def get_queryset(self):
         user = self.request.user
+        # RKC: Include saved views without owner (owner__isnull=True) to allow sharing views with all users
         return (
-            SavedView.objects.filter(owner=user)
+            SavedView.objects.filter(Q(owner=user) | Q(owner__isnull=True))
             .select_related("owner")
             .prefetch_related("filter_rules")
         )
+        # /end RKC edit
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+    # RKC: Prevent modification and deletion of shared saved views (views without owner)
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.owner is None:
+            return HttpResponseForbidden(
+                "Shared saved views (without owner) cannot be modified",
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.owner is None:
+            return HttpResponseForbidden(
+                "Shared saved views (without owner) cannot be modified",
+            )
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.owner is None:
+            return HttpResponseForbidden(
+                "Shared saved views (without owner) cannot be deleted",
+            )
+        return super().destroy(request, *args, **kwargs)
+    # /end RKC edit
 
 
 @extend_schema_view(
@@ -1517,6 +1545,12 @@ class BulkEditView(PassUserMixin):
         method = serializer.validated_data.get("method")
         parameters = serializer.validated_data.get("parameters")
         documents = serializer.validated_data.get("documents")
+        
+        # RKC: Restrict PDF editor to superusers only to prevent accidental file modifications
+        if method == bulk_edit.edit_pdf and not user.is_superuser:
+            return HttpResponseForbidden("PDF editor is restricted to administrators")
+        # /end RKC edit
+        
         if method in [
             bulk_edit.split,
             bulk_edit.merge,
