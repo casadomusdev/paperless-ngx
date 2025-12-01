@@ -24,6 +24,11 @@ export const SETTINGS_KEYS = {
   LANGUAGE: 'language',
   APP_LOGO: 'app_logo',
   APP_TITLE: 'app_title',
+  // RKC: Environment variable driven default settings
+  THEME_COLOR_DEFAULT: 'theme_color_default',
+  DARK_MODE_THUMB_INVERTED_DEFAULT: 'dark_mode_thumb_inverted_default',
+  LANGUAGE_DEFAULT: 'language_default',
+  // /end RKC edit
   // maintain old general-settings: for backwards compatibility
   BULK_EDIT_CONFIRMATION_DIALOGS:
     'general-settings:bulk-edit:confirmation-dialogs',

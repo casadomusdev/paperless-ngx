@@ -2428,6 +2428,12 @@ class UiSettingsView(GenericAPIView):
 
         ui_settings["auditlog_enabled"] = settings.AUDIT_LOG_ENABLED
 
+        # RKC: Pass custom UI defaults (theme color, dark mode thumb inversion, default language) to frontend
+        ui_settings["theme_color_default"] = settings.THEME_COLOR
+        ui_settings["dark_mode_thumb_inverted_default"] = settings.DARK_MODE_THUMB_INVERTED
+        ui_settings["language_default"] = settings.DEFAULT_LANGUAGE
+        # /end RKC edit
+
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:
             manager = PaperlessMailOAuth2Manager()
             if settings.GMAIL_OAUTH_ENABLED:

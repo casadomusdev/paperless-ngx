@@ -5,13 +5,14 @@ This document provides a comprehensive inventory of all RKC (Rob Kenis Consultin
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Core Features](#core-features)
-3. [Permission System](#permission-system)
-4. [Backend Customizations](#backend-customizations)
-5. [Frontend Customizations](#frontend-customizations)
-6. [File Structure](#file-structure)
-7. [Testing](#testing)
-8. [Maintenance Notes](#maintenance-notes)
+2. [Quick Start & Deployment](#quick-start--deployment)
+3. [Core Features](#core-features)
+4. [Permission System](#permission-system)
+5. [Backend Customizations](#backend-customizations)
+6. [Frontend Customizations](#frontend-customizations)
+7. [File Structure](#file-structure)
+8. [Testing](#testing)
+9. [Maintenance Notes](#maintenance-notes)
 
 ## Overview
 
@@ -20,6 +21,123 @@ The RKC customizations focus on:
 - Shared saved views functionality for all users
 - Superuser-only access to destructive document operations
 - Improved access control for collaborative features
+- Customizable theme color and appearance defaults via environment variables
+
+## Quick Start & Deployment
+
+### Setting Environment Variables
+
+The RKC customizations support optional environment variables for customizing default appearance. Add these to your deployment configuration:
+
+#### Docker Compose
+
+Add to your `docker-compose.yml` or `docker-compose.env.yml`:
+
+```yaml
+services:
+  webserver:
+    environment:
+      # Optional: Set custom default theme color (hex format)
+      PAPERLESS_UI_THEME_COLOR: "#2563eb"
+      
+      # Optional: Set dark mode thumbnail inversion default (true/false)
+      PAPERLESS_UI_DARK_MODE_THUMB_INVERTED: "true"
+      
+      # Optional: Set default UI language (language code)
+      PAPERLESS_UI_DEFAULT_LANGUAGE: "de-de"
+```
+
+Or use an environment file (`.env`):
+
+```bash
+# .env file
+PAPERLESS_UI_THEME_COLOR=#2563eb
+PAPERLESS_UI_DARK_MODE_THUMB_INVERTED=true
+PAPERLESS_UI_DEFAULT_LANGUAGE=de-de
+```
+
+#### Bare Metal Installation
+
+Export environment variables before starting Paperless:
+
+```bash
+export PAPERLESS_UI_THEME_COLOR="#2563eb"
+export PAPERLESS_UI_DARK_MODE_THUMB_INVERTED="true"
+export PAPERLESS_UI_DEFAULT_LANGUAGE="de-de"
+
+# Then start paperless
+./manage.py runserver
+```
+
+Or add to your systemd service file:
+
+```ini
+[Service]
+Environment="PAPERLESS_UI_THEME_COLOR=#2563eb"
+Environment="PAPERLESS_UI_DARK_MODE_THUMB_INVERTED=true"
+Environment="PAPERLESS_UI_DEFAULT_LANGUAGE=de-de"
+```
+
+### Rebuilding the Frontend
+
+After modifying any frontend customizations, you must rebuild the Angular application:
+
+#### Docker Installation
+
+```bash
+# Rebuild the Docker image
+docker compose build
+
+# Or if using the official image, rebuild only the frontend:
+docker compose run --rm webserver python3 manage.py collectstatic --clear --no-input
+```
+
+#### Bare Metal Installation
+
+```bash
+# Navigate to frontend source directory
+cd src-ui
+
+# Install dependencies (if needed)
+npm install
+
+# Build production frontend
+npm run build
+
+# Navigate back to project root
+cd ..
+
+# Collect static files
+python3 manage.py collectstatic --clear --no-input
+
+# Restart your web server
+sudo systemctl restart paperless-webserver
+```
+
+#### Development Mode
+
+For development with live reload:
+
+```bash
+cd src-ui
+npm install
+npm run start
+
+# Frontend will be available at http://localhost:4200
+# Backend API should be running separately on port 8000
+```
+
+### Applying Changes
+
+**After setting environment variables**:
+1. No rebuild needed - just restart the Paperless container/service
+2. Changes apply immediately to users without custom preferences
+3. Existing user preferences remain unchanged
+
+**After modifying code**:
+1. Rebuild frontend (see above)
+2. Restart backend service
+3. Clear browser cache if changes don't appear
 
 ## Core Features
 
@@ -275,8 +393,101 @@ SET owner_id = NULL
 WHERE id = <view_id>;
 ```
 
+## Environment Variables
+
+### 1. Theme Color Default (`PAPERLESS_UI_THEME_COLOR`)
+**Purpose**: Set a custom default theme color for new users and users who haven't selected a color
+
+**Type**: String (hex color)
+**Default**: `#17541f` (Paperless green)
+**Example**: `PAPERLESS_UI_THEME_COLOR=#2563eb`
+
+**Behavior**:
+- Users without a theme color preference will see this color
+- Users can still override this by selecting their own color in Settings
+- Changing this env var updates all users without a custom color instantly
+- Does not overwrite existing user preferences
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var
+- Backend: `src/documents/views.py` - Passes to frontend via `/api/ui_settings/`
+- Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
+- Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback
+
+### 2. Dark Mode Thumbnail Inversion Default (`PAPERLESS_UI_DARK_MODE_THUMB_INVERTED`)
+**Purpose**: Set the default for inverting document thumbnails in dark mode
+
+**Type**: Boolean
+**Default**: `true`
+**Example**: `PAPERLESS_UI_DARK_MODE_THUMB_INVERTED=false`
+
+**Behavior**:
+- New users will have this setting as their default
+- Users who haven't explicitly set this preference will use this value
+- Users can still override this in Settings > Appearance
+- Useful for organizations that want consistent default appearance
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var as boolean
+- Backend: `src/documents/views.py` - Passes to frontend via `/api/ui_settings/`
+- Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
+- Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback in `get()` method
+
+### 3. Default Language (`PAPERLESS_UI_DEFAULT_LANGUAGE`)
+**Purpose**: Set the default UI language for new users and users who haven't selected a language
+
+**Type**: String (language code)
+**Default**: `de-de` (German)
+**Example**: `PAPERLESS_UI_DEFAULT_LANGUAGE=fr-fr`
+
+**Behavior**:
+- Users without a language preference will see the UI in this language
+- Users can still override this by selecting their own language in Settings > General
+- Changing this env var updates all users without a custom language instantly
+- Does not overwrite existing user preferences
+
+**Available Language Codes**:
+- `de-de` (German) - Default
+- `en-us` (English US)
+- `en-gb` (English GB)
+- `fr-fr` (French)
+- `es-es` (Spanish)
+- `it-it` (Italian)
+- `nl-nl` (Dutch)
+- `pt-pt` (Portuguese)
+- `pt-br` (Portuguese Brazil)
+- `da-dk` (Danish)
+- `no-no` (Norwegian)
+- `sv-se` (Swedish)
+- `fi-fi` (Finnish)
+- `cs-cz` (Czech)
+- `pl-pl` (Polish)
+- `ru-ru` (Russian)
+- `ja-jp` (Japanese)
+- `ko-kr` (Korean)
+- `zh-cn` (Chinese Simplified)
+- `zh-tw` (Chinese Traditional)
+- `ar-ar` (Arabic)
+- And 15+ more languages
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var
+- Backend: `src/documents/views.py` - Passes to frontend via `/api/ui_settings/`
+- Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
+- Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback in `get()` method
+
 ## Version History
 
+- **v1.0.2 (2025-12-01)**: Default language environment variable
+  - Added `PAPERLESS_UI_DEFAULT_LANGUAGE` for custom default UI language
+  - Renamed environment variables to use `PAPERLESS_UI_` prefix for consistency
+  - All three UI defaults work as fallbacks without overriding user preferences
+  
+- **v1.0.1 (2025-12-01)**: Environment variable customizations
+  - Added `PAPERLESS_UI_THEME_COLOR` for custom default theme color
+  - Added `PAPERLESS_UI_DARK_MODE_THUMB_INVERTED` for dark mode thumbnail inversion default
+  - Both work as fallbacks - don't override existing user preferences
+  
 - **v1.0.0 (2025-12-01)**: Initial RKC customizations
   - PDF editor superuser restriction (backend + frontend)
   - Shared saved views with NULL owner support

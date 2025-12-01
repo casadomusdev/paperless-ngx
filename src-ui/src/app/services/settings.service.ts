@@ -444,9 +444,15 @@ export class SettingsService {
       )
     }
 
-    if (themeColor?.length) {
-      const hsl = hexToHsl(themeColor)
-      const bgBrightnessEstimate = estimateBrightnessForColor(themeColor)
+    // RKC: Use environment-configured default theme color as fallback
+    const effectiveThemeColor = themeColor?.length 
+      ? themeColor 
+      : (this.get(SETTINGS_KEYS.THEME_COLOR_DEFAULT) || PAPERLESS_GREEN_HEX)
+    // /end RKC edit
+
+    if (effectiveThemeColor?.length) {
+      const hsl = hexToHsl(effectiveThemeColor)
+      const bgBrightnessEstimate = estimateBrightnessForColor(effectiveThemeColor)
 
       if (bgBrightnessEstimate == BRIGHTNESS.DARK) {
         this._renderer.addClass(this.document.body, 'primary-dark')
@@ -472,7 +478,7 @@ export class SettingsService {
 
     this.meta.updateTag({
       name: 'theme-color',
-      content: themeColor?.length ? themeColor : PAPERLESS_GREEN_HEX,
+      content: effectiveThemeColor,
     })
   }
 
@@ -547,6 +553,22 @@ export class SettingsService {
     if (key === SETTINGS_KEYS.DEFAULT_PERMS_OWNER && value === undefined) {
       return this.currentUser.id
     }
+
+    // RKC: Use environment-configured defaults for dark mode thumb inversion and language
+    if (key === SETTINGS_KEYS.DARK_MODE_THUMB_INVERTED && value === undefined) {
+      const envDefault = this.get(SETTINGS_KEYS.DARK_MODE_THUMB_INVERTED_DEFAULT)
+      if (envDefault !== undefined) {
+        return envDefault
+      }
+    }
+
+    if (key === SETTINGS_KEYS.LANGUAGE && (value === undefined || value === null || value === '')) {
+      const envDefault = this.get(SETTINGS_KEYS.LANGUAGE_DEFAULT)
+      if (envDefault !== undefined && envDefault !== null && envDefault !== '') {
+        return envDefault
+      }
+    }
+    // /end RKC edit
 
     if (value !== undefined) {
       if (value === null) {
