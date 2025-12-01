@@ -2429,9 +2429,9 @@ class UiSettingsView(GenericAPIView):
         ui_settings["auditlog_enabled"] = settings.AUDIT_LOG_ENABLED
 
         # RKC: Pass custom UI defaults (theme color, dark mode thumb inversion, default language) to frontend
-        ui_settings["theme_color_default"] = settings.PAPERLESS_UI_THEME_COLOR
-        ui_settings["dark_mode_thumb_inverted_default"] = settings.PAPERLESS_UI_DARK_MODE_THUMB_INVERTED
-        ui_settings["language_default"] = settings.PAPERLESS_UI_DEFAULT_LANGUAGE
+        ui_settings["theme_color_default"] = getattr(settings, "THEME_COLOR", "#17541f")
+        ui_settings["dark_mode_thumb_inverted_default"] = getattr(settings, "DARK_MODE_THUMB_INVERTED", True)
+        ui_settings["language_default"] = getattr(settings, "DEFAULT_LANGUAGE", "de-de")
         # /end RKC edit
 
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:
