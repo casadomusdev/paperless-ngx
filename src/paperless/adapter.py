@@ -125,15 +125,27 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         Save the user instance. Default groups are assigned to the user, if
         specified in the settings.
         """
-        # save_user also calls account_adapter save_user which would set ACCOUNT_DEFAULT_GROUPS
-        user: User = super().save_user(request, sociallogin, form)
-        group_names: list[str] = settings.SOCIAL_ACCOUNT_DEFAULT_GROUPS
-        if len(group_names) > 0:
-            groups = Group.objects.filter(name__in=group_names)
-            logger.debug(
-                f"Adding default social groups to user `{user}`: {group_names}",
-            )
-            user.groups.add(*groups)
-            user.save()
-        handle_social_account_updated(None, request, sociallogin)
-        return user
+        try:
+            logger.debug(f"Starting social account save_user for {sociallogin.account}")
+            # save_user also calls account_adapter save_user which would set ACCOUNT_DEFAULT_GROUPS
+            user: User = super().save_user(request, sociallogin, form)
+            logger.debug(f"Successfully created/retrieved user: {user}")
+            
+            group_names: list[str] = settings.SOCIAL_ACCOUNT_DEFAULT_GROUPS
+            logger.debug(f"Social account default groups: {group_names}")
+            
+            if len(group_names) > 0:
+                groups = Group.objects.filter(name__in=group_names)
+                logger.debug(
+                    f"Adding default social groups to user `{user}`: {group_names}",
+                )
+                user.groups.add(*groups)
+                user.save()
+            
+            logger.debug(f"Calling handle_social_account_updated for user: {user}")
+            handle_social_account_updated(None, request, sociallogin)
+            logger.debug(f"Successfully completed save_user for user: {user}")
+            return user
+        except Exception as e:
+            logger.exception(f"Error in CustomSocialAccountAdapter.save_user: {e}")
+            raise
