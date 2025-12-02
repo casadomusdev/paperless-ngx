@@ -210,13 +210,16 @@ class IndexView(TemplateView):
     template_name = "index.html"
 
     def get_frontend_language(self):
-        if hasattr(
-            self.request.user,
-            "ui_settings",
-        ) and self.request.user.ui_settings.settings.get("language"):
+        # RKC: Handle None settings for new SSO users
+        if (
+            hasattr(self.request.user, "ui_settings")
+            and self.request.user.ui_settings.settings is not None
+            and self.request.user.ui_settings.settings.get("language")
+        ):
             lang = self.request.user.ui_settings.settings.get("language")
         else:
             lang = get_language()
+        # /end RKC edit
         # This is here for the following reason:
         # Django identifies languages in the form "en-us"
         # However, angular generates locales as "en-US".
@@ -2402,8 +2405,10 @@ class UiSettingsView(GenericAPIView):
 
         user = User.objects.select_related("ui_settings").get(pk=request.user.id)
         ui_settings = {}
-        if hasattr(user, "ui_settings"):
+        # RKC: Handle None settings for new SSO users
+        if hasattr(user, "ui_settings") and user.ui_settings.settings is not None:
             ui_settings = user.ui_settings.settings
+        # /end RKC edit
         if "update_checking" in ui_settings:
             ui_settings["update_checking"]["backend_setting"] = (
                 settings.ENABLE_UPDATE_CHECK

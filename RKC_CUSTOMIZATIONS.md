@@ -532,6 +532,13 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.4 (2025-12-02)**: SSO UiSettings bug fix
+  - Fixed critical bug where new SSO users would get error on first login
+  - Problem: When UiSettings is created, `settings` field defaults to NULL
+  - Views were calling `.get()` on None, causing AttributeError
+  - Fixed in `IndexView.get_frontend_language()` and `UiSettingsView.get()`
+  - Added NULL checks before accessing `ui_settings.settings`
+
 - **v1.0.3 (2025-12-02)**: Social account debug logging
   - Added `PAPERLESS_SOCIALACCOUNT_DEBUG` environment variable for troubleshooting SSO issues
   - Enables verbose django-allauth logging when set to true
