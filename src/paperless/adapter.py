@@ -131,10 +131,11 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         Save the user instance. Default groups are assigned to the user, if
         specified in the settings.
         """
-        # RKC: Log IMMEDIATELY - don't access sociallogin.account.user as it doesn't exist yet
-        logger.error(f"[SSO_DEBUG] save_user() called! provider={sociallogin.account.provider}")
+        # RKC: Log IMMEDIATELY - don't stringify sociallogin.account as it triggers user access
+        provider = sociallogin.account.provider
+        logger.error(f"[SSO_DEBUG] save_user() called! provider={provider}")
         try:
-            logger.debug(f"Starting social account save_user for {sociallogin.account}")
+            logger.debug(f"Starting social account save_user for provider: {provider}")
             # save_user also calls account_adapter save_user which would set ACCOUNT_DEFAULT_GROUPS
             user: User = super().save_user(request, sociallogin, form)
             logger.debug(f"Successfully created/retrieved user: {user}")
