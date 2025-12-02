@@ -868,7 +868,9 @@ LOGGING = {
             "backupCount": LOGROTATE_MAX_BACKUPS,
         },
     },
-    "root": {"handlers": ["console"]},
+    # RKC: Set root logger level to INFO so debug messages are not silently dropped
+    "root": {"handlers": ["console"], "level": "INFO"},
+    # /end RKC edit
     "loggers": {
         "paperless": {"handlers": ["file_paperless"], "level": "DEBUG"},
         "paperless_mail": {"handlers": ["file_mail"], "level": "DEBUG"},
@@ -877,6 +879,17 @@ LOGGING = {
         "kombu": {"handlers": ["file_celery"], "level": "DEBUG"},
         "_granian": {"handlers": ["file_paperless"], "level": "DEBUG"},
         "granian.access": {"handlers": ["file_paperless"], "level": "DEBUG"},
+        # RKC: Add Django core loggers to capture request/response errors
+        "django": {
+            "handlers": ["file_paperless", "console"],
+            "level": "INFO",
+        },
+        "django.request": {
+            "handlers": ["file_paperless", "console"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        # /end RKC edit
     },
 }
 

@@ -532,7 +532,16 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.0.4 (2025-12-02)**: SSO UiSettings bug fix
+- **v1.0.5 (2025-12-02)**: SSO UiSettings comprehensive fix
+  - Fixed critical bug where new SSO users would get error on first login
+  - Problem: When UiSettings is created, `settings` field defaults to NULL
+  - Fixed in `IndexView.get_frontend_language()` and `UiSettingsView.get()` with proper exception handling
+  - Added try/except blocks to catch `RelatedObjectDoesNotExist` exception
+  - Added post_save signal to auto-create UiSettings for new users (in `documents/signals/handlers.py`)
+  - Enhanced Django logging in settings.py with django.request logger for better debugging
+  - Added root logger level to capture all debug messages properly
+
+- **v1.0.4 (2025-12-02)**: SSO UiSettings bug fix (deprecated - see v1.0.5)
   - Fixed critical bug where new SSO users would get error on first login
   - Problem: When UiSettings is created, `settings` field defaults to NULL
   - Views were calling `.get()` on None, causing AttributeError

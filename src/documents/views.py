@@ -210,14 +210,14 @@ class IndexView(TemplateView):
     template_name = "index.html"
 
     def get_frontend_language(self):
-        # RKC: Handle None settings for new SSO users
-        if (
-            hasattr(self.request.user, "ui_settings")
-            and self.request.user.ui_settings.settings is not None
-            and self.request.user.ui_settings.settings.get("language")
-        ):
-            lang = self.request.user.ui_settings.settings.get("language")
-        else:
+        # RKC: Handle None settings for new SSO users - use try/except to catch RelatedObjectDoesNotExist
+        try:
+            ui_settings_obj = self.request.user.ui_settings
+            if ui_settings_obj.settings is not None and ui_settings_obj.settings.get("language"):
+                lang = ui_settings_obj.settings.get("language")
+            else:
+                lang = get_language()
+        except UiSettings.DoesNotExist:
             lang = get_language()
         # /end RKC edit
         # This is here for the following reason:
@@ -2405,9 +2405,14 @@ class UiSettingsView(GenericAPIView):
 
         user = User.objects.select_related("ui_settings").get(pk=request.user.id)
         ui_settings = {}
-        # RKC: Handle None settings for new SSO users
-        if hasattr(user, "ui_settings") and user.ui_settings.settings is not None:
-            ui_settings = user.ui_settings.settings
+        # RKC: Handle None settings for new SSO users - use try/except to catch RelatedObjectDoesNotExist
+        try:
+            ui_settings_obj = user.ui_settings
+            if ui_settings_obj.settings is not None:
+                ui_settings = ui_settings_obj.settings
+        except UiSettings.DoesNotExist:
+            # UiSettings doesn't exist yet, use empty dict
+            pass
         # /end RKC edit
         if "update_checking" in ui_settings:
             ui_settings["update_checking"]["backend_setting"] = (
