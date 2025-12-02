@@ -605,13 +605,21 @@ def create_ui_settings_for_new_user(sender, instance: User, created: bool, **kwa
     Automatically create UiSettings with empty settings dict for newly created users.
     This prevents issues when new SSO users sign up, as the system expects UiSettings
     to exist even if the settings field is null/empty.
+    
+    CRITICAL: This signal MUST NOT raise exceptions or it will break SSO signup!
     """
     if created:
-        UiSettings.objects.get_or_create(
-            user=instance,
-            defaults={"settings": {}},
-        )
-        logger.debug(f"Auto-created UiSettings for new user: {instance.username}")
+        try:
+            logger.error(f"[SIGNAL_DEBUG] Creating UiSettings for NEW user: {instance.username}")
+            ui_settings, was_created = UiSettings.objects.get_or_create(
+                user=instance,
+                defaults={"settings": {}},
+            )
+            logger.error(f"[SIGNAL_DEBUG] UiSettings {'created' if was_created else 'already existed'} for user: {instance.username}")
+        except Exception as e:
+            # CRITICAL: Do NOT raise - log error but let user creation succeed
+            logger.exception(f"[SIGNAL_DEBUG] ERROR creating UiSettings for {instance.username}: {e}")
+            logger.error(f"[SIGNAL_DEBUG] Continuing despite UiSettings creation failure - user signup will proceed")
 # /end RKC edit
 
 
