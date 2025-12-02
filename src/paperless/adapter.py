@@ -108,9 +108,15 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         Check whether the site is open for signups via social account, which can be
         disabled via the SOCIALACCOUNT_ALLOW_SIGNUPS setting.
         """
-        allow_signups = super().is_open_for_signup(request, sociallogin)
-        # Override with setting, otherwise default to super.
-        return getattr(settings, "SOCIALACCOUNT_ALLOW_SIGNUPS", allow_signups)
+        try:
+            logger.debug(f"[SSO] is_open_for_signup called for {sociallogin.account.provider}")
+            allow_signups = super().is_open_for_signup(request, sociallogin)
+            result = getattr(settings, "SOCIALACCOUNT_ALLOW_SIGNUPS", allow_signups)
+            logger.debug(f"[SSO] is_open_for_signup returning: {result}")
+            return result
+        except Exception as e:
+            logger.exception(f"[SSO] Error in is_open_for_signup: {e}")
+            raise
 
     def get_connect_redirect_url(self, request, socialaccount):
         """

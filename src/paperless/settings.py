@@ -898,6 +898,11 @@ if SOCIALACCOUNT_DEBUG:
         "handlers": ["file_paperless", "console"],
         "level": "DEBUG",
     }
+    # Also enable debug logging for paperless.auth which is used by adapter.py
+    LOGGING["loggers"]["paperless.auth"] = {
+        "handlers": ["file_paperless", "console"],
+        "level": "DEBUG",
+    }
 # /end RKC edit
 
 # Configure logging before calling any logger in settings.py so it will respect the log format, even if Django has not parsed the settings yet.
