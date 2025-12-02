@@ -403,3 +403,96 @@ No database migrations required. Changes are code-only:
 1. Deploy updated code
 2. Restart paperless container/service
 3. Changes take effect immediately for all new signups
+
+---
+
+## ACTUAL ROOT CAUSE - JWT Issuer Validation (2025-12-02 17:16)
+
+### The Real Problem
+
+After enabling DEBUG logging for ALL Django and allauth components, the actual error was revealed:
+
+```
+jwt.exceptions.InvalidIssuerError: Invalid issuer
+```
+
+**Full Stack Trace**:
+```
+File "/usr/local/lib/python3.12/site-packages/allauth/socialaccount/internal/jwtkit.py", line 89, in verify_and_decode
+    data = jwt.decode(...)
+File "/usr/local/lib/python3.12/site-packages/jwt/api_jwt.py", line 424, in _validate_iss
+    raise InvalidIssuerError("Invalid issuer")
+jwt.exceptions.InvalidIssuerError: Invalid issuer
+
+The above exception was the direct cause of the following exception:
+
+File "/usr/local/lib/python3.12/site-packages/allauth/socialaccount/providers/openid_connect/views.py", line 58, in complete_login
+    data["id_token"] = self._decode_id_token(app, id_token_str)
+allauth.socialaccount.providers.oauth2.client.OAuth2Error: Invalid id_token
+```
+
+### Why This Happens
+
+The current `SOCIALACCOUNT_PROVIDERS` configuration uses:
+```json
+{
+  "openid_connect": {
+    "APPS": [{
+      "provider_id": "microsoft-sso",
+      "settings": {
+        "server_url": "https://login.microsoftonline.com/organizations/v2.0/.well-known/openid-configuration"
+      }
+    }]
+  }
+}
+```
+
+The `/organizations/` endpoint is Microsoft's multi-tenant endpoint. When a user authenticates:
+1. Microsoft returns an id_token (JWT)
+2. The JWT contains an `iss` (issuer) claim with the TENANT-SPECIFIC issuer:
+   - `https://login.microsoftonline.com/{tenant-id}/v2.0`
+3. Allauth validates the JWT against the issuer from the discovery document
+4. The discovery document from `/organizations/` has a different issuer
+5. Validation fails with `InvalidIssuerError`
+
+### The Fix
+
+**Option 1: Use Tenant-Specific Endpoint** (Recommended for single-tenant apps)
+
+Update the `server_url` to use your specific tenant ID:
+```json
+{
+  "openid_connect": {
+    "APPS": [{
+      "provider_id": "microsoft-sso",
+      "settings": {
+        "server_url": "https://login.microsoftonline.com/{YOUR-TENANT-ID}/v2.0/.well-known/openid-configuration"
+      }
+    }]
+  }
+}
+```
+
+Replace `{YOUR-TENANT-ID}` with your actual Azure AD tenant ID (a GUID).
+
+**Option 2: Disable Issuer Validation** (For multi-tenant apps)
+
+If you need to support multiple tenants, you may need to configure allauth to skip issuer validation. However, this is less secure and not recommended unless absolutely necessary.
+
+### How to Apply
+
+1. Find your Azure AD Tenant ID in the Azure Portal
+2. Update the environment variable `PAPERLESS_SOCIALACCOUNT_PROVIDERS` with the tenant-specific endpoint
+3. Restart the container
+4. Test SSO signup with a new account
+
+### Verification
+
+After applying the fix, new user signup should work without errors. The logs should show:
+```
+[allauth.socialaccount] Successfully created social account
+[paperless.auth] Starting social account save_user
+[paperless.auth] Successfully completed save_user
+```
+
+**Status**: 🔍 Root cause identified, fix pending deployment
