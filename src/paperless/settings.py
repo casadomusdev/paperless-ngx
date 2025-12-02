@@ -921,8 +921,10 @@ if SOCIALACCOUNT_DEBUG:
 # Configure logging before calling any logger in settings.py so it will respect the log format, even if Django has not parsed the settings yet.
 logging.config.dictConfig(LOGGING)
 
+# RKC: Log status if social-account debug is enabled
 if SOCIALACCOUNT_DEBUG:
     logger.info("Social account debug logging enabled via PAPERLESS_SOCIALACCOUNT_DEBUG")
+# /end RKC edit
 
 
 ###############################################################################
