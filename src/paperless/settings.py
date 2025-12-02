@@ -883,6 +883,29 @@ LOGGING = {
 # Configure logging before calling any logger in settings.py so it will respect the log format, even if Django has not parsed the settings yet.
 logging.config.dictConfig(LOGGING)
 
+# RKC: Enable django-allauth debug logging via environment variable
+# This allows troubleshooting SSO/social account signup issues by enabling verbose logging
+# from the allauth library without requiring full DEBUG mode
+SOCIALACCOUNT_DEBUG = __get_boolean("PAPERLESS_SOCIALACCOUNT_DEBUG", "NO")
+
+if SOCIALACCOUNT_DEBUG:
+    LOGGING["loggers"]["allauth"] = {
+        "handlers": ["file_paperless", "console"],
+        "level": "DEBUG",
+    }
+    LOGGING["loggers"]["allauth.account"] = {
+        "handlers": ["file_paperless", "console"],
+        "level": "DEBUG",
+    }
+    LOGGING["loggers"]["allauth.socialaccount"] = {
+        "handlers": ["file_paperless", "console"],
+        "level": "DEBUG",
+    }
+    # Reconfigure logging with the updated settings
+    logging.config.dictConfig(LOGGING)
+    logger.info("Social account debug logging enabled via PAPERLESS_SOCIALACCOUNT_DEBUG")
+# /end RKC edit
+
 
 ###############################################################################
 # Task queue                                                                  #

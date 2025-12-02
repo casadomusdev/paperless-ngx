@@ -476,7 +476,68 @@ WHERE id = <view_id>;
 - Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
 - Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback in `get()` method
 
+### 4. Social Account Debug Logging (`PAPERLESS_SOCIALACCOUNT_DEBUG`)
+**Purpose**: Enable detailed debug logging for django-allauth SSO/social account signup and authentication
+
+**Type**: Boolean
+**Default**: `false`
+**Example**: `PAPERLESS_SOCIALACCOUNT_DEBUG=true`
+
+**Behavior**:
+- When enabled, adds verbose logging for all django-allauth operations
+- Logs to both `paperless.log` file and console output
+- Captures internal allauth signup flow, authentication attempts, and errors
+- Should only be enabled temporarily for troubleshooting SSO issues
+- No performance impact when disabled
+
+**Use Cases**:
+- Troubleshooting SSO signup failures
+- Debugging social account connection issues
+- Investigating authentication errors with OAuth providers
+- Diagnosing user creation problems
+
+**Log Output Location**:
+- File: `/usr/src/paperless/data/log/paperless.log` (inside container)
+- Console: `docker logs <container-name>` or systemd journal
+
+**What Gets Logged**:
+- `[allauth]` - General allauth framework operations
+- `[allauth.account]` - Account creation and management
+- `[allauth.socialaccount]` - Social provider authentication flow
+
+**Example Usage**:
+```bash
+# Enable debug logging
+docker compose down
+# Add to docker-compose.yml environment section:
+# - PAPERLESS_SOCIALACCOUNT_DEBUG=true
+docker compose up -d
+
+# Watch logs in real-time
+docker compose logs -f webserver
+
+# Attempt SSO signup
+# Check logs for detailed debug output
+
+# Disable when troubleshooting complete
+# Remove or set to false, then restart
+docker compose restart webserver
+```
+
+**Security Note**: Debug logs may contain sensitive information. Review logs before sharing and disable after troubleshooting.
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Conditionally adds allauth loggers to LOGGING configuration
+- Backend: `src/paperless/adapter.py` - Contains additional debug logging in CustomSocialAccountAdapter
+
 ## Version History
+
+- **v1.0.3 (2025-12-02)**: Social account debug logging
+  - Added `PAPERLESS_SOCIALACCOUNT_DEBUG` environment variable for troubleshooting SSO issues
+  - Enables verbose django-allauth logging when set to true
+  - Logs to both paperless.log file and console output
+  - Includes debug logging in CustomSocialAccountAdapter.save_user method
+  - Helps diagnose social account signup and authentication problems
 
 - **v1.0.2 (2025-12-01)**: Default language environment variable
   - Added `PAPERLESS_UI_DEFAULT_LANGUAGE` for custom default UI language
