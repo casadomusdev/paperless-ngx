@@ -902,19 +902,32 @@ if SOCIALACCOUNT_DEBUG:
     LOGGING["loggers"]["allauth"] = {
         "handlers": ["file_paperless", "console"],
         "level": "DEBUG",
+        "propagate": True,
     }
     LOGGING["loggers"]["allauth.account"] = {
         "handlers": ["file_paperless", "console"],
         "level": "DEBUG",
+        "propagate": True,
     }
     LOGGING["loggers"]["allauth.socialaccount"] = {
         "handlers": ["file_paperless", "console"],
         "level": "DEBUG",
+        "propagate": True,
     }
     # Also enable debug logging for paperless.auth which is used by adapter.py
     LOGGING["loggers"]["paperless.auth"] = {
         "handlers": ["file_paperless", "console"],
         "level": "DEBUG",
+        "propagate": True,
+    }
+    # RKC: Capture ALL django logs including successful requests during SSO debug
+    LOGGING["loggers"]["django"]["level"] = "DEBUG"
+    LOGGING["loggers"]["django.request"]["level"] = "DEBUG"
+    # Add django.security logger to catch security-related issues
+    LOGGING["loggers"]["django.security"] = {
+        "handlers": ["file_paperless", "console"],
+        "level": "DEBUG",
+        "propagate": False,
     }
 # /end RKC edit
 
