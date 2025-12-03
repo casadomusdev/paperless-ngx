@@ -131,30 +131,21 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         Save the user instance. Default groups are assigned to the user, if
         specified in the settings.
         """
-        # RKC: Log IMMEDIATELY - don't stringify sociallogin.account as it triggers user access
-        provider = sociallogin.account.provider
-        logger.error(f"[SSO_DEBUG] save_user() called! provider={provider}")
         try:
-            logger.debug(f"Starting social account save_user for provider: {provider}")
-            # save_user also calls account_adapter save_user which would set ACCOUNT_DEFAULT_GROUPS
+            # RKC: Create user first, THEN log (to avoid accessing sociallogin.account.user before it exists)
             user: User = super().save_user(request, sociallogin, form)
-            logger.debug(f"Successfully created/retrieved user: {user}")
+            logger.debug(f"Social SSO: Created/retrieved user: {user.username}")
             
             group_names: list[str] = settings.SOCIAL_ACCOUNT_DEFAULT_GROUPS
-            logger.debug(f"Social account default groups: {group_names}")
-            
             if len(group_names) > 0:
                 groups = Group.objects.filter(name__in=group_names)
-                logger.debug(
-                    f"Adding default social groups to user `{user}`: {group_names}",
-                )
+                logger.debug(f"Social SSO: Adding groups to {user.username}: {group_names}")
                 user.groups.add(*groups)
                 user.save()
             
-            logger.debug(f"Calling handle_social_account_updated for user: {user}")
             handle_social_account_updated(None, request, sociallogin)
-            logger.debug(f"Successfully completed save_user for user: {user}")
+            logger.debug(f"Social SSO: Completed save_user for {user.username}")
             return user
         except Exception as e:
-            logger.exception(f"Error in CustomSocialAccountAdapter.save_user: {e}")
+            logger.exception(f"Social SSO: Error in save_user: {e}")
             raise
