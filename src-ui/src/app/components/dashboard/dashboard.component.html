@@ -45,7 +45,18 @@
             </div>
           </div>
         }
-        @for (v of dashboardViews; track v.id) {
+        <!-- RKC: Display global dashboard views (not draggable, ordered by admin) -->
+        @for (v of globalDashboardViews(); track v.id) {
+          <div class="col">
+            <pngx-saved-view-widget
+              [savedView]="v"
+              [cdkDragDisabled]="true"
+              >
+            </pngx-saved-view-widget>
+          </div>
+        }
+        <!-- RKC: Display user dashboard views (draggable, ordered by user) -->
+        @for (v of userDashboardViews(); track v.id) {
           <div class="col">
             <pngx-saved-view-widget
               [savedView]="v"
@@ -55,6 +66,7 @@
             </pngx-saved-view-widget>
           </div>
         }
+        <!-- /end RKC edit -->
       </ng-container>
     </div>
   </div>

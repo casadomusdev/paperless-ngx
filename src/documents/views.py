@@ -2471,7 +2471,34 @@ class UiSettingsView(GenericAPIView):
                 logger.warning(f"[RKC Global Views] Error fetching admin user settings: {e}")
 
         ui_settings["global_views_sort_order"] = global_views_sort_order
-        logger.info(f"[RKC Global Views] Passing to frontend: {global_views_sort_order}")
+        logger.info(f"[RKC Global Views] Passing sidebar sort order to frontend: {global_views_sort_order}")
+
+        # RKC: Pass global dashboard views sort order from designated admin user to frontend
+        global_dashboard_views_sort_order = None
+        if settings.GLOBAL_VIEWS_ADMIN_USER_ID:
+            try:
+                admin_user = User.objects.select_related("ui_settings").get(
+                    id=settings.GLOBAL_VIEWS_ADMIN_USER_ID
+                )
+                logger.info(f"[RKC Global Dashboard Views] Found admin user: {admin_user.username} (ID: {admin_user.id})")
+                if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
+                    # Access the nested "saved_views" object
+                    saved_views_settings = admin_user.ui_settings.settings.get("saved_views", {})
+                    logger.info(f"[RKC Global Dashboard Views] saved_views object keys: {list(saved_views_settings.keys()) if isinstance(saved_views_settings, dict) else 'not a dict'}")
+                    
+                    if isinstance(saved_views_settings, dict):
+                        # Try different possible key names for the dashboard sort order
+                        global_dashboard_views_sort_order = saved_views_settings.get("dashboard-views-sort-order") or saved_views_settings.get("dashboard_views_sort_order")
+                        logger.info(f"[RKC Global Dashboard Views] Retrieved dashboard sort order from nested saved_views: {global_dashboard_views_sort_order}")
+                    else:
+                        logger.warning(f"[RKC Global Dashboard Views] saved_views is not a dict: {type(saved_views_settings)}")
+                else:
+                    logger.warning(f"[RKC Global Dashboard Views] Admin user {admin_user.username} has no ui_settings or settings is None")
+            except (User.DoesNotExist, UiSettings.DoesNotExist) as e:
+                logger.warning(f"[RKC Global Dashboard Views] Error fetching admin user settings: {e}")
+
+        ui_settings["global_dashboard_views_sort_order"] = global_dashboard_views_sort_order
+        logger.info(f"[RKC Global Dashboard Views] Passing dashboard sort order to frontend: {global_dashboard_views_sort_order}")
         # /end RKC edit
 
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:

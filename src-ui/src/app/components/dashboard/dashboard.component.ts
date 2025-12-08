@@ -5,7 +5,7 @@ import {
   DragDropModule,
   moveItemInArray,
 } from '@angular/cdk/drag-drop'
-import { Component, inject } from '@angular/core'
+import { Component, computed, inject } from '@angular/core'
 import { RouterModule } from '@angular/router'
 import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { TourNgBootstrapModule, TourService } from 'ngx-ui-tour-ng-bootstrap'
@@ -47,13 +47,31 @@ export class DashboardComponent extends ComponentWithPermissions {
   private tourService = inject(TourService)
   private toastService = inject(ToastService)
 
-  public dashboardViews: SavedView[] = []
+  // RKC: Separate global dashboard views (owner=null) from user dashboard views
+  // Global views are ordered by admin's dashboard sort order, user views by current user's order
+  globalDashboardViews = computed(() => {
+    const allViews = this.savedViewService.dashboardViews
+    const globalViews = allViews.filter((v) => v.owner === null)
+
+    const globalSortOrder = this.settingsService.globalDashboardViewsSortOrder
+    if (globalSortOrder?.length > 0) {
+      return globalSortOrder
+        .map((id) => globalViews.find((v) => v.id === id))
+        .concat(globalViews.filter((v) => !globalSortOrder.includes(v.id)))
+        .filter((v) => v)
+    }
+    return globalViews
+  })
+
+  userDashboardViews = computed(() => {
+    return this.savedViewService.dashboardViews.filter((v) => v.owner !== null)
+  })
+  // /end RKC edit
+
   constructor() {
     super()
 
-    this.savedViewService.listAll().subscribe(() => {
-      this.dashboardViews = this.savedViewService.dashboardViews
-    })
+    this.savedViewService.listAll().subscribe()
   }
 
   get subtitle() {
@@ -81,21 +99,18 @@ export class DashboardComponent extends ComponentWithPermissions {
   }
 
   onDrop(event: CdkDragDrop<SavedView[]>) {
-    moveItemInArray(
-      this.dashboardViews,
-      event.previousIndex,
-      event.currentIndex
-    )
+    // RKC: Only allow reordering user dashboard views, not global views
+    const userViews = this.userDashboardViews()
+    moveItemInArray(userViews, event.previousIndex, event.currentIndex)
 
-    this.settingsService
-      .updateDashboardViewsSort(this.dashboardViews)
-      .subscribe({
-        next: () => {
-          this.toastService.showInfo($localize`Dashboard updated`)
-        },
-        error: (e) => {
-          this.toastService.showError($localize`Error updating dashboard`, e)
-        },
-      })
+    this.settingsService.updateDashboardViewsSort(userViews).subscribe({
+      next: () => {
+        this.toastService.showInfo($localize`Dashboard updated`)
+      },
+      error: (e) => {
+        this.toastService.showError($localize`Error updating dashboard`, e)
+      },
+    })
+    // /end RKC edit
   }
 }

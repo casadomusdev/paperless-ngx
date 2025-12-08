@@ -721,5 +721,9 @@ export class SettingsService {
   get globalViewsSortOrder(): number[] | null {
     return this.settings['global_views_sort_order'] || null
   }
+
+  get globalDashboardViewsSortOrder(): number[] | null {
+    return this.settings['global_dashboard_views_sort_order'] || null
+  }
   // /end RKC edit
 }

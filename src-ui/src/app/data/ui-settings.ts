@@ -65,6 +65,8 @@ export const SETTINGS_KEYS = {
     'general-settings:saved-views:sidebar-views-sort-order',
   SIDEBAR_VIEWS_SHOW_COUNT:
     'general-settings:saved-views:sidebar-views-show-count',
+  GLOBAL_VIEWS_SORT_ORDER: 'global_views_sort_order',
+  GLOBAL_DASHBOARD_VIEWS_SORT_ORDER: 'global_dashboard_views_sort_order',
   TOUR_COMPLETE: 'general-settings:tour-complete',
   DEFAULT_PERMS_OWNER: 'general-settings:permissions:default-owner',
   DEFAULT_PERMS_VIEW_USERS: 'general-settings:permissions:default-view-users',
