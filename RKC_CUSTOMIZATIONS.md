@@ -175,18 +175,21 @@ npm run start
 - Users can access but not modify shared views
 - Owner can be cleared directly in database: `UPDATE documents_savedview SET owner_id = NULL WHERE id = X`
 
-### 3. Global Saved Views Sidebar Organization
-**Purpose**: Organize global saved views in a dedicated "Shortcuts" section with consistent ordering across all users
+### 3. Global Saved Views Organization (Sidebar & Dashboard)
+**Purpose**: Organize global saved views with consistent ordering across all users in both sidebar and dashboard
 
 **Environment Variable**:
-- `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`: User ID of admin whose sidebar sort order determines global view ordering
+- `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`: User ID of admin whose view sort orders determine global view ordering
 
 **Files Modified**:
 - `src/paperless/settings.py` - Environment variable configuration
-- `src/documents/views.py` - Pass admin user's sort order to frontend
-- `src-ui/src/app/services/settings.service.ts` - Getter for global views sort order
-- `src-ui/src/app/components/app-frame/app-frame.component.ts` - Computed properties for view separation and sorting
-- `src-ui/src/app/components/app-frame/app-frame.component.html` - Separate template sections for global and user views
+- `src/documents/views.py` - Pass admin user's sidebar and dashboard sort orders to frontend
+- `src-ui/src/app/data/ui-settings.ts` - Settings keys for global views sort orders
+- `src-ui/src/app/services/settings.service.ts` - Getters for global views sort orders (sidebar and dashboard)
+- `src-ui/src/app/components/app-frame/app-frame.component.ts` - Computed properties for sidebar view separation and sorting
+- `src-ui/src/app/components/app-frame/app-frame.component.html` - Separate template sections for global and user sidebar views
+- `src-ui/src/app/components/dashboard/dashboard.component.ts` - Computed properties for dashboard view separation and sorting
+- `src-ui/src/app/components/dashboard/dashboard.component.html` - Separate template sections for global and user dashboard views
 - `src-ui/src/app/components/manage/saved-views/saved-views.component.ts` - Filter global views from management page
 
 **Key Changes**:
@@ -196,21 +199,29 @@ npm run start
    - Global views are not draggable (prevents confusion)
    - User views remain draggable for personalized ordering
 
-2. **Ordering**:
-   - Global views ordered by admin user's sidebar-views-sort-order setting
-   - Falls back to alphabetical ordering if admin sort order unavailable
-   - Consistent ordering across all users
+2. **Dashboard Display**:
+   - Global views appear first on dashboard
+   - User's own dashboard views appear after global views
+   - Global views are not draggable (marked with `cdkDragDisabled`)
+   - User dashboard views remain draggable for personalized ordering
 
-3. **Management Page**:
+3. **Ordering**:
+   - Sidebar global views ordered by admin user's `sidebar-views-sort-order` setting
+   - Dashboard global views ordered by admin user's `dashboard-views-sort-order` setting
+   - Falls back to alphabetical ordering if admin sort order unavailable
+   - Consistent ordering across all users in both locations
+
+4. **Management Page**:
    - Global views hidden from non-admin users in saved views management
    - Prevents confusion and accidental attempts to edit global views
    - Admins can see all views including global ones
 
 **Use Case**:
 - Organization creates global saved views with `owner_id = NULL`
-- Designated admin user (via PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID) organizes their sidebar
-- All users see global views in same order as admin's organization
+- Designated admin user (via PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID) organizes global views in both sidebar and dashboard
+- All users see global views in same order as admin's organization in both locations
 - Clean separation between organizational shortcuts and personal views
+- Admin can organize sidebar and dashboard independently
 
 ## Permission System
 
