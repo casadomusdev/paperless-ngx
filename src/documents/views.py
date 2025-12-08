@@ -2455,18 +2455,16 @@ class UiSettingsView(GenericAPIView):
                 )
                 logger.info(f"[RKC Global Views] Found admin user: {admin_user.username} (ID: {admin_user.id})")
                 if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
-                    # Debug: log all available keys
-                    logger.info(f"[RKC Global Views] All keys in admin settings: {list(admin_user.ui_settings.settings.keys())}")
+                    # Access the nested "saved_views" object
+                    saved_views_settings = admin_user.ui_settings.settings.get("saved_views", {})
+                    logger.info(f"[RKC Global Views] saved_views object keys: {list(saved_views_settings.keys()) if isinstance(saved_views_settings, dict) else 'not a dict'}")
                     
-                    # Try full key first, then fallback to underscore version
-                    global_views_sort_order = admin_user.ui_settings.settings.get(
-                        "general-settings:saved-views:sidebar-views-sort-order", None
-                    )
-                    if global_views_sort_order is None:
-                        global_views_sort_order = admin_user.ui_settings.settings.get(
-                            "sidebar_views_sort_order", None
-                        )
-                    logger.info(f"[RKC Global Views] Retrieved sort order from admin settings: {global_views_sort_order}")
+                    if isinstance(saved_views_settings, dict):
+                        # Try different possible key names for the sort order
+                        global_views_sort_order = saved_views_settings.get("sidebar-views-sort-order") or saved_views_settings.get("sidebar_views_sort_order")
+                        logger.info(f"[RKC Global Views] Retrieved sort order from nested saved_views: {global_views_sort_order}")
+                    else:
+                        logger.warning(f"[RKC Global Views] saved_views is not a dict: {type(saved_views_settings)}")
                 else:
                     logger.warning(f"[RKC Global Views] Admin user {admin_user.username} has no ui_settings or settings is None")
             except (User.DoesNotExist, UiSettings.DoesNotExist) as e:
