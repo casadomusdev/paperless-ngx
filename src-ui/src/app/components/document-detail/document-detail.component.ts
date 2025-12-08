@@ -1282,6 +1282,11 @@ export class DocumentDetailComponent
   get userIsSuperuser(): boolean {
     return this.permissionsService.isSuperUser()
   }
+
+  // RKC: Check if PDF editor restriction feature is enabled
+  get pdfEditorRestrictToSuperuser(): boolean {
+    return this.settings.get(SETTINGS_KEYS.PDF_EDITOR_RESTRICT_TO_SUPERUSER)
+  }
   // /end RKC edit
 
   filterDocuments(items: ObjectWithId[] | NgbDateStruct[], type?: DataType) {

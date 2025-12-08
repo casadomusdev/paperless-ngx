@@ -1363,6 +1363,15 @@ DARK_MODE_THUMB_INVERTED = __get_boolean("PAPERLESS_UI_DARK_MODE_THUMB_INVERTED"
 DEFAULT_LANGUAGE = os.getenv("PAPERLESS_UI_DEFAULT_LANGUAGE", "de-de")
 # /end RKC edit
 
+# RKC: Optional PDF editor restriction to superusers only
+# When disabled (default), app behaves like original Paperless-ngx where PDF editor
+# is available to all users (subject to standard ownership/permission checks)
+PDF_EDITOR_RESTRICT_TO_SUPERUSER = __get_boolean(
+    "PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER",
+    "NO",
+)
+# /end RKC edit
+
 # RKC: Global saved views admin user ID for ordering shortcuts in sidebar
 # This user's saved views sort order will be used to determine the order of global views
 # (views with owner=NULL) in the sidebar for all users

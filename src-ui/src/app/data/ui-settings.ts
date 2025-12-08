@@ -28,6 +28,7 @@ export const SETTINGS_KEYS = {
   THEME_COLOR_DEFAULT: 'theme_color_default',
   DARK_MODE_THUMB_INVERTED_DEFAULT: 'dark_mode_thumb_inverted_default',
   LANGUAGE_DEFAULT: 'language_default',
+  PDF_EDITOR_RESTRICT_TO_SUPERUSER: 'pdf_editor_restrict_to_superuser',
   // /end RKC edit
   // maintain old general-settings: for backwards compatibility
   BULK_EDIT_CONFIRMATION_DIALOGS:

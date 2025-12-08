@@ -1549,8 +1549,12 @@ class BulkEditView(PassUserMixin):
         parameters = serializer.validated_data.get("parameters")
         documents = serializer.validated_data.get("documents")
         
-        # RKC: Restrict PDF editor to superusers only to prevent accidental file modifications
-        if method == bulk_edit.edit_pdf and not user.is_superuser:
+        # RKC: Restrict PDF editor to superusers only if enabled via env var
+        if (
+            method == bulk_edit.edit_pdf
+            and settings.PDF_EDITOR_RESTRICT_TO_SUPERUSER
+            and not user.is_superuser
+        ):
             return HttpResponseForbidden("PDF editor is restricted to administrators")
         # /end RKC edit
         
@@ -2444,34 +2448,28 @@ class UiSettingsView(GenericAPIView):
         ui_settings["language_default"] = getattr(settings, "DEFAULT_LANGUAGE", "de-de")
         # /end RKC edit
 
+        # RKC: Pass PDF editor restriction setting to frontend
+        ui_settings["pdf_editor_restrict_to_superuser"] = getattr(
+            settings, "PDF_EDITOR_RESTRICT_TO_SUPERUSER", False
+        )
+        # /end RKC edit
+
         # RKC: Pass global saved views sort order from designated admin user to frontend
         # This allows all users to see global views (owner=NULL) in the same order
         global_views_sort_order = None
-        logger.info(f"[RKC Global Views] GLOBAL_VIEWS_ADMIN_USER_ID: {settings.GLOBAL_VIEWS_ADMIN_USER_ID}")
         if settings.GLOBAL_VIEWS_ADMIN_USER_ID:
             try:
                 admin_user = User.objects.select_related("ui_settings").get(
                     id=settings.GLOBAL_VIEWS_ADMIN_USER_ID
                 )
-                logger.info(f"[RKC Global Views] Found admin user: {admin_user.username} (ID: {admin_user.id})")
                 if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
-                    # Access the nested "saved_views" object
                     saved_views_settings = admin_user.ui_settings.settings.get("saved_views", {})
-                    logger.info(f"[RKC Global Views] saved_views object keys: {list(saved_views_settings.keys()) if isinstance(saved_views_settings, dict) else 'not a dict'}")
-                    
                     if isinstance(saved_views_settings, dict):
-                        # Try different possible key names for the sort order
                         global_views_sort_order = saved_views_settings.get("sidebar-views-sort-order") or saved_views_settings.get("sidebar_views_sort_order")
-                        logger.info(f"[RKC Global Views] Retrieved sort order from nested saved_views: {global_views_sort_order}")
-                    else:
-                        logger.warning(f"[RKC Global Views] saved_views is not a dict: {type(saved_views_settings)}")
-                else:
-                    logger.warning(f"[RKC Global Views] Admin user {admin_user.username} has no ui_settings or settings is None")
-            except (User.DoesNotExist, UiSettings.DoesNotExist) as e:
-                logger.warning(f"[RKC Global Views] Error fetching admin user settings: {e}")
+            except (User.DoesNotExist, UiSettings.DoesNotExist):
+                pass
 
         ui_settings["global_views_sort_order"] = global_views_sort_order
-        logger.info(f"[RKC Global Views] Passing sidebar sort order to frontend: {global_views_sort_order}")
 
         # RKC: Pass global dashboard views sort order from designated admin user to frontend
         global_dashboard_views_sort_order = None
@@ -2480,25 +2478,14 @@ class UiSettingsView(GenericAPIView):
                 admin_user = User.objects.select_related("ui_settings").get(
                     id=settings.GLOBAL_VIEWS_ADMIN_USER_ID
                 )
-                logger.info(f"[RKC Global Dashboard Views] Found admin user: {admin_user.username} (ID: {admin_user.id})")
                 if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
-                    # Access the nested "saved_views" object
                     saved_views_settings = admin_user.ui_settings.settings.get("saved_views", {})
-                    logger.info(f"[RKC Global Dashboard Views] saved_views object keys: {list(saved_views_settings.keys()) if isinstance(saved_views_settings, dict) else 'not a dict'}")
-                    
                     if isinstance(saved_views_settings, dict):
-                        # Try different possible key names for the dashboard sort order
                         global_dashboard_views_sort_order = saved_views_settings.get("dashboard-views-sort-order") or saved_views_settings.get("dashboard_views_sort_order")
-                        logger.info(f"[RKC Global Dashboard Views] Retrieved dashboard sort order from nested saved_views: {global_dashboard_views_sort_order}")
-                    else:
-                        logger.warning(f"[RKC Global Dashboard Views] saved_views is not a dict: {type(saved_views_settings)}")
-                else:
-                    logger.warning(f"[RKC Global Dashboard Views] Admin user {admin_user.username} has no ui_settings or settings is None")
-            except (User.DoesNotExist, UiSettings.DoesNotExist) as e:
-                logger.warning(f"[RKC Global Dashboard Views] Error fetching admin user settings: {e}")
+            except (User.DoesNotExist, UiSettings.DoesNotExist):
+                pass
 
         ui_settings["global_dashboard_views_sort_order"] = global_dashboard_views_sort_order
-        logger.info(f"[RKC Global Dashboard Views] Passing dashboard sort order to frontend: {global_dashboard_views_sort_order}")
         # /end RKC edit
 
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:

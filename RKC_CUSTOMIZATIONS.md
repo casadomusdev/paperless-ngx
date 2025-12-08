@@ -5,23 +5,56 @@ This document provides a comprehensive inventory of all RKC (Rob Kenis Consultin
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Quick Start & Deployment](#quick-start--deployment)
-3. [Core Features](#core-features)
-4. [Permission System](#permission-system)
-5. [Backend Customizations](#backend-customizations)
-6. [Frontend Customizations](#frontend-customizations)
-7. [File Structure](#file-structure)
-8. [Testing](#testing)
-9. [Maintenance Notes](#maintenance-notes)
+2. [Customizations At A Glance](#customizations-at-a-glance)
+3. [Quick Start & Deployment](#quick-start--deployment)
+4. [Core Features](#core-features)
+5. [Permission System](#permission-system)
+6. [Backend Customizations](#backend-customizations)
+7. [Frontend Customizations](#frontend-customizations)
+8. [File Structure](#file-structure)
+9. [Testing](#testing)
+10. [Environment Variables](#environment-variables)
+11. [Maintenance Notes](#maintenance-notes)
+12. [Version History](#version-history)
 
 ## Overview
 
-The RKC customizations focus on:
-- Enhanced security controls for PDF editing operations
-- Shared saved views functionality for all users
-- Superuser-only access to destructive document operations
-- Improved access control for collaborative features
-- Customizable theme color and appearance defaults via environment variables
+The RKC customizations enhance Paperless-ngx with security controls, collaborative features, and customizable defaults. All customizations are marked with "RKC:" comments throughout the codebase for easy identification and maintenance.
+
+## Customizations At A Glance
+
+### Security & Access Control
+- **[PDF Editor Superuser Restriction](#1-pdf-editor-superuser-restriction)** - Optional restriction of PDF editing to superusers only, preventing accidental modifications by regular users. Disabled by default. When enabled, superusers can edit ANY document's PDF regardless of ownership.
+  - Environment Variable: `PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER` (default: false)
+  - Backend: `src/documents/views.py`
+  - Frontend: `src-ui/src/app/components/document-detail/`
+
+### Collaborative Features
+- **[Shared Saved Views](#2-shared-saved-views-null-owner)** - Enable organization-wide saved views by setting `owner_id = NULL`. All users can view but not modify shared views.
+  - Backend: `src/documents/views.py`
+
+- **[Global Views Organization](#3-global-saved-views-organization-sidebar--dashboard)** - Consistent ordering of global saved views across all users in both sidebar and dashboard using designated admin's sort order.
+  - Environment Variable: `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`
+  - Multiple frontend components
+
+### UI Customization Defaults
+- **[Theme Color Default](#1-theme-color-default-paperless_ui_theme_color)** - Set organization-wide default theme color without overriding user preferences.
+  - Environment Variable: `PAPERLESS_UI_THEME_COLOR`
+
+- **[Dark Mode Thumbnail Inversion](#2-dark-mode-thumbnail-inversion-default-paperless_ui_dark_mode_thumb_inverted)** - Configure default thumbnail inversion setting for dark mode.
+  - Environment Variable: `PAPERLESS_UI_DARK_MODE_THUMB_INVERTED`
+
+- **[Default UI Language](#3-default-language-paperless_ui_default_language)** - Set organization-wide default interface language.
+  - Environment Variable: `PAPERLESS_UI_DEFAULT_LANGUAGE`
+
+### Troubleshooting & Debugging
+- **[SSO Debug Logging](#5-social-account-debug-logging-paperless_socialaccount_debug)** - Detailed logging for django-allauth SSO troubleshooting.
+  - Environment Variable: `PAPERLESS_SOCIALACCOUNT_DEBUG`
+  - Backend: `src/paperless/settings.py`, `src/paperless/adapter.py`
+
+### Bug Fixes & Enhancements
+- **SSO UiSettings Auto-Creation** - Automatically creates UiSettings for new SSO users to prevent login errors.
+  - Backend: `src/documents/signals/handlers.py`
 
 ## Quick Start & Deployment
 
@@ -142,22 +175,33 @@ npm run start
 ## Core Features
 
 ### 1. PDF Editor Superuser Restriction
-**Purpose**: Restrict PDF editor access to superusers only to prevent accidental file modifications by regular users
+**Purpose**: Optionally restrict PDF editor access to superusers only to prevent accidental file modifications by regular users
+
+**Environment Variable**: `PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER`
+- **Type**: Boolean
+- **Default**: `false` (restriction disabled - original Paperless-ngx behavior)
+- **Example**: `PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER=true`
 
 **Files Modified**:
-- `src/documents/views.py` - Backend permission check
-- `src-ui/src/app/components/document-detail/document-detail.component.ts` - Frontend superuser check
+- `src/paperless/settings.py` - Environment variable configuration
+- `src/documents/views.py` - Backend permission check + UI settings exposure
+- `src-ui/src/app/data/ui-settings.ts` - Settings key definition
+- `src-ui/src/app/components/document-detail/document-detail.component.ts` - Frontend setting getter
 - `src-ui/src/app/components/document-detail/document-detail.component.html` - UI visibility control
 
-**Key Changes**:
-- Backend validates `user.is_superuser` before allowing PDF edit operations
-- Frontend hides PDF Editor button for non-superusers
-- Returns `HttpResponseForbidden` with clear error message when unauthorized
+**Behavior**:
+- **When disabled (default)**: All users can access PDF editor (original Paperless-ngx behavior)
+- **When enabled**: Only superusers can access PDF editor
+  - Backend validates `user.is_superuser` before allowing PDF edit operations
+  - Frontend hides PDF Editor button for non-superusers
+  - Returns `HttpResponseForbidden` with clear error message when unauthorized
+  - Superusers can edit ANY document's PDF regardless of ownership
 
 **Security Benefits**:
 - Defense in depth: Backend rejects unauthorized requests + Frontend hides the option
-- Clean UX: Regular users don't see confusing disabled options
+- Clean UX: Regular users don't see confusing disabled options when restriction is enabled
 - API Protection: Direct API calls are rejected even if frontend bypass is attempted
+- Flexible deployment: Can be enabled/disabled per environment without code changes
 
 ### 2. Shared Saved Views (NULL Owner)
 **Purpose**: Enable global saved views that are visible to all users when owner_id is NULL
@@ -244,17 +288,24 @@ npm run start
 
 **Code**:
 ```python
-# RKC: Restrict PDF editor to superusers only to prevent accidental file modifications
-if method == bulk_edit.edit_pdf and not user.is_superuser:
+# RKC: Optional restriction of PDF editor to superusers to prevent accidental file modifications
+# Controlled via PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER environment variable (default: false)
+if (
+    method == bulk_edit.edit_pdf
+    and settings.PDF_EDITOR_RESTRICT_TO_SUPERUSER
+    and not user.is_superuser
+):
     return HttpResponseForbidden("PDF editor is restricted to administrators")
 # /end RKC edit
 ```
 
 **Behavior**:
+- Only applies when `PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER=true`
 - Checks if operation is `edit_pdf`
 - Validates user is superuser
 - Returns 403 Forbidden if unauthorized
 - Executes before any file operations occur
+- When disabled, all users have access (original Paperless-ngx behavior)
 
 ### 2. Shared Saved Views (`src/documents/views.py`)
 **Location**: `SavedViewViewSet.get_queryset()` method
@@ -278,8 +329,8 @@ return (
 
 ## Frontend Customizations
 
-### 1. Superuser Check Getter (`src-ui/src/app/components/document-detail/document-detail.component.ts`)
-**Location**: Component property getter
+### 1. PDF Editor Restriction Setting Getter (`src-ui/src/app/components/document-detail/document-detail.component.ts`)
+**Location**: Component property getters
 
 **Code**:
 ```typescript
@@ -288,32 +339,45 @@ get userIsSuperuser(): boolean {
   return this.permissionsService.isSuperUser()
 }
 // /end RKC edit
+
+// RKC: Check if PDF editor restriction is enabled via environment variable
+get pdfEditorRestrictToSuperuser(): boolean {
+  return this.settings.get(SETTINGS_KEYS.PDF_EDITOR_RESTRICT_TO_SUPERUSER)
+}
+// /end RKC edit
 ```
 
 **Purpose**:
-- Provides reactive superuser status check
-- Used for conditional rendering in template
-- Integrates with existing permissions service
+- `userIsSuperuser`: Provides reactive superuser status check
+- `pdfEditorRestrictToSuperuser`: Reads the restriction setting from backend
+- Both used for conditional rendering in template
+- Integrates with existing permissions and settings services
 
 ### 2. Conditional PDF Editor Button (`src-ui/src/app/components/document-detail/document-detail.component.html`)
 **Location**: Actions dropdown menu
 
 **Code**:
 ```html
-<!-- RKC: Hide PDF Editor menu item for non-superusers to prevent accidental file modifications 
+<!-- RKC: Optionally hide PDF Editor menu item for non-superusers to prevent accidental file modifications
+     Controlled via PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER environment variable (default: false)
+     When restriction is enabled (!pdfEditorRestrictToSuperuser || userIsSuperuser):
+     - If restriction disabled: all users see the button (original behavior)
+     - If restriction enabled: only superusers see the button
      NOTE: Removed !userIsOwner condition to allow superusers to edit ANY document's PDF,
      not just documents they own. Superusers should have full editing rights. -->
-<button *ngIf="userIsSuperuser" ngbDropdownItem (click)="editPdf()" [disabled]="!userCanEdit || originalContentRenderType !== ContentRenderType.PDF">
+<button *ngIf="!pdfEditorRestrictToSuperuser || userIsSuperuser" ngbDropdownItem (click)="editPdf()" [disabled]="!userCanEdit || originalContentRenderType !== ContentRenderType.PDF">
   <i-bs name="pencil"></i-bs>&nbsp;<ng-container i18n>PDF Editor</ng-container>
 </button>
 <!-- /end RKC edit -->
 ```
 
 **Purpose**:
-- Completely hides PDF Editor option for non-superusers
+- Conditionally controls PDF Editor visibility based on environment variable
+- When restriction disabled: all users see the button (original Paperless-ngx behavior)
+- When restriction enabled: completely hides PDF Editor option for non-superusers
 - Allows superusers to edit ANY document's PDF (including documents with NULL owner or owned by others)
 - Still enforces that the document must be a PDF and the user must have edit permissions
-- Prevents confusion from disabled buttons
+- Prevents confusion from disabled buttons when restriction is active
 
 ## File Structure
 
@@ -446,7 +510,34 @@ WHERE id = <view_id>;
 
 ## Environment Variables
 
-### 1. Theme Color Default (`PAPERLESS_UI_THEME_COLOR`)
+### 1. PDF Editor Restriction (`PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER`)
+**Purpose**: Optionally restrict PDF editor access to superusers only
+
+**Type**: Boolean
+**Default**: `false` (restriction disabled - original Paperless-ngx behavior)
+**Example**: `PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER=true`
+
+**Behavior**:
+- When `false` (default): All users can access PDF editor (original Paperless-ngx behavior)
+- When `true`: Only superusers can access PDF editor
+  - Non-superusers won't see the PDF Editor button in the UI
+  - Direct API calls from non-superusers return 403 Forbidden
+  - Superusers can edit ANY document's PDF regardless of ownership
+- Changes take effect immediately after restart
+- No database changes required
+
+**Use Cases**:
+- Organizations wanting to prevent accidental PDF modifications by regular users
+- Environments requiring strict document integrity controls
+- Multi-tenant deployments with varying trust levels
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var as boolean
+- Backend: `src/documents/views.py` - Permission check + UI settings exposure
+- Frontend: `src-ui/src/app/data/ui-settings.ts` - Settings key
+- Frontend: `src-ui/src/app/components/document-detail/` - Conditional UI rendering
+
+### 2. Theme Color Default (`PAPERLESS_UI_THEME_COLOR`)
 **Purpose**: Set a custom default theme color for new users and users who haven't selected a color
 
 **Type**: String (hex color)
@@ -465,7 +556,7 @@ WHERE id = <view_id>;
 - Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
 - Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback
 
-### 2. Dark Mode Thumbnail Inversion Default (`PAPERLESS_UI_DARK_MODE_THUMB_INVERTED`)
+### 3. Dark Mode Thumbnail Inversion Default (`PAPERLESS_UI_DARK_MODE_THUMB_INVERTED`)
 **Purpose**: Set the default for inverting document thumbnails in dark mode
 
 **Type**: Boolean
@@ -484,7 +575,7 @@ WHERE id = <view_id>;
 - Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
 - Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback in `get()` method
 
-### 3. Default Language (`PAPERLESS_UI_DEFAULT_LANGUAGE`)
+### 4. Default Language (`PAPERLESS_UI_DEFAULT_LANGUAGE`)
 **Purpose**: Set the default UI language for new users and users who haven't selected a language
 
 **Type**: String (language code)
@@ -527,7 +618,7 @@ WHERE id = <view_id>;
 - Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
 - Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback in `get()` method
 
-### 4. Global Views Admin User (`PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`)
+### 5. Global Views Admin User (`PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`)
 **Purpose**: Designate which admin user's sidebar organization determines global saved views ordering
 
 **Type**: Integer (User ID)
@@ -559,7 +650,7 @@ WHERE id = <view_id>;
 SELECT id, username, is_superuser FROM auth_user WHERE is_superuser = true;
 ```
 
-### 5. Social Account Debug Logging (`PAPERLESS_SOCIALACCOUNT_DEBUG`)
+### 6. Social Account Debug Logging (`PAPERLESS_SOCIALACCOUNT_DEBUG`)
 **Purpose**: Enable detailed debug logging for django-allauth SSO/social account signup and authentication
 
 **Type**: Boolean
@@ -614,6 +705,23 @@ docker compose restart webserver
 - Backend: `src/paperless/adapter.py` - Contains additional debug logging in CustomSocialAccountAdapter
 
 ## Version History
+
+- **v1.0.8 (2025-12-08)**: PDF Editor restriction now optional via environment variable
+  - Added `PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER` environment variable (default: false)
+  - When disabled (default): App behaves like original Paperless-ngx - all users can access PDF editor
+  - When enabled: PDF editor restricted to superusers only
+  - Defense in depth: Both backend permission check and frontend UI hiding honor the setting
+  - Updated backend: `src/paperless/settings.py`, `src/documents/views.py`
+  - Updated frontend: `src-ui/src/app/data/ui-settings.ts`, component TypeScript and HTML
+  - Allows flexible deployment without code changes
+
+- **v1.0.7 (2025-12-08)**: PDF Editor ownership restriction fix
+  - Fixed bug where superusers couldn't access PDF editor on documents they don't own
+  - Removed `!userIsOwner` condition from PDF editor button's disabled check
+  - Superusers can now edit ANY document's PDF, regardless of ownership
+  - This aligns with the intended behavior: only superusers should have PDF editing rights
+  - Updated frontend: `src-ui/src/app/components/document-detail/document-detail.component.html`
+  - Added detailed code comments explaining the fix
 
 - **v1.0.6 (2025-12-08)**: Global saved views ordering and management
   - Added `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID` environment variable
