@@ -2447,19 +2447,25 @@ class UiSettingsView(GenericAPIView):
         # RKC: Pass global saved views sort order from designated admin user to frontend
         # This allows all users to see global views (owner=NULL) in the same order
         global_views_sort_order = None
+        logger.info(f"[RKC Global Views] GLOBAL_VIEWS_ADMIN_USER_ID: {settings.GLOBAL_VIEWS_ADMIN_USER_ID}")
         if settings.GLOBAL_VIEWS_ADMIN_USER_ID:
             try:
                 admin_user = User.objects.select_related("ui_settings").get(
                     id=settings.GLOBAL_VIEWS_ADMIN_USER_ID
                 )
+                logger.info(f"[RKC Global Views] Found admin user: {admin_user.username} (ID: {admin_user.id})")
                 if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
                     global_views_sort_order = admin_user.ui_settings.settings.get(
                         "general-settings:saved-views:sidebar-views-sort-order", None
                     )
-            except (User.DoesNotExist, UiSettings.DoesNotExist):
-                pass
+                    logger.info(f"[RKC Global Views] Retrieved sort order from admin settings: {global_views_sort_order}")
+                else:
+                    logger.warning(f"[RKC Global Views] Admin user {admin_user.username} has no ui_settings or settings is None")
+            except (User.DoesNotExist, UiSettings.DoesNotExist) as e:
+                logger.warning(f"[RKC Global Views] Error fetching admin user settings: {e}")
 
         ui_settings["global_views_sort_order"] = global_views_sort_order
+        logger.info(f"[RKC Global Views] Passing to frontend: {global_views_sort_order}")
         # /end RKC edit
 
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:

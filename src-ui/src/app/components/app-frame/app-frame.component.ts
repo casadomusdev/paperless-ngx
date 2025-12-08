@@ -313,21 +313,31 @@ export class AppFrameComponent
     const globalViews = this.savedViewService.sidebarViews.filter(v => v.owner === null)
     const globalSortOrder = this.settingsService.globalViewsSortOrder
     
+    // Debug logging
+    console.log('[RKC Global Views] globalViewsSortOrder from settings:', globalSortOrder)
+    console.log('[RKC Global Views] Global views before sorting:', globalViews.map(v => ({ id: v.id, name: v.name, owner: v.owner })))
+    
     if (globalSortOrder && globalSortOrder.length > 0) {
       // Sort by admin user's order
-      return globalViews.sort((a, b) => {
+      const sorted = globalViews.sort((a, b) => {
         const indexA = globalSortOrder.indexOf(a.id)
         const indexB = globalSortOrder.indexOf(b.id)
+        console.log(`[RKC Global Views] Comparing ${a.name} (id=${a.id}, index=${indexA}) vs ${b.name} (id=${b.id}, index=${indexB})`)
         // If not in sort order, put at end sorted alphabetically
         if (indexA === -1 && indexB === -1) return a.name.localeCompare(b.name)
         if (indexA === -1) return 1
         if (indexB === -1) return -1
         return indexA - indexB
       })
+      console.log('[RKC Global Views] Global views after admin sort:', sorted.map(v => ({ id: v.id, name: v.name })))
+      return sorted
     }
     
     // Fallback: alphabetic sort
-    return globalViews.sort((a, b) => a.name.localeCompare(b.name))
+    console.log('[RKC Global Views] Using alphabetic fallback sort')
+    const sorted = globalViews.sort((a, b) => a.name.localeCompare(b.name))
+    console.log('[RKC Global Views] Global views after alphabetic sort:', sorted.map(v => ({ id: v.id, name: v.name })))
+    return sorted
   }
 
   get userSidebarViews(): SavedView[] {
