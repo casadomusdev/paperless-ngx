@@ -10,6 +10,9 @@ import { dirtyCheck } from '@ngneat/dirty-check-forms'
 import { BehaviorSubject, Observable, takeUntil } from 'rxjs'
 import { DisplayMode } from 'src/app/data/document'
 import { SavedView } from 'src/app/data/saved-view'
+// RKC: Import SETTINGS_KEYS for global views admin check
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
+// /end RKC edit
 import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
 import { PermissionsService } from 'src/app/services/permissions.service'
 import { SavedViewService } from 'src/app/services/rest/saved-view.service'
@@ -49,6 +52,12 @@ export class SavedViewsComponent
   DisplayMode = DisplayMode
 
   public savedViews: SavedView[]
+  // RKC: Separate global and personal saved views for distinct management
+  public globalViews: SavedView[] = []
+  public personalViews: SavedView[] = []
+  private globalViewsGroup = new FormGroup({})
+  private personalViewsGroup = new FormGroup({})
+  // /end RKC edit
   private savedViewsGroup = new FormGroup({})
   public savedViewsForm: FormGroup = new FormGroup({
     savedViews: this.savedViewsGroup,
@@ -61,6 +70,13 @@ export class SavedViewsComponent
     return this.settings.allDisplayFields
   }
 
+  // RKC: Check if current user is the designated global views admin
+  get isGlobalViewsAdmin(): boolean {
+    const adminUserId = this.settings.get(SETTINGS_KEYS.GLOBAL_VIEWS_ADMIN_USER_ID)
+    return adminUserId !== null && this.permissionsService.currentUserId === adminUserId
+  }
+  // /end RKC edit
+
   constructor() {
     super()
     this.settings.organizingSidebarSavedViews = true
@@ -69,13 +85,16 @@ export class SavedViewsComponent
   ngOnInit(): void {
     this.loading = true
     this.savedViewService.listAll().subscribe((r) => {
-      // RKC: Filter out global saved views (owner=NULL) for non-admin users
-      // Global views should only be editable when owner is set back in database
-      if (this.permissionsService.isAdmin()) {
-        this.savedViews = r.results
+      // RKC: Separate global views (owner=NULL) from personal views
+      if (this.permissionsService.isSuperUser()) {
+        this.globalViews = r.results.filter(v => v.owner === null)
+        this.personalViews = r.results.filter(v => v.owner !== null)
       } else {
-        this.savedViews = r.results.filter(v => v.owner !== null)
+        this.globalViews = []
+        this.personalViews = r.results.filter(v => v.owner !== null)
       }
+      // Maintain backward compatibility with savedViews property
+      this.savedViews = r.results
       // /end RKC edit
       this.initialize()
     })
@@ -88,11 +107,71 @@ export class SavedViewsComponent
 
   private initialize() {
     this.loading = false
+    // RKC: Clear both global and personal view groups
+    this.emptyGroup(this.globalViewsGroup)
+    this.emptyGroup(this.personalViewsGroup)
+    // /end RKC edit
     this.emptyGroup(this.savedViewsGroup)
 
     let storeData = {
       savedViews: {},
+      // RKC: Add global and personal views to store
+      globalViews: {},
+      personalViews: {},
+      // /end RKC edit
     }
+
+    // RKC: Initialize global views
+    for (let view of this.globalViews) {
+      storeData.globalViews[view.id.toString()] = {
+        id: view.id,
+        name: view.name,
+        show_on_dashboard: view.show_on_dashboard,
+        show_in_sidebar: view.show_in_sidebar,
+        page_size: view.page_size,
+        display_mode: view.display_mode,
+        display_fields: view.display_fields,
+      }
+      this.globalViewsGroup.addControl(
+        view.id.toString(),
+        new FormGroup({
+          id: new FormControl(null),
+          name: new FormControl(null),
+          show_on_dashboard: new FormControl(null),
+          show_in_sidebar: new FormControl(null),
+          page_size: new FormControl(null),
+          display_mode: new FormControl(null),
+          display_fields: new FormControl([]),
+        })
+      )
+    }
+    // /end RKC edit
+
+    // RKC: Initialize personal views
+    for (let view of this.personalViews) {
+      storeData.personalViews[view.id.toString()] = {
+        id: view.id,
+        name: view.name,
+        show_on_dashboard: view.show_on_dashboard,
+        show_in_sidebar: view.show_in_sidebar,
+        page_size: view.page_size,
+        display_mode: view.display_mode,
+        display_fields: view.display_fields,
+      }
+      this.personalViewsGroup.addControl(
+        view.id.toString(),
+        new FormGroup({
+          id: new FormControl(null),
+          name: new FormControl(null),
+          show_on_dashboard: new FormControl(null),
+          show_in_sidebar: new FormControl(null),
+          page_size: new FormControl(null),
+          display_mode: new FormControl(null),
+          display_fields: new FormControl([]),
+        })
+      )
+    }
+    // /end RKC edit
 
     for (let view of this.savedViews) {
       storeData.savedViews[view.id.toString()] = {
@@ -118,6 +197,13 @@ export class SavedViewsComponent
       )
     }
 
+    // RKC: Update form to include both groups
+    this.savedViewsForm = new FormGroup({
+      globalViews: this.globalViewsGroup,
+      personalViews: this.personalViewsGroup,
+    })
+    // /end RKC edit
+
     this.store = new BehaviorSubject(storeData)
     this.store
       .asObservable()
@@ -136,6 +222,15 @@ export class SavedViewsComponent
 
   public deleteSavedView(savedView: SavedView) {
     this.savedViewService.delete(savedView).subscribe(() => {
+      // RKC: Remove from appropriate array
+      if (savedView.owner === null) {
+        this.globalViewsGroup.removeControl(savedView.id.toString())
+        this.globalViews.splice(this.globalViews.indexOf(savedView), 1)
+      } else {
+        this.personalViewsGroup.removeControl(savedView.id.toString())
+        this.personalViews.splice(this.personalViews.indexOf(savedView), 1)
+      }
+      // /end RKC edit
       this.savedViewsGroup.removeControl(savedView.id.toString())
       this.savedViews.splice(this.savedViews.indexOf(savedView), 1)
       this.toastService.showInfo(
@@ -143,6 +238,15 @@ export class SavedViewsComponent
       )
       this.savedViewService.clearCache()
       this.savedViewService.listAll().subscribe((r) => {
+        // RKC: Re-separate views after refresh
+        if (this.permissionsService.isSuperUser()) {
+          this.globalViews = r.results.filter(v => v.owner === null)
+          this.personalViews = r.results.filter(v => v.owner !== null)
+        } else {
+          this.globalViews = []
+          this.personalViews = r.results.filter(v => v.owner !== null)
+        }
+        // /end RKC edit
         this.savedViews = r.results
         this.initialize()
       })
@@ -154,15 +258,27 @@ export class SavedViewsComponent
   }
 
   public save() {
-    // only patch views that have actually changed
-    const changed: SavedView[] = []
-    Object.values(this.savedViewsGroup.controls)
+    // RKC: Save both global and personal views
+    const changedGlobal: SavedView[] = []
+    const changedPersonal: SavedView[] = []
+
+    Object.values(this.globalViewsGroup.controls)
       .filter((g: FormGroup) => !g.pristine)
       .forEach((group: FormGroup) => {
-        changed.push(group.value)
+        changedGlobal.push(group.value)
       })
-    if (changed.length) {
-      this.savedViewService.patchMany(changed).subscribe({
+
+    Object.values(this.personalViewsGroup.controls)
+      .filter((g: FormGroup) => !g.pristine)
+      .forEach((group: FormGroup) => {
+        changedPersonal.push(group.value)
+      })
+
+    const allChanged = [...changedGlobal, ...changedPersonal]
+    // /end RKC edit
+
+    if (allChanged.length) {
+      this.savedViewService.patchMany(allChanged).subscribe({
         next: () => {
           this.toastService.showInfo($localize`Views saved successfully.`)
           this.store.next(this.savedViewsForm.value)
@@ -176,4 +292,35 @@ export class SavedViewsComponent
       })
     }
   }
+
+  // RKC: Save global views order for sidebar and dashboard
+  // Only the designated admin can save the global ordering
+  public saveGlobalViewsOrder() {
+    if (!this.isGlobalViewsAdmin) {
+      this.toastService.showError(
+        $localize`Only the designated global views admin can change the order.`
+      )
+      return
+    }
+
+    // Get current order of global views
+    const globalViewIds = this.globalViews.map(v => v.id)
+    
+    // Store in user settings (will be stored server-side for this admin user)
+    this.settings.set(SETTINGS_KEYS.GLOBAL_VIEWS_SORT_ORDER, globalViewIds)
+    this.settings.set(SETTINGS_KEYS.GLOBAL_DASHBOARD_VIEWS_SORT_ORDER, globalViewIds)
+    
+    this.settings.storeSettings().subscribe({
+      next: () => {
+        this.toastService.showInfo($localize`Global view order saved successfully.`)
+      },
+      error: (error) => {
+        this.toastService.showError(
+          $localize`Error saving global view order.`,
+          error
+        )
+      },
+    })
+  }
+  // /end RKC edit
 }

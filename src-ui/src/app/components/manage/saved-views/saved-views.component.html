@@ -2,74 +2,169 @@
   title="Saved Views"
   i18n-title
   info="Customize the views of your documents."
-  i18n-info
-  >
+  i18n-info>
 </pngx-page-header>
+
 <form [formGroup]="savedViewsForm" (ngSubmit)="save()">
-  <ul class="list-group mb-3" formGroupName="savedViews">
-    @for (view of savedViews; track view) {
-      <li class="list-group-item py-3">
-      <div [formGroupName]="view.id">
-        <div class="row">
-          <div class="col">
-            <pngx-input-text title="Name" formControlName="name"></pngx-input-text>
+  
+  <!-- RKC: Global Shared Views Section (Superusers Only) -->
+  @if (globalViews && globalViews.length > 0) {
+    <div class="card mb-3 border-primary">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0" i18n>Global Shared Views</h5>
+        <small i18n>These views are visible to all users in the organization.</small>
+        @if (!isGlobalViewsAdmin) {
+          <div class="mt-2">
+            <small class="badge bg-warning text-dark" i18n>
+              Only the designated admin can reorder these views
+            </small>
           </div>
-          <div class="col">
-            <div class="form-check form-switch mt-3">
-              <input type="checkbox" class="form-check-input" id="show_on_dashboard_{{view.id}}" formControlName="show_on_dashboard">
-              <label class="form-check-label" for="show_on_dashboard_{{view.id}}" i18n>Show on dashboard</label>
-            </div>
-            <div class="form-check form-switch">
-              <input type="checkbox" class="form-check-input" id="show_in_sidebar_{{view.id}}" formControlName="show_in_sidebar">
-              <label class="form-check-label" for="show_in_sidebar_{{view.id}}" i18n>Show in sidebar</label>
-            </div>
-          </div>
-          <div class="col-auto">
-            <label class="form-label" for="name_{{view.id}}" i18n>Actions</label>
-            <pngx-confirm-button
-              label="Delete"
-              i18n-label
-              (confirm)="deleteSavedView(view)"
-              *pngxIfPermissions="{ action: PermissionAction.Delete, type: PermissionType.SavedView }"
-              buttonClasses="btn-sm btn-outline-danger form-control"
-              iconName="trash">
-            </pngx-confirm-button>
-          </div>
-        </div>
-        <div class="row">
-          <div class="col">
-            <pngx-input-number i18n-title title="Documents page size" [showAdd]="false" formControlName="page_size"></pngx-input-number>
-          </div>
-          <div class="col">
-            <label class="form-label" for="display_mode_{{view.id}}" i18n>Display as</label>
-            <select class="form-select" formControlName="display_mode">
-              <option [ngValue]="DisplayMode.TABLE" i18n>Table</option>
-              <option [ngValue]="DisplayMode.SMALL_CARDS" i18n>Small Cards</option>
-              <option [ngValue]="DisplayMode.LARGE_CARDS" i18n>Large Cards</option>
-            </select>
-          </div>
-            @if (displayFields) {
-              <pngx-input-drag-drop-select i18n-title title="Show" i18n-emptyText emptyText="Default" [items]="displayFields" formControlName="display_fields"></pngx-input-drag-drop-select>
-            }
-          </div>
+        }
       </div>
-      </li>
-    }
+      <div class="card-body">
+        <ul class="list-group" formGroupName="globalViews">
+          @for (view of globalViews; track view) {
+            <li class="list-group-item py-3">
+              <div [formGroupName]="view.id">
+                <div class="row">
+                  <div class="col">
+                    <div class="d-flex align-items-center mb-2">
+                      <span class="badge bg-info me-2" i18n>GLOBAL</span>
+                      <pngx-input-text title="Name" formControlName="name"></pngx-input-text>
+                    </div>
+                  </div>
+                  <div class="col">
+                    <div class="form-check form-switch mt-3">
+                      <input type="checkbox" class="form-check-input" id="global_show_on_dashboard_{{view.id}}" formControlName="show_on_dashboard">
+                      <label class="form-check-label" for="global_show_on_dashboard_{{view.id}}" i18n>Show on dashboard</label>
+                    </div>
+                    <div class="form-check form-switch">
+                      <input type="checkbox" class="form-check-input" id="global_show_in_sidebar_{{view.id}}" formControlName="show_in_sidebar">
+                      <label class="form-check-label" for="global_show_in_sidebar_{{view.id}}" i18n>Show in sidebar</label>
+                    </div>
+                  </div>
+                  <div class="col-auto">
+                    <label class="form-label" for="global_name_{{view.id}}" i18n>Actions</label>
+                    <pngx-confirm-button
+                      label="Delete"
+                      i18n-label
+                      (confirm)="deleteSavedView(view)"
+                      *pngxIfPermissions="{ action: PermissionAction.Delete, type: PermissionType.SavedView }"
+                      buttonClasses="btn-sm btn-outline-danger form-control"
+                      iconName="trash">
+                    </pngx-confirm-button>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col">
+                    <pngx-input-number i18n-title title="Documents page size" [showAdd]="false" formControlName="page_size"></pngx-input-number>
+                  </div>
+                  <div class="col">
+                    <label class="form-label" for="global_display_mode_{{view.id}}" i18n>Display as</label>
+                    <select class="form-select" formControlName="display_mode">
+                      <option [ngValue]="DisplayMode.TABLE" i18n>Table</option>
+                      <option [ngValue]="DisplayMode.SMALL_CARDS" i18n>Small Cards</option>
+                      <option [ngValue]="DisplayMode.LARGE_CARDS" i18n>Large Cards</option>
+                    </select>
+                  </div>
+                  @if (displayFields) {
+                    <pngx-input-drag-drop-select i18n-title title="Show" i18n-emptyText emptyText="Default" [items]="displayFields" formControlName="display_fields"></pngx-input-drag-drop-select>
+                  }
+                </div>
+              </div>
+            </li>
+          }
+        </ul>
+        @if (isGlobalViewsAdmin) {
+          <div class="mt-3">
+            <button type="button" (click)="saveGlobalViewsOrder()" class="btn btn-outline-primary btn-sm" i18n>
+              Save Global View Order
+            </button>
+            <small class="text-muted ms-2" i18n>
+              The order shown here will be applied to all users' sidebars and dashboards
+            </small>
+          </div>
+        }
+      </div>
+    </div>
+  }
+  <!-- /end RKC edit -->
 
-    @if (savedViews && savedViews.length === 0) {
-      <li class="list-group-item">
-        <div i18n>No saved views defined.</div>
-      </li>
-    }
+  <!-- Personal Saved Views Section -->
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0" i18n>Personal Saved Views</h5>
+      <small i18n>These views are private to your account.</small>
+    </div>
+    <div class="card-body">
+      <ul class="list-group" formGroupName="personalViews">
+        @for (view of personalViews; track view) {
+          <li class="list-group-item py-3">
+            <div [formGroupName]="view.id">
+              <div class="row">
+                <div class="col">
+                  <pngx-input-text title="Name" formControlName="name"></pngx-input-text>
+                </div>
+                <div class="col">
+                  <div class="form-check form-switch mt-3">
+                    <input type="checkbox" class="form-check-input" id="show_on_dashboard_{{view.id}}" formControlName="show_on_dashboard">
+                    <label class="form-check-label" for="show_on_dashboard_{{view.id}}" i18n>Show on dashboard</label>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input type="checkbox" class="form-check-input" id="show_in_sidebar_{{view.id}}" formControlName="show_in_sidebar">
+                    <label class="form-check-label" for="show_in_sidebar_{{view.id}}" i18n>Show in sidebar</label>
+                  </div>
+                </div>
+                <div class="col-auto">
+                  <label class="form-label" for="name_{{view.id}}" i18n>Actions</label>
+                  <pngx-confirm-button
+                    label="Delete"
+                    i18n-label
+                    (confirm)="deleteSavedView(view)"
+                    *pngxIfPermissions="{ action: PermissionAction.Delete, type: PermissionType.SavedView }"
+                    buttonClasses="btn-sm btn-outline-danger form-control"
+                    iconName="trash">
+                  </pngx-confirm-button>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col">
+                  <pngx-input-number i18n-title title="Documents page size" [showAdd]="false" formControlName="page_size"></pngx-input-number>
+                </div>
+                <div class="col">
+                  <label class="form-label" for="display_mode_{{view.id}}" i18n>Display as</label>
+                  <select class="form-select" formControlName="display_mode">
+                    <option [ngValue]="DisplayMode.TABLE" i18n>Table</option>
+                    <option [ngValue]="DisplayMode.SMALL_CARDS" i18n>Small Cards</option>
+                    <option [ngValue]="DisplayMode.LARGE_CARDS" i18n>Large Cards</option>
+                  </select>
+                </div>
+                @if (displayFields) {
+                  <pngx-input-drag-drop-select i18n-title title="Show" i18n-emptyText emptyText="Default" [items]="displayFields" formControlName="display_fields"></pngx-input-drag-drop-select>
+                }
+              </div>
+            </div>
+          </li>
+        }
 
-    @if (loading) {
-      <li class="list-group-item">
-        <div class="spinner-border spinner-border-sm fw-normal ms-2 me-auto" role="status"></div>
-        <div class="visually-hidden" i18n>Loading...</div>
-      </li>
-    }
-  </ul>
+        @if (personalViews && personalViews.length === 0) {
+          <li class="list-group-item">
+            <div i18n>No personal saved views defined.</div>
+          </li>
+        }
 
-  <button type="button" (click)="reset()" class="btn btn-outline-secondary mb-2" [disabled]="(isDirty$ | async) === false" i18n>Cancel</button>
-  <button type="submit" class="btn btn-primary ms-2 mb-2" [disabled]="(isDirty$ | async) === false" i18n>Save</button>
+        @if (loading) {
+          <li class="list-group-item">
+            <div class="spinner-border spinner-border-sm fw-normal ms-2 me-auto" role="status"></div>
+            <div class="visually-hidden" i18n>Loading...</div>
+          </li>
+        }
+      </ul>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <button type="button" (click)="reset()" class="btn btn-outline-secondary mb-2" [disabled]="(isDirty$ | async) === false" i18n>Cancel</button>
+    <button type="submit" class="btn btn-primary ms-2 mb-2" [disabled]="(isDirty$ | async) === false" i18n>Save</button>
+  </div>
 </form>

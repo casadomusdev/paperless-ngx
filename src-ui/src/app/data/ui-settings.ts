@@ -29,6 +29,7 @@ export const SETTINGS_KEYS = {
   DARK_MODE_THUMB_INVERTED_DEFAULT: 'dark_mode_thumb_inverted_default',
   LANGUAGE_DEFAULT: 'language_default',
   PDF_EDITOR_RESTRICT_TO_SUPERUSER: 'pdf_editor_restrict_to_superuser',
+  GLOBAL_VIEWS_ADMIN_USER_ID: 'global_views_admin_user_id',
   // /end RKC edit
   // maintain old general-settings: for backwards compatibility
   BULK_EDIT_CONFIRMATION_DIALOGS:

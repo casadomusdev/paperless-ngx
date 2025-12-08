@@ -1472,10 +1472,11 @@ class SavedViewViewSet(ModelViewSet, PassUserMixin):
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
-    # RKC: Prevent modification and deletion of shared saved views (views without owner)
+    # RKC: Allow superusers to edit/delete global saved views (views without owner)
+    # Regular users are still prevented from modifying global views
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.owner is None:
+        if instance.owner is None and not request.user.is_superuser:
             return HttpResponseForbidden(
                 "Shared saved views (without owner) cannot be modified",
             )
@@ -1483,7 +1484,7 @@ class SavedViewViewSet(ModelViewSet, PassUserMixin):
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.owner is None:
+        if instance.owner is None and not request.user.is_superuser:
             return HttpResponseForbidden(
                 "Shared saved views (without owner) cannot be modified",
             )
@@ -1491,7 +1492,7 @@ class SavedViewViewSet(ModelViewSet, PassUserMixin):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.owner is None:
+        if instance.owner is None and not request.user.is_superuser:
             return HttpResponseForbidden(
                 "Shared saved views (without owner) cannot be deleted",
             )
@@ -2486,6 +2487,13 @@ class UiSettingsView(GenericAPIView):
                 pass
 
         ui_settings["global_dashboard_views_sort_order"] = global_dashboard_views_sort_order
+
+        # RKC: Pass global views admin user ID to frontend
+        # This allows the frontend to determine if the current user is authorized
+        # to reorder global saved views in sidebar and dashboard
+        ui_settings["global_views_admin_user_id"] = getattr(
+            settings, "GLOBAL_VIEWS_ADMIN_USER_ID", None
+        )
         # /end RKC edit
 
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:
