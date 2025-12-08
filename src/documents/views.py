@@ -2455,6 +2455,9 @@ class UiSettingsView(GenericAPIView):
                 )
                 logger.info(f"[RKC Global Views] Found admin user: {admin_user.username} (ID: {admin_user.id})")
                 if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
+                    # Debug: log all available keys
+                    logger.info(f"[RKC Global Views] All keys in admin settings: {list(admin_user.ui_settings.settings.keys())}")
+                    
                     # Try full key first, then fallback to underscore version
                     global_views_sort_order = admin_user.ui_settings.settings.get(
                         "general-settings:saved-views:sidebar-views-sort-order", None
