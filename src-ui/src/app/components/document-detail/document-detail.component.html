@@ -62,8 +62,10 @@
         <i-bs width="1em" height="1em" name="diagram-3"></i-bs>&nbsp;<span i18n>More like this</span>
       </button>
 
-      <!-- RKC: Hide PDF Editor menu item for non-superusers to prevent accidental file modifications -->
-      <button *ngIf="userIsSuperuser" ngbDropdownItem (click)="editPdf()" [disabled]="!userIsOwner || !userCanEdit || originalContentRenderType !== ContentRenderType.PDF">
+      <!-- RKC: Hide PDF Editor menu item for non-superusers to prevent accidental file modifications 
+           NOTE: Removed !userIsOwner condition to allow superusers to edit ANY document's PDF,
+           not just documents they own. Superusers should have full editing rights. -->
+      <button *ngIf="userIsSuperuser" ngbDropdownItem (click)="editPdf()" [disabled]="!userCanEdit || originalContentRenderType !== ContentRenderType.PDF">
         <i-bs name="pencil"></i-bs>&nbsp;<ng-container i18n>PDF Editor</ng-container>
       </button>
       <!-- /end RKC edit -->

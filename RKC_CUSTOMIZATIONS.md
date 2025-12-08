@@ -300,8 +300,10 @@ get userIsSuperuser(): boolean {
 
 **Code**:
 ```html
-<!-- RKC: Hide PDF Editor menu item for non-superusers to prevent accidental file modifications -->
-<button *ngIf="userIsSuperuser" ngbDropdownItem (click)="editPdf()" [disabled]="!userIsOwner || !userCanEdit || originalContentRenderType !== ContentRenderType.PDF">
+<!-- RKC: Hide PDF Editor menu item for non-superusers to prevent accidental file modifications 
+     NOTE: Removed !userIsOwner condition to allow superusers to edit ANY document's PDF,
+     not just documents they own. Superusers should have full editing rights. -->
+<button *ngIf="userIsSuperuser" ngbDropdownItem (click)="editPdf()" [disabled]="!userCanEdit || originalContentRenderType !== ContentRenderType.PDF">
   <i-bs name="pencil"></i-bs>&nbsp;<ng-container i18n>PDF Editor</ng-container>
 </button>
 <!-- /end RKC edit -->
@@ -309,8 +311,9 @@ get userIsSuperuser(): boolean {
 
 **Purpose**:
 - Completely hides PDF Editor option for non-superusers
+- Allows superusers to edit ANY document's PDF (including documents with NULL owner or owned by others)
+- Still enforces that the document must be a PDF and the user must have edit permissions
 - Prevents confusion from disabled buttons
-- Maintains all other permission checks when visible
 
 ## File Structure
 
