@@ -294,4 +294,21 @@ export const SETTINGS: UiSetting[] = [
     type: 'string',
     default: 'page-width', // ZoomSetting from 'document-detail.component'
   },
+  // RKC: Environment variable driven default settings
+  {
+    key: SETTINGS_KEYS.THEME_COLOR_DEFAULT,
+    type: 'string',
+    default: PAPERLESS_GREEN_HEX,
+  },
+  {
+    key: SETTINGS_KEYS.DARK_MODE_THUMB_INVERTED_DEFAULT,
+    type: 'boolean',
+    default: true,
+  },
+  {
+    key: SETTINGS_KEYS.LANGUAGE_DEFAULT,
+    type: 'string',
+    default: '',
+  },
+  // /end RKC edit
 ]
