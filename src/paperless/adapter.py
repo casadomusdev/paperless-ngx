@@ -108,6 +108,7 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         Check whether the site is open for signups via social account, which can be
         disabled via the SOCIALACCOUNT_ALLOW_SIGNUPS setting.
         """
+        # RKC: Debug logging for SSO signup flow (only active when PAPERLESS_DEBUG_SSO=true)
         try:
             logger.debug(f"[SSO] is_open_for_signup called for {sociallogin.account.provider}")
             allow_signups = super().is_open_for_signup(request, sociallogin)
@@ -117,6 +118,7 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         except Exception as e:
             logger.exception(f"[SSO] Error in is_open_for_signup: {e}")
             raise
+        # /end RKC edit
 
     def get_connect_redirect_url(self, request, socialaccount):
         """
@@ -131,8 +133,9 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         Save the user instance. Default groups are assigned to the user, if
         specified in the settings.
         """
+        # RKC: Debug logging for SSO user creation (only active when PAPERLESS_DEBUG_SSO=true)
+        # Create user first, THEN log to avoid accessing sociallogin.account.user before it exists
         try:
-            # RKC: Create user first, THEN log (to avoid accessing sociallogin.account.user before it exists)
             user: User = super().save_user(request, sociallogin, form)
             logger.debug(f"Social SSO: Created/retrieved user: {user.username}")
             
@@ -149,3 +152,4 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         except Exception as e:
             logger.exception(f"Social SSO: Error in save_user: {e}")
             raise
+        # /end RKC edit

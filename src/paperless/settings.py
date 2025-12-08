@@ -893,12 +893,13 @@ LOGGING = {
     },
 }
 
-# RKC: Enable django-allauth debug logging via environment variable
-# This allows troubleshooting SSO/social account signup issues by enabling verbose logging
-# from the allauth library without requiring full DEBUG mode
-SOCIALACCOUNT_DEBUG = __get_boolean("PAPERLESS_SOCIALACCOUNT_DEBUG", "NO")
+# RKC: Enable django-allauth SSO debug logging via environment variable
+# This provides detailed logging for troubleshooting SSO signup/authentication issues
+# without requiring full DEBUG mode
+DEBUG_SSO = __get_boolean("PAPERLESS_DEBUG_SSO", "NO")
 
-if SOCIALACCOUNT_DEBUG:
+if DEBUG_SSO:
+    # Enable verbose logging for django-allauth and related auth modules
     LOGGING["loggers"]["allauth"] = {
         "handlers": ["file_paperless", "console"],
         "level": "DEBUG",
@@ -920,7 +921,7 @@ if SOCIALACCOUNT_DEBUG:
         "level": "DEBUG",
         "propagate": True,
     }
-    # RKC: Capture ALL django logs including successful requests during SSO debug
+    # Capture ALL django logs including successful requests during SSO debug
     LOGGING["loggers"]["django"]["level"] = "DEBUG"
     LOGGING["loggers"]["django.request"]["level"] = "DEBUG"
     # Add django.security logger to catch security-related issues
@@ -934,9 +935,9 @@ if SOCIALACCOUNT_DEBUG:
 # Configure logging before calling any logger in settings.py so it will respect the log format, even if Django has not parsed the settings yet.
 logging.config.dictConfig(LOGGING)
 
-# RKC: Log status if social-account debug is enabled
-if SOCIALACCOUNT_DEBUG:
-    logger.info("Social account debug logging enabled via PAPERLESS_SOCIALACCOUNT_DEBUG")
+# RKC: Log status when SSO debug mode is active
+if DEBUG_SSO:
+    logger.info("SSO debug logging enabled via PAPERLESS_DEBUG_SSO")
 # /end RKC edit
 
 

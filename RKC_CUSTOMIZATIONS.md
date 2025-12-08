@@ -650,25 +650,34 @@ WHERE id = <view_id>;
 SELECT id, username, is_superuser FROM auth_user WHERE is_superuser = true;
 ```
 
-### 6. Social Account Debug Logging (`PAPERLESS_SOCIALACCOUNT_DEBUG`)
-**Purpose**: Enable detailed debug logging for django-allauth SSO/social account signup and authentication
+### 6. SSO Debug Logging (`PAPERLESS_DEBUG_SSO`)
+**Purpose**: Enable detailed debug logging for django-allauth SSO troubleshooting without full DEBUG mode
 
-**Type**: Boolean
-**Default**: `false`
-**Example**: `PAPERLESS_SOCIALACCOUNT_DEBUG=true`
+**Environment Variable**: `PAPERLESS_DEBUG_SSO`
+- **Type**: Boolean
+- **Default**: `false`
+- **Example**: `PAPERLESS_DEBUG_SSO=true`
+
+**Files Modified**:
+- `src/paperless/settings.py` - Debug mode configuration and logger setup
+- `src/paperless/adapter.py` - SSO user creation debug logging
+- `src/documents/signals/handlers.py` - UiSettings creation debug logging
 
 **Behavior**:
-- When enabled, adds verbose logging for all django-allauth operations
-- Logs to both `paperless.log` file and console output
-- Captures internal allauth signup flow, authentication attempts, and errors
-- Should only be enabled temporarily for troubleshooting SSO issues
+- When disabled (default): Minimal logging, standard INFO/ERROR levels only
+- When enabled: Verbose DEBUG logging for:
+  - All django-allauth operations (signup, authentication, provider flow)
+  - Django request/response cycle during SSO
+  - Custom adapter operations (user creation, group assignment)
+  - UiSettings auto-creation for new users
+- Logs to both `paperless.log` file and console
 - No performance impact when disabled
 
 **Use Cases**:
 - Troubleshooting SSO signup failures
-- Debugging social account connection issues
-- Investigating authentication errors with OAuth providers
-- Diagnosing user creation problems
+- Debugging OAuth provider configuration issues
+- Investigating user creation problems
+- Diagnosing authentication errors
 
 **Log Output Location**:
 - File: `/usr/src/paperless/data/log/paperless.log` (inside container)
@@ -678,13 +687,16 @@ SELECT id, username, is_superuser FROM auth_user WHERE is_superuser = true;
 - `[allauth]` - General allauth framework operations
 - `[allauth.account]` - Account creation and management
 - `[allauth.socialaccount]` - Social provider authentication flow
+- `[SSO]` - Custom adapter debug messages
+- `Social SSO:` - User creation and group assignment
+- Django request/response details during SSO flow
 
 **Example Usage**:
 ```bash
-# Enable debug logging
+# Enable SSO debug logging
 docker compose down
 # Add to docker-compose.yml environment section:
-# - PAPERLESS_SOCIALACCOUNT_DEBUG=true
+# - PAPERLESS_DEBUG_SSO=true
 docker compose up -d
 
 # Watch logs in real-time
@@ -693,16 +705,17 @@ docker compose logs -f webserver
 # Attempt SSO signup
 # Check logs for detailed debug output
 
-# Disable when troubleshooting complete
+# Disable after troubleshooting
 # Remove or set to false, then restart
 docker compose restart webserver
 ```
 
-**Security Note**: Debug logs may contain sensitive information. Review logs before sharing and disable after troubleshooting.
+**Security Note**: Debug logs may contain sensitive information like tokens. Review before sharing and disable after troubleshooting.
 
 **Implementation**:
-- Backend: `src/paperless/settings.py` - Conditionally adds allauth loggers to LOGGING configuration
-- Backend: `src/paperless/adapter.py` - Contains additional debug logging in CustomSocialAccountAdapter
+- Backend: `src/paperless/settings.py` - Reads `PAPERLESS_DEBUG_SSO` env var and conditionally enables debug loggers
+- Backend: `src/paperless/adapter.py` - Debug logging in `CustomSocialAccountAdapter` (respects `paperless.auth` logger level)
+- Backend: `src/documents/signals/handlers.py` - Conditional debug logging in `create_ui_settings_for_new_user` signal
 
 ## Version History
 
