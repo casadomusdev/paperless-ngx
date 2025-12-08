@@ -11,6 +11,7 @@ import { BehaviorSubject, Observable, takeUntil } from 'rxjs'
 import { DisplayMode } from 'src/app/data/document'
 import { SavedView } from 'src/app/data/saved-view'
 import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
+import { PermissionsService } from 'src/app/services/permissions.service'
 import { SavedViewService } from 'src/app/services/rest/saved-view.service'
 import { SettingsService } from 'src/app/services/settings.service'
 import { ToastService } from 'src/app/services/toast.service'
@@ -43,6 +44,7 @@ export class SavedViewsComponent
   private savedViewService = inject(SavedViewService)
   private settings = inject(SettingsService)
   private toastService = inject(ToastService)
+  private permissionsService = inject(PermissionsService)
 
   DisplayMode = DisplayMode
 
@@ -67,7 +69,14 @@ export class SavedViewsComponent
   ngOnInit(): void {
     this.loading = true
     this.savedViewService.listAll().subscribe((r) => {
-      this.savedViews = r.results
+      // RKC: Filter out global saved views (owner=NULL) for non-admin users
+      // Global views should only be editable when owner is set back in database
+      if (this.permissionsService.isAdmin()) {
+        this.savedViews = r.results
+      } else {
+        this.savedViews = r.results.filter(v => v.owner !== null)
+      }
+      // /end RKC edit
       this.initialize()
     })
   }

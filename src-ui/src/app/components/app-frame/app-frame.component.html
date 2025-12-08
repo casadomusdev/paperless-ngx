@@ -95,45 +95,77 @@
           </li>
         </ul>
 
+        <!-- RKC: Split saved views into global "Shortcuts" section and user "Saved views" section -->
         <div class="nav-group mt-3 mb-1" *pngxIfPermissions="{ action: PermissionAction.View, type: PermissionType.SavedView }">
           @if (savedViewService.loading) {
             <h6 class="sidebar-heading px-3 text-muted">
               <span i18n>Saved views</span>
               <div class="spinner-border spinner-border-sm fw-normal ms-2" role="status"></div>
             </h6>
-          } @else if (savedViewService.sidebarViews?.length > 0) {
-            <h6 class="sidebar-heading px-3 text-muted">
-              <span i18n>Saved views</span>
-            </h6>
-            <ul class="nav flex-column mb-2" cdkDropList (cdkDropListDropped)="onDrop($event)">
-              @for (view of savedViewService.sidebarViews; track view.id) {
-                <li class="nav-item w-100 app-link" cdkDrag [cdkDragDisabled]="!settingsService.organizingSidebarSavedViews"
-                  cdkDragPreviewContainer="parent" cdkDragPreviewClass="navItemDrag" (cdkDragStarted)="onDragStart($event)"
-                  (cdkDragEnded)="onDragEnd($event)">
-                  <a class="nav-link" routerLink="view/{{view.id}}"
-                    routerLinkActive="active" (click)="closeMenu()" [ngbPopover]="view.name"
-                    [disablePopover]="!slimSidebarEnabled" placement="end" container="body" triggers="mouseenter:mouseleave"
-                    popoverClass="popover-slim">
-                    <i-bs class="me-1" name="funnel"></i-bs>
-                      <span>&nbsp;<div class="d-inline-flex view-name"><span class="overflow-hidden" [class.text-wrap]="!slimSidebarEnabled">{{view.name}}</span></div>
-                        @if (showSidebarCounts && !slimSidebarEnabled) {
-                          <span class="badge bg-info text-dark ms-2 d-inline">{{ savedViewService.getDocumentCount(view) }}</span>
-                        }
-                      </span>
-                    @if (showSidebarCounts && slimSidebarEnabled) {
-                      <span class="badge bg-info text-dark position-absolute top-0 end-0 d-none d-md-block">{{ savedViewService.getDocumentCount(view) }}</span>
+          } @else {
+            <!-- Global saved views (owner=NULL) shown as "Shortcuts" - not draggable -->
+            @if (globalSidebarViews?.length > 0) {
+              <h6 class="sidebar-heading px-3 text-muted">
+                <span i18n>Shortcuts</span>
+              </h6>
+              <ul class="nav flex-column mb-2">
+                @for (view of globalSidebarViews; track view.id) {
+                  <li class="nav-item w-100 app-link">
+                    <a class="nav-link" routerLink="view/{{view.id}}"
+                      routerLinkActive="active" (click)="closeMenu()" [ngbPopover]="view.name"
+                      [disablePopover]="!slimSidebarEnabled" placement="end" container="body" triggers="mouseenter:mouseleave"
+                      popoverClass="popover-slim">
+                      <i-bs class="me-1" name="funnel"></i-bs>
+                        <span>&nbsp;<div class="d-inline-flex view-name"><span class="overflow-hidden" [class.text-wrap]="!slimSidebarEnabled">{{view.name}}</span></div>
+                          @if (showSidebarCounts && !slimSidebarEnabled) {
+                            <span class="badge bg-info text-dark ms-2 d-inline">{{ savedViewService.getDocumentCount(view) }}</span>
+                          }
+                        </span>
+                      @if (showSidebarCounts && slimSidebarEnabled) {
+                        <span class="badge bg-info text-dark position-absolute top-0 end-0 d-none d-md-block">{{ savedViewService.getDocumentCount(view) }}</span>
+                      }
+                    </a>
+                  </li>
+                }
+              </ul>
+            }
+            
+            <!-- User saved views (owner set) shown as "Saved views" - draggable -->
+            @if (userSidebarViews?.length > 0) {
+              <h6 class="sidebar-heading px-3 text-muted" [class.mt-3]="globalSidebarViews?.length > 0">
+                <span i18n>Saved views</span>
+              </h6>
+              <ul class="nav flex-column mb-2" cdkDropList (cdkDropListDropped)="onDrop($event)">
+                @for (view of userSidebarViews; track view.id) {
+                  <li class="nav-item w-100 app-link" cdkDrag [cdkDragDisabled]="!settingsService.organizingSidebarSavedViews"
+                    cdkDragPreviewContainer="parent" cdkDragPreviewClass="navItemDrag" (cdkDragStarted)="onDragStart($event)"
+                    (cdkDragEnded)="onDragEnd($event)">
+                    <a class="nav-link" routerLink="view/{{view.id}}"
+                      routerLinkActive="active" (click)="closeMenu()" [ngbPopover]="view.name"
+                      [disablePopover]="!slimSidebarEnabled" placement="end" container="body" triggers="mouseenter:mouseleave"
+                      popoverClass="popover-slim">
+                      <i-bs class="me-1" name="funnel"></i-bs>
+                        <span>&nbsp;<div class="d-inline-flex view-name"><span class="overflow-hidden" [class.text-wrap]="!slimSidebarEnabled">{{view.name}}</span></div>
+                          @if (showSidebarCounts && !slimSidebarEnabled) {
+                            <span class="badge bg-info text-dark ms-2 d-inline">{{ savedViewService.getDocumentCount(view) }}</span>
+                          }
+                        </span>
+                      @if (showSidebarCounts && slimSidebarEnabled) {
+                        <span class="badge bg-info text-dark position-absolute top-0 end-0 d-none d-md-block">{{ savedViewService.getDocumentCount(view) }}</span>
+                      }
+                    </a>
+                    @if (settingsService.organizingSidebarSavedViews) {
+                      <div class="position-absolute end-0 top-0 px-3 py-2" [class.me-n3]="slimSidebarEnabled" cdkDragHandle>
+                        <i-bs name="grip-vertical"></i-bs>
+                      </div>
                     }
-                  </a>
-                  @if (settingsService.organizingSidebarSavedViews) {
-                    <div class="position-absolute end-0 top-0 px-3 py-2" [class.me-n3]="slimSidebarEnabled" cdkDragHandle>
-                      <i-bs name="grip-vertical"></i-bs>
-                    </div>
-                  }
-                </li>
-              }
-            </ul>
+                  </li>
+                }
+              </ul>
+            }
           }
         </div>
+        <!-- /end RKC edit -->
 
         <div class="nav-group mt-3 mb-1" *pngxIfPermissions="{ action: PermissionAction.View, type: PermissionType.Document }">
           @if (openDocuments.length > 0) {

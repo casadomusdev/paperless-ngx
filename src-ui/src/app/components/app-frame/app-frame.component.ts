@@ -305,4 +305,33 @@ export class AppFrameComponent
       !this.settingsService.organizingSidebarSavedViews
     )
   }
+
+  // RKC: Separate global saved views (owner=NULL) from user saved views
+  // Global views appear in "Shortcuts" section at top, ordered by admin user's settings
+  // User views appear underneath, ordered by user's own settings
+  get globalSidebarViews(): SavedView[] {
+    const globalViews = this.savedViewService.sidebarViews.filter(v => v.owner === null)
+    const globalSortOrder = this.settingsService.globalViewsSortOrder
+    
+    if (globalSortOrder && globalSortOrder.length > 0) {
+      // Sort by admin user's order
+      return globalViews.sort((a, b) => {
+        const indexA = globalSortOrder.indexOf(a.id)
+        const indexB = globalSortOrder.indexOf(b.id)
+        // If not in sort order, put at end sorted alphabetically
+        if (indexA === -1 && indexB === -1) return a.name.localeCompare(b.name)
+        if (indexA === -1) return 1
+        if (indexB === -1) return -1
+        return indexA - indexB
+      })
+    }
+    
+    // Fallback: alphabetic sort
+    return globalViews.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  get userSidebarViews(): SavedView[] {
+    return this.savedViewService.sidebarViews.filter(v => v.owner !== null)
+  }
+  // /end RKC edit
 }

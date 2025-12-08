@@ -175,6 +175,43 @@ npm run start
 - Users can access but not modify shared views
 - Owner can be cleared directly in database: `UPDATE documents_savedview SET owner_id = NULL WHERE id = X`
 
+### 3. Global Saved Views Sidebar Organization
+**Purpose**: Organize global saved views in a dedicated "Shortcuts" section with consistent ordering across all users
+
+**Environment Variable**:
+- `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`: User ID of admin whose sidebar sort order determines global view ordering
+
+**Files Modified**:
+- `src/paperless/settings.py` - Environment variable configuration
+- `src/documents/views.py` - Pass admin user's sort order to frontend
+- `src-ui/src/app/services/settings.service.ts` - Getter for global views sort order
+- `src-ui/src/app/components/app-frame/app-frame.component.ts` - Computed properties for view separation and sorting
+- `src-ui/src/app/components/app-frame/app-frame.component.html` - Separate template sections for global and user views
+- `src-ui/src/app/components/manage/saved-views/saved-views.component.ts` - Filter global views from management page
+
+**Key Changes**:
+1. **Sidebar Display**:
+   - Global views appear in "Shortcuts" section at top of sidebar
+   - User's own views appear in "Saved views" section underneath
+   - Global views are not draggable (prevents confusion)
+   - User views remain draggable for personalized ordering
+
+2. **Ordering**:
+   - Global views ordered by admin user's sidebar-views-sort-order setting
+   - Falls back to alphabetical ordering if admin sort order unavailable
+   - Consistent ordering across all users
+
+3. **Management Page**:
+   - Global views hidden from non-admin users in saved views management
+   - Prevents confusion and accidental attempts to edit global views
+   - Admins can see all views including global ones
+
+**Use Case**:
+- Organization creates global saved views with `owner_id = NULL`
+- Designated admin user (via PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID) organizes their sidebar
+- All users see global views in same order as admin's organization
+- Clean separation between organizational shortcuts and personal views
+
 ## Permission System
 
 ### Superuser Restrictions
@@ -476,7 +513,39 @@ WHERE id = <view_id>;
 - Frontend: `src-ui/src/app/data/ui-settings.ts` - Adds setting key
 - Frontend: `src-ui/src/app/services/settings.service.ts` - Uses as fallback in `get()` method
 
-### 4. Social Account Debug Logging (`PAPERLESS_SOCIALACCOUNT_DEBUG`)
+### 4. Global Views Admin User (`PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`)
+**Purpose**: Designate which admin user's sidebar organization determines global saved views ordering
+
+**Type**: Integer (User ID)
+**Default**: None (alphabetical fallback)
+**Example**: `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID=1`
+
+**Behavior**:
+- Specifies the user ID whose saved views sidebar sort order is used for global views
+- Global saved views (owner=NULL) are displayed in "Shortcuts" section
+- All users see global views in the same order as this designated admin
+- Falls back to alphabetical ordering if not set or if admin user has no sort order
+- Does not affect user's own personal saved views ordering
+
+**Setup Process**:
+1. Set `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID` to admin user's ID
+2. That admin organizes global views in their sidebar (drag/drop)
+3. All users immediately see global views in that order
+4. Personal views remain independently sortable per user
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads and validates env var
+- Backend: `src/documents/views.py` - Fetches admin user's sort order settings
+- Frontend: `src-ui/src/app/services/settings.service.ts` - Provides globalViewsSortOrder getter
+- Frontend: `src-ui/src/app/components/app-frame/app-frame.component.ts` - Sorts global views accordingly
+
+**Database Query**:
+```sql
+-- Find user ID to use for PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID
+SELECT id, username, is_superuser FROM auth_user WHERE is_superuser = true;
+```
+
+### 5. Social Account Debug Logging (`PAPERLESS_SOCIALACCOUNT_DEBUG`)
 **Purpose**: Enable detailed debug logging for django-allauth SSO/social account signup and authentication
 
 **Type**: Boolean
@@ -531,6 +600,14 @@ docker compose restart webserver
 - Backend: `src/paperless/adapter.py` - Contains additional debug logging in CustomSocialAccountAdapter
 
 ## Version History
+
+- **v1.0.6 (2025-12-08)**: Global saved views ordering and management
+  - Added `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID` environment variable
+  - Global saved views (owner=NULL) now display in separate "Shortcuts" section at top of sidebar
+  - Global views ordered by designated admin user's settings with alphabetic fallback
+  - Global views are not draggable (only user's own views can be reordered)
+  - Global views hidden from management page for non-admin users
+  - Prevents confusion and accidental attempts to edit global views
 
 - **v1.0.5 (2025-12-02)**: SSO UiSettings comprehensive fix
   - Fixed critical bug where new SSO users would get error on first login

@@ -1363,6 +1363,20 @@ DARK_MODE_THUMB_INVERTED = __get_boolean("PAPERLESS_UI_DARK_MODE_THUMB_INVERTED"
 DEFAULT_LANGUAGE = os.getenv("PAPERLESS_UI_DEFAULT_LANGUAGE", "de-de")
 # /end RKC edit
 
+# RKC: Global saved views admin user ID for ordering shortcuts in sidebar
+# This user's saved views sort order will be used to determine the order of global views
+# (views with owner=NULL) in the sidebar for all users
+GLOBAL_VIEWS_ADMIN_USER_ID = os.getenv("PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID", None)
+if GLOBAL_VIEWS_ADMIN_USER_ID:
+    try:
+        GLOBAL_VIEWS_ADMIN_USER_ID = int(GLOBAL_VIEWS_ADMIN_USER_ID)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"Invalid PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID value: {GLOBAL_VIEWS_ADMIN_USER_ID}. Must be an integer."
+        )
+        GLOBAL_VIEWS_ADMIN_USER_ID = None
+# /end RKC edit
+
 ###############################################################################
 # Machine Learning                                                            #
 ###############################################################################

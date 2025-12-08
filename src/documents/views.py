@@ -2444,6 +2444,24 @@ class UiSettingsView(GenericAPIView):
         ui_settings["language_default"] = getattr(settings, "DEFAULT_LANGUAGE", "de-de")
         # /end RKC edit
 
+        # RKC: Pass global saved views sort order from designated admin user to frontend
+        # This allows all users to see global views (owner=NULL) in the same order
+        global_views_sort_order = None
+        if settings.GLOBAL_VIEWS_ADMIN_USER_ID:
+            try:
+                admin_user = User.objects.select_related("ui_settings").get(
+                    id=settings.GLOBAL_VIEWS_ADMIN_USER_ID
+                )
+                if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
+                    global_views_sort_order = admin_user.ui_settings.settings.get(
+                        "general-settings:saved-views:sidebar-views-sort-order", None
+                    )
+            except (User.DoesNotExist, UiSettings.DoesNotExist):
+                pass
+
+        ui_settings["global_views_sort_order"] = global_views_sort_order
+        # /end RKC edit
+
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:
             manager = PaperlessMailOAuth2Manager()
             if settings.GMAIL_OAUTH_ENABLED:

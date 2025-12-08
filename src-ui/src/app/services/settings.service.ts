@@ -713,6 +713,13 @@ export class SettingsService {
     this.set(SETTINGS_KEYS.SIDEBAR_VIEWS_SORT_ORDER, [
       ...new Set(sidebarViews.map((v) => v.id)),
     ])
-    return this.storeSettings()
+    return of(true)
   }
+
+  // RKC: Get global views sort order from admin user's settings
+  // This is used to order global saved views (owner=NULL) consistently for all users
+  get globalViewsSortOrder(): number[] | null {
+    return this.settings['global_views_sort_order'] || null
+  }
+  // /end RKC edit
 }
