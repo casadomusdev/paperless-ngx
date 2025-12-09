@@ -865,27 +865,46 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.0.11 (2025-12-09)**: System-wide global view ordering via ApplicationConfiguration
+- **v1.0.11 (2025-12-09)**: System-wide global view ordering with drag-drop interface
   - Replaced per-user global view ordering with centralized system-wide storage
   - Added two new fields to ApplicationConfiguration model:
     - `global_sidebar_views_order` - JSONField for sidebar ordering
     - `global_dashboard_views_order` - JSONField for dashboard ordering
   - Created Django migration `0005_add_global_views_order.py`
-  - **Any superuser can now update the global view order** (not just one designated admin)
-  - Frontend `saveGlobalViewsOrder()` method now POSTs to ApplicationConfiguration API endpoint
+  - **Any superuser can now reorder global views via drag-drop** (not just one designated admin)
   - **Removed `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID` environment variable** - no longer needed
   - Backend reads order from ApplicationConfiguration singleton instead of admin user's settings
+  - **Drag-drop reordering implementation**:
+    - Global views draggable in sidebar for superusers (when organizing mode active)
+    - Global views draggable on dashboard for superusers
+    - Personal views draggable for all users (unchanged)
+    - Separate cdkDropList for global and personal views (prevents intermixing)
+    - Auto-save on drop for immediate feedback
+  - **UI improvements**:
+    - Added "Personal Saved Views" heading on dashboard to separate view types
+    - Removed "Save Global View Order" button from management page
+    - Single Save button handles both global and personal view properties
+    - Global views show drag handle only for superusers in organizing mode
+  - **SettingsService enhancements**:
+    - Added `updateGlobalSidebarViewsSort()` method
+    - Added `updateGlobalDashboardViewsSort()` method
+    - Both methods PATCH to ApplicationConfiguration API endpoint
   - Single canonical ordering shared by all users
   - Removed yellow warning message from saved views management page
-  - Removed `isGlobalViewsAdmin` getter that checked admin user ID
   - Files modified:
     - Backend: `src/paperless/settings.py` (removed GLOBAL_VIEWS_ADMIN_USER_ID env var)
     - Backend: `src/paperless/models.py` (added JSONField columns)
     - Backend: `src/paperless/migrations/0005_add_global_views_order.py` (new migration)
     - Backend: `src/documents/views.py` (read from ApplicationConfiguration instead of user settings)
-    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.ts` (HttpClient injection, simplified permissions)
-    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.html` (removed warning, simplified button display)
+    - Frontend: `src-ui/src/app/services/settings.service.ts` (added update methods)
+    - Frontend: `src-ui/src/app/components/app-frame/app-frame.component.ts` (drag-drop handlers)
+    - Frontend: `src-ui/src/app/components/app-frame/app-frame.component.html` (draggable global views)
+    - Frontend: `src-ui/src/app/components/dashboard/dashboard.component.ts` (drag-drop handlers, heading)
+    - Frontend: `src-ui/src/app/components/dashboard/dashboard.component.html` (separate drop lists, heading)
+    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.ts` (removed ordering method)
+    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.html` (removed ordering button)
   - Architecture: Moved from per-superuser settings to singleton model for true system-wide state
+  - User experience: Reordering done where views are displayed (sidebar/dashboard), not on management page
   - All changes properly marked with RKC comments following conventions
 
 - **v1.0.10 (2025-12-09)**: Toggle switches for personal/global view conversion

@@ -325,38 +325,4 @@ export class SavedViewsComponent
       })
     }
   }
-
-  // RKC: Save global views order for sidebar and dashboard to ApplicationConfiguration
-  // Any superuser can save the global ordering, which is stored system-wide
-  public saveGlobalViewsOrder() {
-    if (!this.permissionsService.isSuperUser()) {
-      this.toastService.showError(
-        $localize`Only superusers can change the global view order.`
-      )
-      return
-    }
-
-    // Get current order of global views
-    const globalViewIds = this.globalViews.map(v => v.id)
-    
-    // Update ApplicationConfiguration singleton with global view ordering
-    // This ordering is shared across all users
-    const payload = {
-      global_sidebar_views_order: globalViewIds,
-      global_dashboard_views_order: globalViewIds
-    }
-    
-    this.http.patch(`${environment.apiBaseUrl}api/config/1/`, payload).subscribe({
-      next: () => {
-        this.toastService.showInfo($localize`Global view order saved successfully.`)
-      },
-      error: (error) => {
-        this.toastService.showError(
-          $localize`Error saving global view order.`,
-          error
-        )
-      },
-    })
-  }
-  // /end RKC edit
 }

@@ -103,14 +103,18 @@
               <div class="spinner-border spinner-border-sm fw-normal ms-2" role="status"></div>
             </h6>
           } @else {
-            <!-- Global saved views (owner=NULL) shown as "Shortcuts" - not draggable -->
+            <!-- RKC: Global saved views (owner=NULL) shown as "Shortcuts" -->
+            <!-- Draggable for superusers when organizing mode is active -->
             @if (globalSidebarViews?.length > 0) {
               <h6 class="sidebar-heading px-3 text-muted">
                 <span i18n>Shortcuts</span>
               </h6>
-              <ul class="nav flex-column mb-2">
+              <ul class="nav flex-column mb-2" cdkDropList (cdkDropListDropped)="onDropGlobal($event)">
                 @for (view of globalSidebarViews; track view.id) {
-                  <li class="nav-item w-100 app-link">
+                  <li class="nav-item w-100 app-link" cdkDrag 
+                    [cdkDragDisabled]="!settingsService.organizingSidebarSavedViews || !permissionsService.isSuperUser()"
+                    cdkDragPreviewContainer="parent" cdkDragPreviewClass="navItemDrag" (cdkDragStarted)="onDragStart($event)"
+                    (cdkDragEnded)="onDragEnd($event)">
                     <a class="nav-link" routerLink="view/{{view.id}}"
                       routerLinkActive="active" (click)="closeMenu()" [ngbPopover]="view.name"
                       [disablePopover]="!slimSidebarEnabled" placement="end" container="body" triggers="mouseenter:mouseleave"
@@ -125,10 +129,16 @@
                         <span class="badge bg-info text-dark position-absolute top-0 end-0 d-none d-md-block">{{ savedViewService.getDocumentCount(view) }}</span>
                       }
                     </a>
+                    @if (settingsService.organizingSidebarSavedViews && permissionsService.isSuperUser()) {
+                      <div class="position-absolute end-0 top-0 px-3 py-2" [class.me-n3]="slimSidebarEnabled" cdkDragHandle>
+                        <i-bs name="grip-vertical"></i-bs>
+                      </div>
+                    }
                   </li>
                 }
               </ul>
             }
+            <!-- /end RKC edit -->
             
             <!-- User saved views (owner set) shown as "Saved views" - draggable -->
             @if (userSidebarViews?.length > 0) {

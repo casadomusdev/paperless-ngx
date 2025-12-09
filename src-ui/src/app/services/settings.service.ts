@@ -716,7 +716,30 @@ export class SettingsService {
     return of(true)
   }
 
-  // RKC: Get global views sort order from admin user's settings
+  // RKC: Save global sidebar views order to ApplicationConfiguration
+  // This ordering is shared across all users in the system
+  // Only superusers can update global view ordering
+  updateGlobalSidebarViewsSort(globalViews: SavedView[]): Observable<any> {
+    const globalViewIds = [...new Set(globalViews.map((v) => v.id))]
+    return this.http.patch(
+      `${environment.apiBaseUrl}api/config/1/`,
+      { global_sidebar_views_order: globalViewIds }
+    )
+  }
+
+  // RKC: Save global dashboard views order to ApplicationConfiguration
+  // This ordering is shared across all users in the system
+  // Only superusers can update global view ordering
+  updateGlobalDashboardViewsSort(globalViews: SavedView[]): Observable<any> {
+    const globalViewIds = [...new Set(globalViews.map((v) => v.id))]
+    return this.http.patch(
+      `${environment.apiBaseUrl}api/config/1/`,
+      { global_dashboard_views_order: globalViewIds }
+    )
+  }
+  // /end RKC edit
+
+  // RKC: Get global views sort order from ApplicationConfiguration
   // This is used to order global saved views (owner=NULL) consistently for all users
   get globalViewsSortOrder(): number[] | null {
     return this.settings['global_views_sort_order'] || null

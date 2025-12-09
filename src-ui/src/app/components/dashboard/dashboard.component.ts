@@ -11,6 +11,7 @@ import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { TourNgBootstrapModule, TourService } from 'ngx-ui-tour-ng-bootstrap'
 import { SavedView } from 'src/app/data/saved-view'
 import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
+import { PermissionsService } from 'src/app/services/permissions.service'
 import { SavedViewService } from 'src/app/services/rest/saved-view.service'
 import { SettingsService } from 'src/app/services/settings.service'
 import { ToastService } from 'src/app/services/toast.service'
@@ -113,4 +114,32 @@ export class DashboardComponent extends ComponentWithPermissions {
     })
     // /end RKC edit
   }
+
+  // RKC: Handle drag-drop reordering of global dashboard views
+  // Only superusers can reorder global views
+  // Saves ordering to ApplicationConfiguration which applies to all users
+  onDropGlobal(event: CdkDragDrop<SavedView[]>) {
+    if (!this.permissionsService.isSuperUser()) {
+      this.toastService.showError(
+        $localize`Only superusers can reorder global views.`
+      )
+      return
+    }
+
+    const globalViews = this.globalDashboardViews()
+    moveItemInArray(globalViews, event.previousIndex, event.currentIndex)
+
+    this.settingsService.updateGlobalDashboardViewsSort(globalViews).subscribe({
+      next: () => {
+        this.toastService.showInfo($localize`Global dashboard views updated`)
+        // Reload to reflect new ordering
+        this.savedViewService.clearCache()
+        this.savedViewService.listAll().subscribe()
+      },
+      error: (e) => {
+        this.toastService.showError($localize`Error updating global dashboard views`, e)
+      },
+    })
+  }
+  // /end RKC edit
 }

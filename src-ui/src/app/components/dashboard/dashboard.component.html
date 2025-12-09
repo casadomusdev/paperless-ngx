@@ -4,11 +4,7 @@
 
 <div class="row">
   <div class="col-12 col-lg-8 col-xl-9 mb-4">
-    <div class="row row-cols-1 g-4"
-      cdkDropList
-      [cdkDropListDisabled]="settingsService.globalDropzoneActive"
-      (cdkDropListDropped)="onDrop($event)"
-      >
+    <div class="row row-cols-1 g-4">
       @if (savedViewService.loading) {
         <div class="col">
           <div class="card shadow-sm bg-light">
@@ -45,25 +41,53 @@
             </div>
           </div>
         }
-        <!-- RKC: Display global dashboard views (not draggable, ordered by admin) -->
-        @for (v of globalDashboardViews(); track v.id) {
-          <div class="col">
-            <pngx-saved-view-widget
-              [savedView]="v"
-              [cdkDragDisabled]="true"
-              >
-            </pngx-saved-view-widget>
+        
+        <!-- RKC: Global dashboard views section (draggable for superusers only) -->
+        @if (globalDashboardViews()?.length > 0) {
+          <div class="col-12" 
+            cdkDropList
+            [cdkDropListDisabled]="settingsService.globalDropzoneActive || !permissionsService.isSuperUser()"
+            (cdkDropListDropped)="onDropGlobal($event)">
+            <div class="row row-cols-1 g-4">
+              @for (v of globalDashboardViews(); track v.id) {
+                <div class="col">
+                  <pngx-saved-view-widget
+                    [savedView]="v"
+                    cdkDrag
+                    [cdkDragDisabled]="!permissionsService.isSuperUser()"
+                    (cdkDragStarted)="onDragStart($event)"
+                    (cdkDragEnded)="onDragEnd($event)"
+                    >
+                  </pngx-saved-view-widget>
+                </div>
+              }
+            </div>
           </div>
         }
-        <!-- RKC: Display user dashboard views (draggable, ordered by user) -->
-        @for (v of userDashboardViews(); track v.id) {
-          <div class="col">
-            <pngx-saved-view-widget
-              [savedView]="v"
-              (cdkDragStarted)="onDragStart($event)"
-              (cdkDragEnded)="onDragEnd($event)"
-              >
-            </pngx-saved-view-widget>
+        <!-- /end RKC edit -->
+        
+        <!-- RKC: Personal dashboard views section with heading (draggable for all users) -->
+        @if (userDashboardViews()?.length > 0) {
+          <div class="col-12">
+            <h5 class="mt-3 mb-3" i18n>Personal Saved Views</h5>
+          </div>
+          <div class="col-12"
+            cdkDropList
+            [cdkDropListDisabled]="settingsService.globalDropzoneActive"
+            (cdkDropListDropped)="onDrop($event)">
+            <div class="row row-cols-1 g-4">
+              @for (v of userDashboardViews(); track v.id) {
+                <div class="col">
+                  <pngx-saved-view-widget
+                    [savedView]="v"
+                    cdkDrag
+                    (cdkDragStarted)="onDragStart($event)"
+                    (cdkDragEnded)="onDragEnd($event)"
+                    >
+                  </pngx-saved-view-widget>
+                </div>
+              }
+            </div>
           </div>
         }
         <!-- /end RKC edit -->
