@@ -722,7 +722,7 @@ export class SettingsService {
   updateGlobalSidebarViewsSort(globalViews: SavedView[]): Observable<any> {
     const globalViewIds = [...new Set(globalViews.map((v) => v.id))]
     return this.http.patch(
-      `${environment.apiBaseUrl}api/config/1/`,
+      `${environment.apiBaseUrl}config/1/`,
       { global_sidebar_views_order: globalViewIds }
     )
   }
@@ -733,7 +733,7 @@ export class SettingsService {
   updateGlobalDashboardViewsSort(globalViews: SavedView[]): Observable<any> {
     const globalViewIds = [...new Set(globalViews.map((v) => v.id))]
     return this.http.patch(
-      `${environment.apiBaseUrl}api/config/1/`,
+      `${environment.apiBaseUrl}config/1/`,
       { global_dashboard_views_order: globalViewIds }
     )
   }
