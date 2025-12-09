@@ -37,6 +37,12 @@ The RKC customizations enhance Paperless-ngx with security controls, collaborati
   - Environment Variable: `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`
   - Multiple frontend components
 
+- **[Global Saved Views Management](#4-global-saved-views-management-ui)** - Full UI-based management of global saved views for superusers with visual distinction and admin-controlled ordering.
+  - Environment Variable: `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`
+  - Backend: `src/documents/views.py`
+  - Frontend: `src-ui/src/app/components/manage/saved-views/` (TypeScript & HTML)
+  - Frontend: `src-ui/src/app/data/ui-settings.ts`
+
 ### UI Customization Defaults
 - **[Theme Color Default](#1-theme-color-default-paperless_ui_theme_color)** - Set organization-wide default theme color without overriding user preferences.
   - Environment Variable: `PAPERLESS_UI_THEME_COLOR`
@@ -266,6 +272,146 @@ npm run start
 - All users see global views in same order as admin's organization in both locations
 - Clean separation between organizational shortcuts and personal views
 - Admin can organize sidebar and dashboard independently
+
+### 4. Global Saved Views Management UI
+**Purpose**: Enable full UI-based management of global saved views for superusers with visual separation and admin-controlled ordering
+
+**Environment Variable**:
+- `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`: User ID of admin authorized to save global view ordering
+
+**Files Modified**:
+- `src/documents/views.py` - Backend permission checks for global view editing
+- `src-ui/src/app/data/ui-settings.ts` - Added GLOBAL_VIEWS_ADMIN_USER_ID settings key
+- `src-ui/src/app/components/manage/saved-views/saved-views.component.ts` - Complete component refactor
+- `src-ui/src/app/components/manage/saved-views/saved-views.component.html` - New UI layout
+
+**Key Features**:
+
+1. **Superuser Access Control**:
+   - Only superusers can see and edit global views in the management page
+   - Regular users only see their personal views
+   - Backend enforces permissions - superusers can modify global views via API
+   - Non-superusers get 403 Forbidden when attempting to modify global views
+
+2. **Visual Distinction**:
+   - **Global Shared Views Section**: Displayed in a blue card with "Global Shared Views" header
+   - **GLOBAL Badges**: Each global view shows a blue "GLOBAL" ba dge for clear identification
+   - **Personal Saved Views Section**: Displayed in standard card below global views
+   - Clean separation prevents confusion between organizational and personal views
+
+3. **Admin Authorization**:
+   - Component includes `isGlobalViewsAdmin` getter
+   - Checks if current user ID matches `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`
+   - Only the designated admin sees "Save Global View Order" button
+   - Non-admin superusers see warning: "Only the designated admin can reorder these views"
+
+4. **Dual Form Management**:
+   - Separate FormGroups for global views (`globalViewsGroup`) and personal views (`personalViewsGroup`)
+   - Each group independently tracks changes and validation
+   - Save operation combines both groups for efficient API call
+   - Delete operation correctly identifies and removes from appropriate array
+
+5. **Global View Ordering**:
+   - `saveGlobalViewsOrder()` method stores current order to backend
+   - Order saved to both sidebar and dashboard settings simultaneously
+   - Changes immediately propagate to all users
+   - Only authorized admin can save ordering
+
+**Component Architecture**:
+
+```typescript
+// Properties
+public globalViews: SavedView[] = []
+public personalViews: SavedView[] = []
+private globalViewsGroup = new FormGroup({})
+private personalViewsGroup = new FormGroup({})
+
+// Getters
+get isGlobalViewsAdmin(): boolean {
+  const adminUserId = this.settings.get(SETTINGS_KEYS.GLOBAL_VIEWS_ADMIN_USER_ID)
+  return adminUserId !== null && this.permissionsService.currentUserId === adminUserId
+}
+
+// Key Methods
+ngOnInit() - Separates views into global and personal arrays
+initialize() - Creates separate FormGroups for each view type  
+save() - Combines and saves both global and personal changes
+deleteSavedView() - Removes from appropriate array
+saveGlobalViewsOrder() - Stores global view order (admin only)
+```
+
+**UI Layout**:
+
+```
+┌─────────────────────────────────────────┐
+│ Saved Views                              │
+├─────────────────────────────────────────┤
+│ ┌─ Global Shared Views (Blue Card) ───┐│
+│ │ These views are visible to all users ││
+│ │ [Warning if not admin]               ││
+│ │                                       ││
+│ │ [GLOBAL] View 1 - [Edit] [Delete]   ││
+│ │ [GLOBAL] View 2 - [Edit] [Delete]   ││
+│ │                                       ││
+│ │ [Save Global View Order] (admin only)││
+│ └─────────────────────────────────────┘│
+│                                          │
+│ ┌─ Personal Saved Views ──────────────┐│
+│ │ These views are private to account   ││
+│ │                                       ││
+│ │ My View 1 - [Edit] [Delete]         ││
+│ │ My View 2 - [Edit] [Delete]         ││
+│ └─────────────────────────────────────┘│
+│                                          │
+│ [Cancel] [Save]                         │
+└─────────────────────────────────────────┘
+```
+
+**Security Model**:
+- **Backend**: `SavedViewViewSet` allows superusers to modify global views (owner=NULL)
+- **Frontend**: Component separates and displays views based on owner field
+- **Authorization**: Admin check prevents unauthorized ordering changes
+- **Defense in Depth**: Both UI hiding and backend validation
+
+**Workflow Example**:
+
+1. **Admin Creates Global View**:
+   ```sql
+   -- Create view then clear owner
+   UPDATE documents_savedview SET owner_id = NULL WHERE id = X;
+   ```
+
+2. **Superuser Edits Global View**:
+   - Logs into Settings > Saved Views
+   - Sees both "Global Shared Views" and "Personal Saved Views" sections
+   - Edits global view name, visibility, or display settings
+   - Clicks "Save" - backend allows modification
+
+3. **Admin Organizes Global Views**:
+   - Designated admin (matching PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID)
+   - Sees "Save Global View Order" button
+   - Arranges global views in desired order
+   - Clicks "Save Global View Order"
+   - Order propagates to all users' sidebar and dashboard
+
+4. **Regular User Experience**:
+   - Logs into Settings > Saved Views
+   - Sees only "Personal Saved Views" section
+   - Cannot see or modify global views in management page
+   - Global views still appear normally in sidebar and dashboard
+
+**Use Cases**:
+- IT department creates standard views for different document types
+- Superusers can refine global view settings without database access
+- Designated admin maintains consistent organization across all users
+- Users focus on personalizing their own views without confusion
+
+**Benefits**:
+- No more database manipulation required for editing global views
+- Clear visual separation reduces user confusion
+- Superuser-only access maintains security
+- Admin ordering provides organization-wide consistency
+- Clean upgrade path for future Paperless-ngx updates (all changes marked with RKC comments)
 
 ## Permission System
 
@@ -718,6 +864,21 @@ docker compose restart webserver
 - Backend: `src/documents/signals/handlers.py` - Conditional debug logging in `create_ui_settings_for_new_user` signal
 
 ## Version History
+
+- **v1.0.9 (2025-12-09)**: Global saved views management UI implementation
+  - Implemented complete UI-based management system for global saved views
+  - Superusers can now edit global views directly through Settings > Saved Views page
+  - Backend modified to allow superusers to update/delete global views (owner=NULL)
+  - Frontend separated into "Global Shared Views" and "Personal Saved Views" sections
+  - Added visual distinction with blue card, "GLOBAL" badges, and warning messages
+  - Only designated admin (via `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID`) can save ordering
+  - Non-admin superusers can edit but see warning about ordering restrictions
+  - Regular users see only personal views (global views hidden from management page)
+  - Files modified:
+    - Backend: `src/documents/views.py` (allow superuser modifications)
+    - Frontend: `src-ui/src/app/data/ui-settings.ts` (added GLOBAL_VIEWS_ADMIN_USER_ID key)
+    - Frontend: `src-ui/src/app/components/manage/saved-views/` (complete refactor)
+  - All changes marked with RKC comments for maintainability
 
 - **v1.0.8 (2025-12-08)**: PDF Editor restriction now optional via environment variable
   - Added `PAPERLESS_PDF_EDITOR_RESTRICT_TO_SUPERUSER` environment variable (default: false)
