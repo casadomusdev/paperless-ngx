@@ -713,7 +713,7 @@ export class SettingsService {
     this.set(SETTINGS_KEYS.SIDEBAR_VIEWS_SORT_ORDER, [
       ...new Set(sidebarViews.map((v) => v.id)),
     ])
-    return of(true)
+    return this.storeSettings()
   }
 
   // RKC: Save global sidebar views order to ApplicationConfiguration

@@ -272,6 +272,7 @@ export class AppFrameComponent
   // RKC: Handle drag-drop reordering of global saved views in sidebar
   // Only superusers can reorder global views
   // Saves ordering to ApplicationConfiguration which applies to all users
+  // After save, must reload settings to get updated global_sidebar_views_order
   onDropGlobal(event: CdkDragDrop<SavedView[]>) {
     if (!this.permissionsService.isSuperUser()) {
       this.toastService.showError(
@@ -286,9 +287,11 @@ export class AppFrameComponent
     this.settingsService.updateGlobalSidebarViewsSort(globalViews).subscribe({
       next: () => {
         this.toastService.showInfo($localize`Global sidebar views updated`)
-        // Reload to reflect new ordering
-        this.savedViewService.clearCache()
-        this.savedViewService.reload()
+        // RKC: Reload settings to pick up updated global_sidebar_views_order from ApplicationConfiguration
+        this.settingsService.initializeSettings().subscribe(() => {
+          // After settings reload, the globalSidebarViews getter will use the new order
+        })
+        // /end RKC edit
       },
       error: (e) => {
         this.toastService.showError($localize`Error updating global sidebar views`, e)

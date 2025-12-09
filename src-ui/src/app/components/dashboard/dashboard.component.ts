@@ -110,6 +110,9 @@ export class DashboardComponent extends ComponentWithPermissions {
     this.settingsService.updateDashboardViewsSort(userViews).subscribe({
       next: () => {
         this.toastService.showInfo($localize`Dashboard updated`)
+        // RKC: Reload settings to pick up updated dashboard_views_sort_order from user settings
+        this.settingsService.initializeSettings().subscribe()
+        // /end RKC edit
       },
       error: (e) => {
         this.toastService.showError($localize`Error updating dashboard`, e)
@@ -121,6 +124,7 @@ export class DashboardComponent extends ComponentWithPermissions {
   // RKC: Handle drag-drop reordering of global dashboard views
   // Only superusers can reorder global views
   // Saves ordering to ApplicationConfiguration which applies to all users
+  // After save, must reload settings to get updated global_dashboard_views_order
   onDropGlobal(event: CdkDragDrop<SavedView[]>) {
     if (!this.permissionsService.isSuperUser()) {
       this.toastService.showError(
@@ -135,9 +139,11 @@ export class DashboardComponent extends ComponentWithPermissions {
     this.settingsService.updateGlobalDashboardViewsSort(globalViews).subscribe({
       next: () => {
         this.toastService.showInfo($localize`Global dashboard views updated`)
-        // Reload to reflect new ordering
-        this.savedViewService.clearCache()
-        this.savedViewService.listAll().subscribe()
+        // RKC: Reload settings to pick up updated global_dashboard_views_order from ApplicationConfiguration
+        this.settingsService.initializeSettings().subscribe(() => {
+          // After settings reload, the globalDashboardViews computed signal will use the new order
+        })
+        // /end RKC edit
       },
       error: (e) => {
         this.toastService.showError($localize`Error updating global dashboard views`, e)
