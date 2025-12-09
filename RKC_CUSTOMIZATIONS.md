@@ -865,6 +865,29 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.11 (2025-12-09)**: System-wide global view ordering via ApplicationConfiguration
+  - Replaced per-user global view ordering with centralized system-wide storage
+  - Added two new fields to ApplicationConfiguration model:
+    - `global_sidebar_views_order` - JSONField for sidebar ordering
+    - `global_dashboard_views_order` - JSONField for dashboard ordering
+  - Created Django migration `0005_add_global_views_order.py`
+  - **Any superuser can now update the global view order** (not just one designated admin)
+  - Frontend `saveGlobalViewsOrder()` method now POSTs to ApplicationConfiguration API endpoint
+  - **Removed `PAPERLESS_GLOBAL_VIEWS_ADMIN_USER_ID` environment variable** - no longer needed
+  - Backend reads order from ApplicationConfiguration singleton instead of admin user's settings
+  - Single canonical ordering shared by all users
+  - Removed yellow warning message from saved views management page
+  - Removed `isGlobalViewsAdmin` getter that checked admin user ID
+  - Files modified:
+    - Backend: `src/paperless/settings.py` (removed GLOBAL_VIEWS_ADMIN_USER_ID env var)
+    - Backend: `src/paperless/models.py` (added JSONField columns)
+    - Backend: `src/paperless/migrations/0005_add_global_views_order.py` (new migration)
+    - Backend: `src/documents/views.py` (read from ApplicationConfiguration instead of user settings)
+    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.ts` (HttpClient injection, simplified permissions)
+    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.html` (removed warning, simplified button display)
+  - Architecture: Moved from per-superuser settings to singleton model for true system-wide state
+  - All changes properly marked with RKC comments following conventions
+
 - **v1.0.10 (2025-12-09)**: Toggle switches for personal/global view conversion
   - Added toggle switches to convert views between personal (owner=user) and global (owner=NULL)
   - Prominently displayed in each view container on saved views management page

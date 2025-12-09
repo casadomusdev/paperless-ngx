@@ -1,3 +1,4 @@
+import { HttpClient } from '@angular/common/http'
 import { AsyncPipe } from '@angular/common'
 import { Component, OnDestroy, OnInit, inject } from '@angular/core'
 import {
@@ -10,8 +11,8 @@ import { dirtyCheck } from '@ngneat/dirty-check-forms'
 import { BehaviorSubject, Observable, takeUntil } from 'rxjs'
 import { DisplayMode } from 'src/app/data/document'
 import { SavedView } from 'src/app/data/saved-view'
-// RKC: Import SETTINGS_KEYS for global views admin check
-import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
+// RKC: Import HttpClient for ApplicationConfiguration API calls
+import { environment } from 'src/environments/environment'
 // /end RKC edit
 import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
 import { PermissionsService } from 'src/app/services/permissions.service'
@@ -48,6 +49,9 @@ export class SavedViewsComponent
   private settings = inject(SettingsService)
   private toastService = inject(ToastService)
   private permissionsService = inject(PermissionsService)
+  // RKC: Inject HttpClient for ApplicationConfiguration API calls
+  private http = inject(HttpClient)
+  // /end RKC edit
 
   DisplayMode = DisplayMode
 
@@ -69,12 +73,6 @@ export class SavedViewsComponent
   get displayFields() {
     return this.settings.allDisplayFields
   }
-
-  // RKC: Check if current user is a superuser (can manage global views)
-  get isGlobalViewsAdmin(): boolean {
-    return this.permissionsService.isSuperUser()
-  }
-  // /end RKC edit
 
   constructor() {
     super()
@@ -328,10 +326,10 @@ export class SavedViewsComponent
     }
   }
 
-  // RKC: Save global views order for sidebar and dashboard
-  // Any superuser can save the global ordering
+  // RKC: Save global views order for sidebar and dashboard to ApplicationConfiguration
+  // Any superuser can save the global ordering, which is stored system-wide
   public saveGlobalViewsOrder() {
-    if (!this.isGlobalViewsAdmin) {
+    if (!this.permissionsService.isSuperUser()) {
       this.toastService.showError(
         $localize`Only superusers can change the global view order.`
       )
@@ -341,11 +339,14 @@ export class SavedViewsComponent
     // Get current order of global views
     const globalViewIds = this.globalViews.map(v => v.id)
     
-    // Store in user settings (will be stored server-side for this admin user)
-    this.settings.set(SETTINGS_KEYS.GLOBAL_VIEWS_SORT_ORDER, globalViewIds)
-    this.settings.set(SETTINGS_KEYS.GLOBAL_DASHBOARD_VIEWS_SORT_ORDER, globalViewIds)
+    // Update ApplicationConfiguration singleton with global view ordering
+    // This ordering is shared across all users
+    const payload = {
+      global_sidebar_views_order: globalViewIds,
+      global_dashboard_views_order: globalViewIds
+    }
     
-    this.settings.storeSettings().subscribe({
+    this.http.patch(`${environment.apiBaseUrl}api/config/1/`, payload).subscribe({
       next: () => {
         this.toastService.showInfo($localize`Global view order saved successfully.`)
       },

@@ -188,6 +188,27 @@ class ApplicationConfiguration(AbstractSingletonModel):
         upload_to="logo/",
     )
 
+    # RKC: System-wide global saved views ordering
+    # Stores the order of global saved views (views with owner=NULL) for sidebar
+    # Any superuser can update this ordering
+    global_sidebar_views_order = models.JSONField(
+        verbose_name=_("Global saved views sidebar order"),
+        null=True,
+        blank=True,
+        help_text=_("Array of saved view IDs defining the sidebar order for global views"),
+    )
+
+    # RKC: System-wide global saved views ordering for dashboard
+    # Stores the order of global saved views (views with owner=NULL) for dashboard
+    # Any superuser can update this ordering
+    global_dashboard_views_order = models.JSONField(
+        verbose_name=_("Global saved views dashboard order"),
+        null=True,
+        blank=True,
+        help_text=_("Array of saved view IDs defining the dashboard order for global views"),
+    )
+    # /end RKC edit
+
     """
     Settings for the barcode scanner
     """

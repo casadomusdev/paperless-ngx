@@ -2455,45 +2455,21 @@ class UiSettingsView(GenericAPIView):
         )
         # /end RKC edit
 
-        # RKC: Pass global saved views sort order from designated admin user to frontend
-        # This allows all users to see global views (owner=NULL) in the same order
+        # RKC: Read global saved views ordering from ApplicationConfiguration singleton
+        # This system-wide setting can be updated by any superuser and is shared by all users
         global_views_sort_order = None
-        if settings.GLOBAL_VIEWS_ADMIN_USER_ID:
-            try:
-                admin_user = User.objects.select_related("ui_settings").get(
-                    id=settings.GLOBAL_VIEWS_ADMIN_USER_ID
-                )
-                if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
-                    saved_views_settings = admin_user.ui_settings.settings.get("saved_views", {})
-                    if isinstance(saved_views_settings, dict):
-                        global_views_sort_order = saved_views_settings.get("sidebar-views-sort-order") or saved_views_settings.get("sidebar_views_sort_order")
-            except (User.DoesNotExist, UiSettings.DoesNotExist):
-                pass
+        global_dashboard_views_sort_order = None
+        
+        try:
+            app_config = ApplicationConfiguration.objects.first()
+            if app_config:
+                global_views_sort_order = app_config.global_sidebar_views_order
+                global_dashboard_views_sort_order = app_config.global_dashboard_views_order
+        except ApplicationConfiguration.DoesNotExist:
+            pass
 
         ui_settings["global_views_sort_order"] = global_views_sort_order
-
-        # RKC: Pass global dashboard views sort order from designated admin user to frontend
-        global_dashboard_views_sort_order = None
-        if settings.GLOBAL_VIEWS_ADMIN_USER_ID:
-            try:
-                admin_user = User.objects.select_related("ui_settings").get(
-                    id=settings.GLOBAL_VIEWS_ADMIN_USER_ID
-                )
-                if hasattr(admin_user, 'ui_settings') and admin_user.ui_settings.settings:
-                    saved_views_settings = admin_user.ui_settings.settings.get("saved_views", {})
-                    if isinstance(saved_views_settings, dict):
-                        global_dashboard_views_sort_order = saved_views_settings.get("dashboard-views-sort-order") or saved_views_settings.get("dashboard_views_sort_order")
-            except (User.DoesNotExist, UiSettings.DoesNotExist):
-                pass
-
         ui_settings["global_dashboard_views_sort_order"] = global_dashboard_views_sort_order
-
-        # RKC: Pass global views admin user ID to frontend
-        # This allows the frontend to determine if the current user is authorized
-        # to reorder global saved views in sidebar and dashboard
-        ui_settings["global_views_admin_user_id"] = getattr(
-            settings, "GLOBAL_VIEWS_ADMIN_USER_ID", None
-        )
         # /end RKC edit
 
         if settings.GMAIL_OAUTH_ENABLED or settings.OUTLOOK_OAUTH_ENABLED:

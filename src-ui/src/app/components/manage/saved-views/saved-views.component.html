@@ -13,13 +13,6 @@
       <div class="card-header bg-primary text-white">
         <h5 class="mb-0" i18n>Global Shared Views</h5>
         <small i18n>These views are visible to all users in the organization.</small>
-        @if (!isGlobalViewsAdmin) {
-          <div class="mt-2">
-            <small class="badge bg-warning text-dark" i18n>
-              Only superusers can reorder these views
-            </small>
-          </div>
-        }
       </div>
       <div class="card-body">
         <ul class="list-group" formGroupName="globalViews">
@@ -84,16 +77,16 @@
             </li>
           }
         </ul>
-        @if (isGlobalViewsAdmin) {
-          <div class="mt-3">
-            <button type="button" (click)="saveGlobalViewsOrder()" class="btn btn-outline-primary btn-sm" i18n>
-              Save Global View Order
-            </button>
-            <small class="text-muted ms-2" i18n>
-              The order shown here will be applied to all users' sidebars and dashboards
-            </small>
-          </div>
-        }
+        <!-- RKC: Any superuser can save global view order -->
+        <div class="mt-3">
+          <button type="button" (click)="saveGlobalViewsOrder()" class="btn btn-outline-primary btn-sm" i18n>
+            Save Global View Order
+          </button>
+          <small class="text-muted ms-2" i18n>
+            The order shown here will be applied to all users' sidebars and dashboards
+          </small>
+        </div>
+        <!-- /end RKC edit -->
       </div>
     </div>
   }
