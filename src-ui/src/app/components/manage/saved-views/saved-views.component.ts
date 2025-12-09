@@ -73,7 +73,7 @@ export class SavedViewsComponent
   // RKC: Check if current user is the designated global views admin
   get isGlobalViewsAdmin(): boolean {
     const adminUserId = this.settings.get(SETTINGS_KEYS.GLOBAL_VIEWS_ADMIN_USER_ID)
-    return adminUserId !== null && this.permissionsService.currentUserId === adminUserId
+    return adminUserId !== null && this.permissionsService['currentUser']?.id === adminUserId
   }
   // /end RKC edit
 
@@ -279,7 +279,7 @@ export class SavedViewsComponent
       .forEach((group: FormGroup) => {
         const viewData = { ...group.value }
         // RKC: Set owner based on isGlobal toggle (NULL for global, user ID for personal)
-        viewData.owner = viewData.isGlobal ? null : this.permissionsService.currentUserId
+        viewData.owner = viewData.isGlobal ? null : this.permissionsService['currentUser']?.id
         delete viewData.isGlobal
         // /end RKC edit
         changedGlobal.push(viewData)
@@ -290,7 +290,7 @@ export class SavedViewsComponent
       .forEach((group: FormGroup) => {
         const viewData = { ...group.value }
         // RKC: Set owner based on isGlobal toggle (NULL for global, user ID for personal)
-        viewData.owner = viewData.isGlobal ? null : this.permissionsService.currentUserId
+        viewData.owner = viewData.isGlobal ? null : this.permissionsService['currentUser']?.id
         delete viewData.isGlobal
         // /end RKC edit
         changedPersonal.push(viewData)
