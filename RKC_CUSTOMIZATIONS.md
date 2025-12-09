@@ -865,6 +865,18 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.10 (2025-12-09)**: Toggle switches for personal/global view conversion
+  - Added toggle switches to convert views between personal (owner=user) and global (owner=NULL)
+  - Prominently displayed in each view container on saved views management page
+  - Toggle state automatically sets owner field when saving
+  - No confirmation dialogs - clean UX with instant state changes
+  - Views automatically migrate between sections after save and refresh
+  - Works for both global and personal view sections
+  - Only available to superusers (leverages existing permission system)
+  - Files modified:
+    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.ts` (added isGlobal control, modified save logic)
+    - Frontend: `src-ui/src/app/components/manage/saved-views/saved-views.component.html` (added toggle UI)
+
 - **v1.0.9 (2025-12-09)**: Global saved views management UI implementation
   - Implemented complete UI-based management system for global saved views
   - Superusers can now edit global views directly through Settings > Saved Views page

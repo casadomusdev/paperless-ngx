@@ -33,6 +33,15 @@
                       <pngx-input-text title="Name" formControlName="name"></pngx-input-text>
                     </div>
                   </div>
+                  <!-- RKC: Toggle switch to convert view between personal/global (superuser only) -->
+                  <div class="col-auto">
+                    <label class="form-label" i18n>Global View</label>
+                    <div class="form-check form-switch">
+                      <input type="checkbox" class="form-check-input" id="global_isGlobal_{{view.id}}" formControlName="isGlobal">
+                      <label class="form-check-label" for="global_isGlobal_{{view.id}}" i18n>Make global for all users</label>
+                    </div>
+                  </div>
+                  <!-- /end RKC edit -->
                   <div class="col">
                     <div class="form-check form-switch mt-3">
                       <input type="checkbox" class="form-check-input" id="global_show_on_dashboard_{{view.id}}" formControlName="show_on_dashboard">
@@ -100,12 +109,21 @@
       <ul class="list-group" formGroupName="personalViews">
         @for (view of personalViews; track view) {
           <li class="list-group-item py-3">
-            <div [formGroupName]="view.id">
-              <div class="row">
-                <div class="col">
-                  <pngx-input-text title="Name" formControlName="name"></pngx-input-text>
-                </div>
-                <div class="col">
+              <div [formGroupName]="view.id">
+                <div class="row">
+                  <div class="col">
+                    <pngx-input-text title="Name" formControlName="name"></pngx-input-text>
+                  </div>
+                  <!-- RKC: Toggle switch to convert view between personal/global (superuser only) -->
+                  <div class="col-auto">
+                    <label class="form-label" i18n>Global View</label>
+                    <div class="form-check form-switch">
+                      <input type="checkbox" class="form-check-input" id="personal_isGlobal_{{view.id}}" formControlName="isGlobal">
+                      <label class="form-check-label" for="personal_isGlobal_{{view.id}}" i18n>Make global for all users</label>
+                    </div>
+                  </div>
+                  <!-- /end RKC edit -->
+                  <div class="col">
                   <div class="form-check form-switch mt-3">
                     <input type="checkbox" class="form-check-input" id="show_on_dashboard_{{view.id}}" formControlName="show_on_dashboard">
                     <label class="form-check-label" for="show_on_dashboard_{{view.id}}" i18n>Show on dashboard</label>

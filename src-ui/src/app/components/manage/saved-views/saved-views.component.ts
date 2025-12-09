@@ -131,6 +131,9 @@ export class SavedViewsComponent
         page_size: view.page_size,
         display_mode: view.display_mode,
         display_fields: view.display_fields,
+        // RKC: Toggle control for converting views between personal/global
+        isGlobal: true,
+        // /end RKC edit
       }
       this.globalViewsGroup.addControl(
         view.id.toString(),
@@ -142,6 +145,9 @@ export class SavedViewsComponent
           page_size: new FormControl(null),
           display_mode: new FormControl(null),
           display_fields: new FormControl([]),
+          // RKC: Toggle control for converting views between personal/global
+          isGlobal: new FormControl(true),
+          // /end RKC edit
         })
       )
     }
@@ -157,6 +163,9 @@ export class SavedViewsComponent
         page_size: view.page_size,
         display_mode: view.display_mode,
         display_fields: view.display_fields,
+        // RKC: Toggle control for converting views between personal/global
+        isGlobal: false,
+        // /end RKC edit
       }
       this.personalViewsGroup.addControl(
         view.id.toString(),
@@ -168,6 +177,9 @@ export class SavedViewsComponent
           page_size: new FormControl(null),
           display_mode: new FormControl(null),
           display_fields: new FormControl([]),
+          // RKC: Toggle control for converting views between personal/global
+          isGlobal: new FormControl(false),
+          // /end RKC edit
         })
       )
     }
@@ -265,13 +277,23 @@ export class SavedViewsComponent
     Object.values(this.globalViewsGroup.controls)
       .filter((g: FormGroup) => !g.pristine)
       .forEach((group: FormGroup) => {
-        changedGlobal.push(group.value)
+        const viewData = { ...group.value }
+        // RKC: Set owner based on isGlobal toggle (NULL for global, user ID for personal)
+        viewData.owner = viewData.isGlobal ? null : this.permissionsService.currentUserId
+        delete viewData.isGlobal
+        // /end RKC edit
+        changedGlobal.push(viewData)
       })
 
     Object.values(this.personalViewsGroup.controls)
       .filter((g: FormGroup) => !g.pristine)
       .forEach((group: FormGroup) => {
-        changedPersonal.push(group.value)
+        const viewData = { ...group.value }
+        // RKC: Set owner based on isGlobal toggle (NULL for global, user ID for personal)
+        viewData.owner = viewData.isGlobal ? null : this.permissionsService.currentUserId
+        delete viewData.isGlobal
+        // /end RKC edit
+        changedPersonal.push(viewData)
       })
 
     const allChanged = [...changedGlobal, ...changedPersonal]
@@ -282,6 +304,20 @@ export class SavedViewsComponent
         next: () => {
           this.toastService.showInfo($localize`Views saved successfully.`)
           this.store.next(this.savedViewsForm.value)
+          // RKC: Refresh view list after save to reflect owner changes
+          this.savedViewService.clearCache()
+          this.savedViewService.listAll().subscribe((r) => {
+            if (this.permissionsService.isSuperUser()) {
+              this.globalViews = r.results.filter(v => v.owner === null)
+              this.personalViews = r.results.filter(v => v.owner !== null)
+            } else {
+              this.globalViews = []
+              this.personalViews = r.results.filter(v => v.owner !== null)
+            }
+            this.savedViews = r.results
+            this.initialize()
+          })
+          // /end RKC edit
         },
         error: (error) => {
           this.toastService.showError(
