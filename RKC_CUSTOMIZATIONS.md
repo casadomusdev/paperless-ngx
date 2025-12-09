@@ -865,6 +865,22 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.12 (2025-12-09)**: Mail-document correlation via custom fields
+  - Implemented reliable email-to-document correlation using IMAP UIDs
+  - Solves async processing issue where timestamp-based correlation fails with Celery's parallel processing
+  - Added `mail_uid` field to ConsumableDocument dataclass for passing IMAP UID through processing pipeline
+  - Added `PAPERLESS_MAIL_CORRELATION_FIELD` environment variable (default: "Mail UID")
+  - Helper function `_attach_mail_uid_custom_field()` creates CustomFieldInstance linking document to email
+  - Non-critical enhancement: failures don't abort document consumption, only log warnings
+  - Enables future queries to find documents originating from specific emails via custom field
+  - Files modified:
+    - Backend: `src/documents/data_models.py` (added mail_uid field)
+    - Backend: `src/paperless/settings.py` (added PAPERLESS_MAIL_CORRELATION_FIELD env var)
+    - Backend: `src/paperless_mail/mail.py` (pass mail_uid in both attachment and EML processing)
+    - Backend: `src/documents/consumer.py` (added helper function and call after document.save())
+  - All changes properly marked with RKC comments for maintainability
+  - See `MAILDOC_CORRELATION.md` for detailed implementation documentation
+
 - **v1.0.11 (2025-12-09)**: System-wide global view ordering with drag-drop interface
   - Replaced per-user global view ordering with centralized system-wide storage
   - Added two new fields to ApplicationConfiguration model:

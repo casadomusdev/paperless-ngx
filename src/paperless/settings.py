@@ -1373,6 +1373,11 @@ PDF_EDITOR_RESTRICT_TO_SUPERUSER = __get_boolean(
 )
 # /end RKC edit
 
+# RKC: Custom field name for storing email UID correlation
+# Hardcoded to avoid requiring environment variable configuration
+PAPERLESS_MAIL_CORRELATION_FIELD = "Mail UID"
+# /end RKC edit
+
 ###############################################################################
 # Machine Learning                                                            #
 ###############################################################################

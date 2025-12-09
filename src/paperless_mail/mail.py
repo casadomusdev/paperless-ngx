@@ -843,6 +843,9 @@ class MailAccountHandler(LoggingMixin):
                     source=DocumentSource.MailFetch,
                     original_file=temp_filename,
                     mailrule_id=rule.pk,
+                    # RKC: Pass mail UID for document correlation
+                    mail_uid=message.uid,
+                    # /end RKC edit
                 )
                 doc_overrides = DocumentMetadataOverrides(
                     title=title,
@@ -945,6 +948,9 @@ class MailAccountHandler(LoggingMixin):
             source=DocumentSource.MailFetch,
             original_file=temp_filename,
             mailrule_id=rule.pk,
+            # RKC: Pass mail UID for document correlation
+            mail_uid=message.uid,
+            # /end RKC edit
         )
         doc_overrides = DocumentMetadataOverrides(
             title=message.subject,

@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import logging
 import os
 import tempfile
 from enum import Enum
@@ -48,6 +49,51 @@ from documents.utils import copy_basic_file_stats
 from documents.utils import copy_file_with_basic_stats
 from documents.utils import run_subprocess
 from paperless_mail.parsers import MailDocumentParser
+
+
+# RKC: Helper function to attach mail UID as custom field for correlation with ProcessedMail
+def _attach_mail_uid_custom_field(document, mail_uid: str):
+    """
+    Attaches the mail UID to the document as a custom field.
+    Creates the custom field definition if it doesn't exist.
+    
+    Args:
+        document: The Document instance to attach the field to
+        mail_uid: The IMAP UID from the source email
+    """
+    if not mail_uid:
+        return
+    
+    logger = logging.getLogger("paperless.consumer")
+    
+    try:
+        # Get or create the mail correlation custom field definition
+        field_name = settings.PAPERLESS_MAIL_CORRELATION_FIELD
+        field, created = CustomField.objects.get_or_create(
+            name=field_name,
+            defaults={
+                'data_type': CustomField.FieldDataType.STRING,
+            }
+        )
+        
+        if created:
+            logger.info(f"Created mail correlation custom field: {field_name}")
+        
+        # Set the custom field value for this document
+        CustomFieldInstance.objects.update_or_create(
+            document=document,
+            field=field,
+            defaults={
+                'value_text': mail_uid,
+            }
+        )
+        
+        logger.debug(f"Attached mail UID {mail_uid} to document {document.pk}")
+        
+    except Exception as e:
+        logger.error(f"Failed to attach mail UID custom field: {e}")
+        # Don't raise - this is a non-critical enhancement
+# /end RKC edit
 
 
 class WorkflowTriggerPlugin(
@@ -531,6 +577,11 @@ class ConsumerPlugin(
                 # renaming logic to acquire the lock as well.
                 # This triggers things like file renaming
                 document.save()
+
+                # RKC: Attach mail UID custom field if document came from mail
+                if self.input_doc.mail_uid:
+                    _attach_mail_uid_custom_field(document, self.input_doc.mail_uid)
+                # /end RKC edit
 
                 # Delete the file only if it was successfully consumed
                 self.log.debug(f"Deleting original file {self.input_doc.original_file}")

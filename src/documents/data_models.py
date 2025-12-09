@@ -158,6 +158,9 @@ class ConsumableDocument:
     original_file: Path
     original_path: Path | None = None
     mailrule_id: int | None = None
+    # RKC: Store mail UID for correlation with ProcessedMail table
+    mail_uid: str | None = None
+    # /end RKC edit
     mime_type: str = dataclasses.field(init=False, default=None)
 
     def __post_init__(self):
