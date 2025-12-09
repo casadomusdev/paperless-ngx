@@ -369,7 +369,26 @@ export class AppFrameComponent
   }
 
   get userSidebarViews(): SavedView[] {
-    return this.savedViewService.sidebarViews.filter(v => v.owner !== null)
+    const userViews = this.savedViewService.sidebarViews.filter(v => v.owner !== null)
+    const userSortOrder = this.settingsService.get(SETTINGS_KEYS.SIDEBAR_VIEWS_SORT_ORDER)
+    
+    // Apply user's custom sort order if it exists
+    if (userSortOrder && userSortOrder.length > 0) {
+      // Sort by user's order
+      const sorted = userViews.sort((a, b) => {
+        const indexA = userSortOrder.indexOf(a.id)
+        const indexB = userSortOrder.indexOf(b.id)
+        // If not in sort order, put at end sorted alphabetically
+        if (indexA === -1 && indexB === -1) return a.name.localeCompare(b.name)
+        if (indexA === -1) return 1
+        if (indexB === -1) return -1
+        return indexA - indexB
+      })
+      return sorted
+    }
+    
+    // Fallback: use service's default sort order (already sorted)
+    return userViews
   }
   // /end RKC edit
 }

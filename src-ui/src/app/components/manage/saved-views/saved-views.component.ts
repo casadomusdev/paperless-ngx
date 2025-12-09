@@ -207,7 +207,9 @@ export class SavedViewsComponent
     }
 
     // RKC: Update form to include both groups
+    // Keep savedViews group for backward compatibility to prevent form validation errors
     this.savedViewsForm = new FormGroup({
+      savedViews: this.savedViewsGroup,
       globalViews: this.globalViewsGroup,
       personalViews: this.personalViewsGroup,
     })
