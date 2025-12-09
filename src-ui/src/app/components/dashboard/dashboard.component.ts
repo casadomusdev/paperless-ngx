@@ -45,6 +45,9 @@ import { WelcomeWidgetComponent } from './widgets/welcome-widget/welcome-widget.
 export class DashboardComponent extends ComponentWithPermissions {
   settingsService = inject(SettingsService)
   savedViewService = inject(SavedViewService)
+  // RKC: Inject PermissionsService for superuser checks in global view drag-drop handlers
+  permissionsService = inject(PermissionsService)
+  // /end RKC edit
   private tourService = inject(TourService)
   private toastService = inject(ToastService)
 
