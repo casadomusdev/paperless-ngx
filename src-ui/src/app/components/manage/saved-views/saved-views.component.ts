@@ -70,10 +70,9 @@ export class SavedViewsComponent
     return this.settings.allDisplayFields
   }
 
-  // RKC: Check if current user is the designated global views admin
+  // RKC: Check if current user is a superuser (can manage global views)
   get isGlobalViewsAdmin(): boolean {
-    const adminUserId = this.settings.get(SETTINGS_KEYS.GLOBAL_VIEWS_ADMIN_USER_ID)
-    return adminUserId !== null && this.permissionsService['currentUser']?.id === adminUserId
+    return this.permissionsService.isSuperUser()
   }
   // /end RKC edit
 
@@ -330,11 +329,11 @@ export class SavedViewsComponent
   }
 
   // RKC: Save global views order for sidebar and dashboard
-  // Only the designated admin can save the global ordering
+  // Any superuser can save the global ordering
   public saveGlobalViewsOrder() {
     if (!this.isGlobalViewsAdmin) {
       this.toastService.showError(
-        $localize`Only the designated global views admin can change the order.`
+        $localize`Only superusers can change the global view order.`
       )
       return
     }
