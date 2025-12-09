@@ -259,7 +259,11 @@ export class AppFrameComponent
     const sidebarViews = this.savedViewService.sidebarViews.concat([])
     moveItemInArray(sidebarViews, event.previousIndex, event.currentIndex)
 
-    this.settingsService.updateSidebarViewsSort(sidebarViews).subscribe({
+    // RKC: Filter to only save personal views (owner !== null) to user settings
+    // Global views should not be included in user's sort order
+    const personalViewsOnly = sidebarViews.filter(v => v.owner !== null)
+    
+    this.settingsService.updateSidebarViewsSort(personalViewsOnly).subscribe({
       next: () => {
         this.toastService.showInfo($localize`Sidebar views updated`)
         // RKC: Reload settings to pick up updated sidebar_views_sort_order from user settings
