@@ -262,6 +262,12 @@ export class AppFrameComponent
     this.settingsService.updateSidebarViewsSort(sidebarViews).subscribe({
       next: () => {
         this.toastService.showInfo($localize`Sidebar views updated`)
+        // RKC: Reload settings to pick up updated sidebar_views_sort_order from user settings
+        // This prevents the UI from jumping back to the old order after drag-drop
+        this.settingsService.initializeSettings().subscribe(() => {
+          // After settings reload, the userSidebarViews getter will use the new order
+        })
+        // /end RKC edit
       },
       error: (e) => {
         this.toastService.showError($localize`Error updating sidebar views`, e)
