@@ -873,6 +873,12 @@ docker compose restart webserver
   - Helper function `_attach_mail_uid_custom_field()` creates CustomFieldInstance linking document to email
   - Non-critical enhancement: failures don't abort document consumption, only log warnings
   - Enables future queries to find documents originating from specific emails via custom field
+  - **Querying documents by mail UID via REST API**:
+    - Use the `custom_field_query` parameter to filter documents by "Mail UID" custom field
+    - Example: `GET /api/documents/?custom_field_query=["Mail UID", "exact", "12345"]`
+    - Retrieves all documents that were created from the email with IMAP UID "12345"
+    - Supported operators for STRING fields: `exact`, `icontains`, `istartswith`, `iendswith`, `in`, `isnull`, `exists`
+    - Complex queries supported with AND/OR/NOT logic for advanced filtering
   - Files modified:
     - Backend: `src/documents/data_models.py` (added mail_uid field)
     - Backend: `src/paperless/settings.py` (added PAPERLESS_MAIL_CORRELATION_FIELD env var)
