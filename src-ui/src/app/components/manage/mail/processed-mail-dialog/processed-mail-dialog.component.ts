@@ -70,6 +70,8 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
   public page: number = 1
   // RKC: Store total count for pagination (fixes bug where pagination only showed current page count)
   public collectionSize: number = 0
+  // RKC: Store total unfiltered count to show alongside filtered results
+  public totalUnfilteredCount: number = 0
   // /end RKC edit
 
   // RKC: Filter properties for client-side filtering (similar to file tasks page)
@@ -119,12 +121,12 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadProcessedMails()
     
-    // RKC: Set up filter debouncing with server-side reload (100ms delay, min 3 chars)
+    // RKC: Set up filter debouncing with server-side reload (500ms delay allows user to finish typing, min 3 chars)
     // When filter changes, reload data from backend with filter parameters
     this.filterDebounce
       .pipe(
         takeUntil(this.unsubscribeNotifier),
-        debounceTime(100),
+        debounceTime(500),
         distinctUntilChanged(),
         filter((query) => !query.length || query.length > 2)
       )
@@ -167,6 +169,10 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
         this.processedMails = result.results
         // RKC: Capture total count from API - now reflects filtered count for server-side filtering
         this.collectionSize = result.count
+        // RKC: Store total unfiltered count on initial load to show alongside filtered results
+        if (!this._filterText || this._filterText.length < 3) {
+          this.totalUnfilteredCount = result.count
+        }
         // /end RKC edit
         this.loading = false
       })

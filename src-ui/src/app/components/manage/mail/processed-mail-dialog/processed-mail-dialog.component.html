@@ -21,10 +21,11 @@
   } @else {
     <!-- RKC: Add filtering capability and count display matching file tasks page exactly -->
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <!-- RKC: Show server-side filtered count from API (collectionSize reflects filtered total) -->
+      <!-- RKC: Show server-side filtered count from API with total count (collectionSize reflects filtered total) -->
       <div class="text-muted" style="width: 50%; padding-right: 1rem;">
         @if (filterText?.length) {
           <ng-container i18n>{collectionSize, plural, =1 {One entry matches filter} other {{{collectionSize}} entries match filter}}</ng-container>
+          <ng-container i18n>&nbsp;(of {totalUnfilteredCount, plural, =1 {1 total} other {{{totalUnfilteredCount}} total}})</ng-container>
         } @else {
           <ng-container i18n>{collectionSize, plural, =1 {One total entry of emails processed} other {{{collectionSize}} total entries of emails processed}}</ng-container>
         }
