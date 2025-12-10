@@ -869,13 +869,14 @@ docker compose restart webserver
   - Enhanced error column in processed mail dialog with clickable modal for full tracebacks
   - **Problem**: Error messages were limited to 20 character preview on hover, making full tracebacks inaccessible
   - **Solution**: 
-    - Increased hover preview from 20 to 50 characters for better quick reference
-    - Increased hover popover from full text to 200 characters for better preview
+    - Table column continues to show first 20 characters (maintains compact layout)
+    - Hover popover displays full error text for quick reference
     - Made error text clickable with visual indicators (pointer cursor, dotted underline)
-    - Opens scrollable modal dialog showing complete error traceback
+    - Click opens scrollable modal dialog showing complete error traceback
     - Modal includes email subject for context
   - **UX improvements**:
-    - Hover preview still available for quick checks (0-50 chars visible, 0-200 in popover)
+    - Compact table layout preserved (20 char limit)
+    - Hover preview shows full error text in popover
     - Click opens large scrollable modal with full error content
     - Modal uses word-wrap for long lines
     - Clean close button in modal footer

@@ -69,7 +69,7 @@
               <td>
                 <!-- RKC: Enhanced error column with hover preview and clickable modal for full traceback -->
                 <ng-template #errorPopover>
-                  <pre class="small">{{ mail.error | slice:0:200 }}</pre>
+                  <pre class="small">{{ mail.error }}</pre>
                 </ng-template>
                 @if (mail.error) {
                   <span 
@@ -78,7 +78,7 @@
                     triggers="mouseenter:mouseleave" 
                     [ngbPopover]="errorPopover"
                     (click)="showErrorDetails(mail.error, mail.subject)">
-                    {{ mail.error | slice:0:50 }}
+                    {{ mail.error | slice:0:20 }}
                   </span>
                 }
                 <!-- /end RKC edit -->
