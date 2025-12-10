@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import magic
 import pathvalidate
 from celery import chord
+from celery import group
 from celery import shared_task
 from celery.canvas import Signature
 from django.conf import settings
@@ -234,76 +235,9 @@ def mailbox_login(mailbox: MailBox, account: MailAccount):
         ) from e
 
 
-@shared_task
-def apply_mail_action(
-    result: list[str],
-    rule_id: int,
-    message_uid: str,
-    message_subject: str,
-    message_date: datetime.datetime,
-):
-    """
-    This shared task applies the mail action of a particular mail rule to the
-    given mail. Creates a ProcessedMail object, so that the mail won't be
-    processed in the future.
-    """
-
-    rule = MailRule.objects.get(pk=rule_id)
-    account = MailAccount.objects.get(pk=rule.account.pk)
-
-    # Ensure the date is properly timezone aware
-    if is_naive(message_date):
-        message_date = make_aware(message_date)
-
-    try:
-        with get_mailbox(
-            server=account.imap_server,
-            port=account.imap_port,
-            security=account.imap_security,
-        ) as M:
-            # Need to know the support for the possible tagging
-            supports_gmail_labels = "X-GM-EXT-1" in M.client.capabilities
-
-            mailbox_login(M, account)
-            M.folder.set(rule.folder)
-
-            action = get_rule_action(rule, supports_gmail_labels=supports_gmail_labels)
-            try:
-                action.post_consume(M, message_uid, rule.action_parameter)
-            except errors.ImapToolsError:
-                logger = logging.getLogger("paperless_mail")
-                logger.exception(
-                    "Error while processing mail action during post_consume",
-                )
-                raise
-
-        ProcessedMail.objects.create(
-            owner=rule.owner,
-            rule=rule,
-            folder=rule.folder,
-            uid=message_uid,
-            subject=message_subject,
-            received=message_date,
-            status="SUCCESS",
-        )
-
-    except Exception:
-        ProcessedMail.objects.create(
-            owner=rule.owner,
-            rule=rule,
-            folder=rule.folder,
-            uid=message_uid,
-            subject=message_subject,
-            received=message_date,
-            status="FAILED",
-            error=traceback.format_exc(),
-        )
-        raise
-
-
 # RKC: Helper task for batched mail action processing (v1.0.17)
 @shared_task
-def update_mail_status(processed_mail_id: int, status: str, error: str = None):
+def update_processed_mail_status(processed_mail_id: int, status: str, error: str = None):
     """
     Update status of a single ProcessedMail entry.
     
@@ -375,16 +309,20 @@ def queue_consumption_tasks(
         status="PENDING_POST_ACTION",
     )
     
-    # Execute consumption tasks without post-action callback
+    # Execute consumption tasks without post-action callback using group instead of chord
+    # Group is used since we don't need a callback - actions are batched via scheduled task
     # Error handling still creates FAILED entries via error_callback
-    chord(header=consume_tasks).on_error(
-        error_callback.s(
-            rule_id=rule.pk,
-            message_uid=message.uid,
-            message_subject=message.subject,
-            message_date=message.date,
-        ),
-    ).delay()
+    error_handler = error_callback.s(
+        rule_id=rule.pk,
+        message_uid=message.uid,
+        message_subject=message.subject,
+        message_date=message.date,
+    )
+    
+    # Use group for parallel execution without callback requirement
+    task_group = group(consume_tasks)
+    task_group.link_error(error_handler)
+    task_group.apply_async()
     # /end RKC edit
 
 
@@ -1011,7 +949,7 @@ class MailAccountHandler(LoggingMixin):
 
 # RKC: Batch processing tasks for mail actions (v1.0.17)
 @shared_task
-def process_pending_mail_actions():
+def apply_pending_mail_actions():
     """
     Scheduled task to process all pending mail actions with pooled IMAP connections.
     
@@ -1038,11 +976,11 @@ def process_pending_mail_actions():
     
     # Process each account with ONE pooled connection
     for account_id, mail_ids in by_account.items():
-        process_account_pending_actions.delay(account_id, mail_ids)
+        batch_mail_actions_by_account.delay(account_id, mail_ids)
 
 
 @shared_task
-def process_account_pending_actions(account_id: int, mail_ids: list[int]):
+def batch_mail_actions_by_account(account_id: int, mail_ids: list[int]):
     """
     Process all pending actions for ONE account with ONE pooled IMAP connection.
     
@@ -1078,13 +1016,13 @@ def process_account_pending_actions(account_id: int, mail_ids: list[int]):
                     )
                     action.post_consume(M, mail.uid, mail.rule.action_parameter)
                     
-                    update_mail_status.delay(mail_id, "SUCCESS")
+                    update_processed_mail_status.delay(mail_id, "SUCCESS")
                     
                 except ProcessedMail.DoesNotExist:
                     logger.warning(f"ProcessedMail {mail_id} not found")
                 except Exception as e:
                     logger.exception(f"Error processing mail {mail_id}: {e}")
-                    update_mail_status.delay(
+                    update_processed_mail_status.delay(
                         mail_id,
                         "FAILED",
                         traceback.format_exc()
@@ -1094,7 +1032,7 @@ def process_account_pending_actions(account_id: int, mail_ids: list[int]):
         logger.error(f"Mail error for account {account}: {e}")
         # Mark all as failed if auth fails
         for mail_id in mail_ids:
-            update_mail_status.delay(
+            update_processed_mail_status.delay(
                 mail_id,
                 "FAILED",
                 f"Account authentication failed: {str(e)}"
@@ -1102,7 +1040,7 @@ def process_account_pending_actions(account_id: int, mail_ids: list[int]):
     except Exception as e:
         logger.exception(f"Unexpected error processing account {account}: {e}")
         for mail_id in mail_ids:
-            update_mail_status.delay(
+            update_processed_mail_status.delay(
                 mail_id,
                 "FAILED",
                 f"Unexpected error: {str(e)}"
