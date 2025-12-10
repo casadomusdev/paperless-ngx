@@ -66,7 +66,6 @@ export class ProcessedMailDialogComponent implements OnInit {
         this.processedMails = result.results
         // RKC: Capture total count from API for proper pagination across all pages
         this.collectionSize = result.count
-        console.log('[RKC DEBUG] Pagination - processedMails.length:', this.processedMails.length, 'collectionSize:', this.collectionSize, 'result.count:', result.count)
         // /end RKC edit
         this.loading = false
       })
