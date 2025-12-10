@@ -80,8 +80,46 @@ class MailAccount(document_models.ModelWithOwner):
         ),
     )
 
+    # RKC: OAuth2 email sending support - allow mail accounts to send emails (v1.0.18)
+    use_for_sending = models.BooleanField(
+        _("use for sending"),
+        default=False,
+        help_text=_(
+            "Allow this account to be used for sending outgoing emails via OAuth2."
+        ),
+    )
+
+    from_address = models.EmailField(
+        _("from address"),
+        blank=True,
+        null=True,
+        help_text=_(
+            "The email address to use as sender when sending emails. "
+            "If not set, will use the username if it's an email address."
+        ),
+    )
+    # /end RKC edit
+
     def __str__(self):
         return self.name
+
+    # RKC: Validate from_address when use_for_sending is enabled (v1.0.18)
+    def clean(self):
+        super().clean()
+        if self.use_for_sending:
+            # Check if we have a valid from address
+            from_addr = self.from_address
+            if not from_addr:
+                # Try to use username as from address
+                if '@' not in self.username:
+                    from django.core.exceptions import ValidationError
+                    raise ValidationError({
+                        'from_address': _(
+                            'From address is required when "use for sending" is enabled '
+                            'and username is not an email address.'
+                        )
+                    })
+    # /end RKC edit
 
 
 class MailRule(document_models.ModelWithOwner):

@@ -31,7 +31,9 @@ class MailAccountAdminForm(forms.ModelForm):
 
 
 class MailAccountAdmin(GuardedModelAdmin):
-    list_display = ("name", "imap_server", "username")
+    # RKC: Add use_for_sending to list display (v1.0.18)
+    list_display = ("name", "imap_server", "username", "use_for_sending")
+    # /end RKC edit
 
     fieldsets = [
         (None, {"fields": ["name", "imap_server", "imap_port"]}),
@@ -40,6 +42,19 @@ class MailAccountAdmin(GuardedModelAdmin):
             {"fields": ["imap_security", "username", "password", "is_token"]},
         ),
         (_("Advanced settings"), {"fields": ["character_set"]}),
+        # RKC: Add OAuth2 sending fieldset (v1.0.18)
+        (
+            _("OAuth2 Sending"),
+            {
+                "fields": ["use_for_sending", "from_address"],
+                "classes": ["collapse"],
+                "description": _(
+                    "Configure this account to send outgoing emails via OAuth2. "
+                    "Only Gmail and Outlook OAuth accounts can be used for sending."
+                ),
+            },
+        ),
+        # /end RKC edit
     ]
     form = MailAccountAdminForm
 

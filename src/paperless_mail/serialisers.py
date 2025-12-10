@@ -23,6 +23,10 @@ class ObfuscatedPasswordField(serializers.CharField):
 
 class MailAccountSerializer(OwnedObjectSerializer):
     password = ObfuscatedPasswordField()
+    # RKC: Add OAuth2 sending fields (v1.0.18)
+    use_for_sending = serializers.BooleanField(required=False, default=False)
+    from_address = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    # /end RKC edit
 
     class Meta:
         model = MailAccount
@@ -42,6 +46,10 @@ class MailAccountSerializer(OwnedObjectSerializer):
             "set_permissions",
             "account_type",
             "expiration",
+            # RKC: OAuth2 sending fields (v1.0.18)
+            "use_for_sending",
+            "from_address",
+            # /end RKC edit
         ]
 
     def update(self, instance, validated_data):

@@ -969,6 +969,33 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.18 (2025-01-12)**: OAuth2 Email Sending Support
+  - Added OAuth2 authentication for outgoing SMTP emails
+  - **Problem**: Organizations using OAuth2 for mail retrieval still needed separate SMTP credentials for sending
+  - **Solution**: 
+    - Extended MailAccount model with `use_for_sending` and `from_address` fields
+    - Created OAuth2EmailBackend using XOAUTH2 SASL mechanism
+    - Modified send_email() to use OAuth2 when available, fallback to SMTP
+    - Reuses existing OAuth2 infrastructure and token refresh logic
+  - **Configuration**:
+    - Enable "Use for sending" on any Gmail/Outlook OAuth2 MailAccount
+    - Set "From address" if username is not an email address
+    - If no OAuth2 sending account configured, falls back to SMTP
+    - If SMTP not configured, email sending disabled (current behavior)
+  - **Architecture**:
+    - Minimal core code impact - isolated to RKC-marked sections
+    - Automatic token refresh before sending
+    - SMTP XOAUTH2 authentication (Gmail: smtp.gmail.com:587, Outlook: smtp.office365.com:587)
+    - Graceful degradation through multiple fallback layers
+  - Files modified:
+    - Backend: `src/paperless_mail/models.py` (added use_for_sending, from_address fields + validation)
+    - Backend: `src/paperless_mail/mail_oauth.py` (new OAuth2EmailBackend, helper functions)
+    - Backend: `src/documents/mail.py` (modified send_email to use OAuth2)
+    - Backend: `src/paperless_mail/admin.py` (admin fieldsets)
+    - Backend: `src/paperless_mail/serialisers.py` (API serializers)
+    - Migration: `src/paperless_mail/migrations/0030_add_oauth_sending_fields.py`
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.17 (2025-01-12)**: Mail action connection pooling to eliminate OAuth2 authentication storms
   - Implemented batched mail action processing via scheduled tasks to eliminate Microsoft IMAP rate limiting
   - **Problem**: Celery chord pattern created 100s of simultaneous OAuth2 authentication requests when processing emails

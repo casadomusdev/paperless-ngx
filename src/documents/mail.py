@@ -8,6 +8,17 @@ from django.conf import settings
 from django.core.mail import EmailMessage
 from filelock import FileLock
 
+# RKC: Import OAuth2 email backend support (v1.0.18)
+import logging
+from paperless_mail.mail_oauth import (
+    get_sending_mail_account,
+    get_from_address,
+    OAuth2EmailBackend,
+)
+
+logger = logging.getLogger("paperless_mail")
+# /end RKC edit
+
 
 @dataclass(frozen=True)
 class EmailAttachment:
@@ -25,6 +36,9 @@ def send_email(
     """
     Send an email with attachments.
 
+    RKC: Enhanced to support OAuth2 SMTP authentication if configured (v1.0.18).
+    Falls back to regular SMTP if no OAuth2 account is available.
+
     Args:
         subject: Email subject
         body: Email body text
@@ -36,11 +50,32 @@ def send_email(
 
     TODO: re-evaluate this pending https://code.djangoproject.com/ticket/35581 / https://github.com/django/django/pull/18966
     """
-    email = EmailMessage(
-        subject=subject,
-        body=body,
-        to=to,
-    )
+    # RKC: Check for OAuth2 sending account (v1.0.18)
+    oauth_account = get_sending_mail_account()
+    
+    if oauth_account:
+        # Use OAuth2 backend
+        logger.debug(f"Using OAuth2 account {oauth_account.name} for sending email")
+        from_email = get_from_address(oauth_account)
+        
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=to,
+        )
+        
+        # Set the OAuth2 backend
+        email.connection = OAuth2EmailBackend(oauth_account)
+    else:
+        # Use regular SMTP (original behavior)
+        logger.debug("Using regular SMTP for sending email")
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            to=to,
+        )
+    # /end RKC edit
 
     used_filenames: set[str] = set()
 
