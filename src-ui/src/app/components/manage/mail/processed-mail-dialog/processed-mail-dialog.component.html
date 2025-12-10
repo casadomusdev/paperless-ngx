@@ -16,8 +16,6 @@
         <span class="visually-hidden" i18n>Loading...</span>
       </div>
     </div>
-  } @else if (processedMails.length === 0) {
-    <span i18n>No processed email messages found.</span>
   } @else {
     <!-- RKC: Add filtering capability and count display matching file tasks page exactly -->
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -56,6 +54,16 @@
       </div>
     </div>
     <!-- /end RKC edit -->
+    
+    <!-- RKC: Show appropriate message when no results found, keep filter UI visible -->
+    @if (processedMails.length === 0 && !filterText?.length) {
+      <div class="alert alert-info" i18n>No processed email messages found.</div>
+    } @else if (processedMails.length === 0 && filterText?.length) {
+      <div class="alert alert-warning" i18n>No entries match the current filter.</div>
+    }
+    <!-- /end RKC edit -->
+    
+    @if (processedMails.length > 0) {
     <div class="table-responsive">
       <table class="table table-hover table-sm align-middle">
         <thead>
@@ -129,6 +137,8 @@
         </tbody>
       </table>
     </div>
+    }
+    
     <div class="btn-toolbar">
       <button type="button" class="btn btn-outline-secondary me-2" (click)="clearSelection()" [disabled]="selectedMailIds.size === 0" i18n>Clear</button>
       <pngx-confirm-button
