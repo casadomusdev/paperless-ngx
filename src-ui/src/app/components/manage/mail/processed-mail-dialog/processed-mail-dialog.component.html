@@ -21,12 +21,15 @@
   } @else {
     <!-- RKC: Add filtering capability and count display matching file tasks page exactly -->
     <div class="d-flex justify-content-between align-items-center mb-3">
+      <!-- RKC: Show server-side filtered count from API (collectionSize reflects filtered total) -->
       <div class="text-muted" style="width: 50%; padding-right: 1rem;">
-        <ng-container i18n>{collectionSize, plural, =1 {One total entry of emails processed} other {{{collectionSize}} total entries of emails processed}}</ng-container>
         @if (filterText?.length) {
-          <ng-container i18n>&nbsp;- {filteredMails.length, plural, =1 {one entry filtered} other {{{filteredMails.length}} entries filtered}}</ng-container>
+          <ng-container i18n>{collectionSize, plural, =1 {One entry matches filter} other {{{collectionSize}} entries match filter}}</ng-container>
+        } @else {
+          <ng-container i18n>{collectionSize, plural, =1 {One total entry of emails processed} other {{{collectionSize}} total entries of emails processed}}</ng-container>
         }
       </div>
+      <!-- /end RKC edit -->
       <div class="input-group input-group-sm flex-fill w-auto flex-nowrap" style="width: 50%; padding-left: 1rem;">
         <span class="input-group-text text-muted" i18n>Filter by</span>
         <div ngbDropdown>
@@ -66,8 +69,8 @@
           </tr>
         </thead>
         <tbody>
-          <!-- RKC: Use filteredMails instead of processedMails to apply client-side filtering -->
-          @for (mail of filteredMails; track mail.id) {
+          <!-- RKC: Use processedMails directly - filtering now done server-side -->
+          @for (mail of processedMails; track mail.id) {
           <!-- /end RKC edit -->
             <ng-template #statusTooltip>
               <div class="small text-light font-monospace">

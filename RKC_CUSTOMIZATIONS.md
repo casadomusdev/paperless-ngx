@@ -865,6 +865,41 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.16 (2025-01-12)**: Server-side filtering for Processed Mail
+  - Migrated from client-side to server-side filtering for better search capabilities
+  - **Problem**: Client-side filtering (v1.0.15) only worked on current page (max 50 items), could not search entire dataset
+  - **Solution**: 
+    - Backend accepts `filter_field` and `filter_text` query parameters via Django filters
+    - Database queries filter entire dataset using `__icontains`, not just current page
+    - Accurate filtered counts displayed across all entries
+    - Significant improvement for finding specific items in large datasets (1000+ emails)
+  - **Filter Fields**:
+    - Error (default) - search error messages and tracebacks
+    - Subject - filter by email subject line
+    - Received - filter by email received timestamp
+    - Processed - filter by processing timestamp
+  - **Features**:
+    - Case-insensitive search across entire dataset
+    - Pagination works correctly with active filters
+    - Debounced input (100ms, 3-char minimum) for performance
+    - Filter automatically resets to page 1 when changed
+    - Clear button to remove filter and reload all data
+  - **Performance**:
+    - Uses Django ORM `__icontains` for safe, efficient queries
+    - 3-character minimum prevents excessive database load
+    - Supports PostgreSQL ILIKE for case-insensitive matching
+  - **Architecture**:
+    - Custom FilterSet field `filter_text` with dynamic field targeting
+    - Single `filter_by_text` method handles all field types
+    - Frontend reloads data from server on filter change
+    - Removed client-side `filteredMails` getter (now server-side)
+  - Files modified:
+    - Backend: `src/paperless_mail/filters.py` (added server-side filtering logic)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.ts` (server-side reload)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html` (updated count display)
+  - All changes properly marked with RKC comments for maintainability
+  - **Future Enhancement**: File Tasks page could use same pattern (Phase 2 of IMPL_BACKEND_FILTERS.md)
+
 - **v1.0.15 (2025-01-12)**: Processed mail filtering capability
   - Added client-side filtering to processed mail dialog matching file tasks page pattern
   - **Filter Targets**:

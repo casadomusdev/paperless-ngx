@@ -97,30 +97,20 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
     ]
   }
 
-  get filteredMails(): ProcessedMail[] {
-    if (!this._filterText.length) return this.processedMails
-
-    return this.processedMails.filter((mail) => {
-      const searchText = this._filterText.toLowerCase()
-      switch (this.filterTargetID) {
-        case MailFilterTarget.Error:
-          return mail.error?.toLowerCase().includes(searchText) ?? false
-        case MailFilterTarget.Subject:
-          return mail.subject?.toLowerCase().includes(searchText) ?? false
-        case MailFilterTarget.Received:
-          return mail.received
-            ?.toString()
-            .toLowerCase()
-            .includes(searchText) ?? false
-        case MailFilterTarget.Processed:
-          return mail.processed
-            ?.toString()
-            .toLowerCase()
-            .includes(searchText) ?? false
-        default:
-          return false
-      }
-    })
+  // RKC: Convert filter target enum to backend field name for server-side filtering
+  private getFilterFieldName(): string {
+    switch (this.filterTargetID) {
+      case MailFilterTarget.Error:
+        return 'error'
+      case MailFilterTarget.Subject:
+        return 'subject'
+      case MailFilterTarget.Received:
+        return 'received'
+      case MailFilterTarget.Processed:
+        return 'processed'
+      default:
+        return 'error'
+    }
   }
   // /end RKC edit
 
@@ -129,7 +119,8 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadProcessedMails()
     
-    // RKC: Set up filter debouncing (100ms delay, min 3 chars, same as file tasks page)
+    // RKC: Set up filter debouncing with server-side reload (100ms delay, min 3 chars)
+    // When filter changes, reload data from backend with filter parameters
     this.filterDebounce
       .pipe(
         takeUntil(this.unsubscribeNotifier),
@@ -137,7 +128,11 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
         distinctUntilChanged(),
         filter((query) => !query.length || query.length > 2)
       )
-      .subscribe((query) => (this._filterText = query))
+      .subscribe((query) => {
+        this._filterText = query
+        this.page = 1 // Reset to first page when filter changes
+        this.loadProcessedMails() // Reload with new filter from server
+      })
     // /end RKC edit
   }
 
@@ -155,11 +150,22 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
   private loadProcessedMails(): void {
     this.loading = true
     this.clearSelection()
+    
+    // RKC: Build params object with filter parameters for server-side filtering
+    const params: any = { rule: this.rule.id }
+    
+    // Add filter parameters if filter is active (min 3 chars)
+    if (this._filterText && this._filterText.length > 2) {
+      params.filter_field = this.getFilterFieldName()
+      params.filter_text = this._filterText
+    }
+    // /end RKC edit
+    
     this.processedMailService
-      .list(this.page, 50, 'processed_at', true, { rule: this.rule.id })
+      .list(this.page, 50, 'processed_at', true, params)
       .subscribe((result) => {
         this.processedMails = result.results
-        // RKC: Capture total count from API for proper pagination across all pages
+        // RKC: Capture total count from API - now reflects filtered count for server-side filtering
         this.collectionSize = result.count
         // /end RKC edit
         this.loading = false
@@ -205,9 +211,11 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
     modalRef.componentInstance.subject = subject
   }
 
-  // Filter helper methods (same pattern as file tasks page)
+  // RKC: Filter helper methods for server-side filtering (reload data when filter cleared)
   public resetFilter(): void {
     this._filterText = ''
+    this.page = 1
+    this.loadProcessedMails() // Reload data without filter
   }
 
   filterInputKeyup(event: KeyboardEvent): void {
