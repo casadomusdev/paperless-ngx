@@ -1,4 +1,4 @@
-import { SlicePipe } from '@angular/common'
+import { CommonModule, SlicePipe } from '@angular/common'
 import { Component, inject, Input, OnDestroy, OnInit } from '@angular/core'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import {
@@ -38,6 +38,7 @@ enum MailFilterTarget {
 @Component({
   selector: 'pngx-processed-mail-dialog',
   imports: [
+    CommonModule,
     ConfirmButtonComponent,
     CustomDatePipe,
     NgbPagination,

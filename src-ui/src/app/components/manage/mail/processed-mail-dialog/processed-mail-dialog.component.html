@@ -27,18 +27,18 @@
           <i-bs name="x"></i-bs>
         </button>
       }
-      <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" ngbDropdown #filterDropdown="ngbDropdown">
-        {{ filterTargetName }}
-      </button>
-      <ul class="dropdown-menu dropdown-menu-end" ngbDropdownMenu>
-        @for (target of filterTargets; track target.id) {
-          <li>
-            <a class="dropdown-item" [class.active]="filterTargetID === target.id" (click)="filterTargetID = target.id; filterDropdown.close()" href="javascript:void(0)">
+      <div ngbDropdown class="d-inline-block" #filterDropdown="ngbDropdown">
+        <button class="btn btn-outline-secondary dropdown-toggle" type="button" ngbDropdownToggle>
+          {{ filterTargetName }}
+        </button>
+        <div ngbDropdownMenu class="dropdown-menu-end">
+          @for (target of filterTargets; track target.id) {
+            <button class="dropdown-item" [class.active]="filterTargetID === target.id" (click)="filterTargetID = target.id; filterDropdown.close()" type="button">
               {{ target.name }}
-            </a>
-          </li>
-        }
-      </ul>
+            </button>
+          }
+        </div>
+      </div>
     </div>
     <!-- /end RKC edit -->
     <div class="table-responsive">
