@@ -32,18 +32,22 @@
       <!-- /end RKC edit -->
       <div class="input-group input-group-sm flex-fill w-auto flex-nowrap" style="width: 50%; padding-left: 1rem;">
         <span class="input-group-text text-muted" i18n>Filter by</span>
+        <!-- RKC: Add type="button" to prevent form submission behavior -->
         <div ngbDropdown>
-          <button class="btn btn-sm btn-outline-primary" style="border-radius: 0;" ngbDropdownToggle>{{filterTargetName}}</button>
+          <button type="button" class="btn btn-sm btn-outline-primary" style="border-radius: 0;" ngbDropdownToggle>{{filterTargetName}}</button>
           <div class="dropdown-menu shadow" ngbDropdownMenu>
             @for (target of filterTargets; track target.id) {
-              <button ngbDropdownItem [class.active]="filterTargetID === target.id" (click)="filterTargetID = target.id">{{target.name}}</button>
+              <button type="button" ngbDropdownItem [class.active]="filterTargetID === target.id" (click)="filterTargetID = target.id">{{target.name}}</button>
             }
           </div>
         </div>
+        <!-- /end RKC edit -->
         @if (filterText?.length) {
-          <button class="btn btn-link btn-sm px-2 position-absolute top-0 end-0 z-10" (click)="resetFilter()">
+          <!-- RKC: Add type="button" to prevent form submission behavior -->
+          <button type="button" class="btn btn-link btn-sm px-2 position-absolute top-0 end-0 z-10" (click)="resetFilter()">
             <i-bs width="1em" height="1em" name="x"></i-bs>
           </button>
+          <!-- /end RKC edit -->
         }
         <input #filterInput class="form-control form-control-sm" type="text"
           (keyup)="filterInputKeyup($event)"
