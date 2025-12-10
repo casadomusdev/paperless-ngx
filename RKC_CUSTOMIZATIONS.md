@@ -865,6 +865,17 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.13 (2025-01-12)**: Processed mail pagination fix
+  - Fixed bug where processed mail dialog pagination was broken
+  - Problem: `ngb-pagination` was using `processedMails.length` (current page results only) instead of total count from API
+  - This caused pagination to only show `<< 1 >>` even when multiple pages existed
+  - Solution: Added `collectionSize` property to store `result.count` from API response
+  - Updated pagination to use `collectionSize` for proper multi-page navigation
+  - Files modified:
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.ts`
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html`
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.12 (2025-12-09)**: Mail-document correlation via custom fields
   - Implemented reliable email-to-document correlation using IMAP UIDs
   - Solves async processing issue where timestamp-based correlation fails with Celery's parallel processing

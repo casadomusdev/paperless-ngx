@@ -43,6 +43,9 @@ export class ProcessedMailDialogComponent implements OnInit {
   public readonly selectedMailIds: Set<number> = new Set<number>()
 
   public page: number = 1
+  // RKC: Store total count for pagination (fixes bug where pagination only showed current page count)
+  public collectionSize: number = 0
+  // /end RKC edit
 
   @Input() rule: MailRule
 
@@ -61,6 +64,9 @@ export class ProcessedMailDialogComponent implements OnInit {
       .list(this.page, 50, 'processed_at', true, { rule: this.rule.id })
       .subscribe((result) => {
         this.processedMails = result.results
+        // RKC: Capture total count from API for proper pagination across all pages
+        this.collectionSize = result.count
+        // /end RKC edit
         this.loading = false
       })
   }
