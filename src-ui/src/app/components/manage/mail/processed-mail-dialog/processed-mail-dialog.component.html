@@ -94,6 +94,9 @@
         (confirm)="deleteSelected()">
       </pngx-confirm-button>
       <div class="ms-auto">
+        <!-- RKC: Debug display to verify values -->
+        <small class="text-danger me-3">DEBUG: collectionSize={{collectionSize}} len={{processedMails.length}}</small>
+        <!-- /end RKC debug -->
         <!-- RKC: Use collectionSize from API instead of processedMails.length to fix pagination bug -->
         <ngb-pagination
           [collectionSize]="collectionSize"
