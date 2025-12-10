@@ -21,16 +21,16 @@
   } @else {
     <!-- RKC: Add filtering capability and count display matching file tasks page exactly -->
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <div class="text-muted">
+      <div class="text-muted" style="width: 50%; padding-right: 1rem;">
         <ng-container i18n>{collectionSize, plural, =1 {One total email message processed} other {{{collectionSize}} total email messages processed}}</ng-container>
         @if (filterText?.length) {
           <ng-container i18n>&nbsp;- {filteredMails.length, plural, =1 {one message filtered} other {{{filteredMails.length}} messages filtered}}</ng-container>
         }
       </div>
-      <div class="input-group input-group-sm flex-fill w-auto flex-nowrap">
+      <div class="input-group input-group-sm flex-fill w-auto flex-nowrap" style="width: 50%; padding-left: 1rem;">
         <span class="input-group-text text-muted" i18n>Filter by</span>
         <div ngbDropdown>
-          <button class="btn btn-sm btn-outline-primary" ngbDropdownToggle>{{filterTargetName}}</button>
+          <button class="btn btn-sm btn-outline-primary" style="border-radius: 0;" ngbDropdownToggle>{{filterTargetName}}</button>
           <div class="dropdown-menu shadow" ngbDropdownMenu>
             @for (target of filterTargets; track target.id) {
               <button ngbDropdownItem [class.active]="filterTargetID === target.id" (click)="filterTargetID = target.id">{{target.name}}</button>
