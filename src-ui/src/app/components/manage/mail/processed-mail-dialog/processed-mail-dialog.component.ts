@@ -120,7 +120,7 @@ export class ProcessedMailDialogComponent implements OnInit {
 @Component({
   selector: 'pngx-error-detail-modal',
   standalone: true,
-  imports: [NgbActiveModal],
+  imports: [],
   template: `
     <div class="modal-header">
       <h6 class="modal-title">Error Details: {{ subject }}</h6>
