@@ -51,8 +51,10 @@
                 </div>
               </td>
               <td>{{ mail.subject }}</td>
-              <td>{{ mail.received | customDate:'longDate' }}</td>
-              <td>{{ mail.processed | customDate:'longDate' }}</td>
+              <!-- RKC: Show date and time (hours:minutes) instead of date only -->
+              <td>{{ mail.received | customDate:'short' }}</td>
+              <td>{{ mail.processed | customDate:'short' }}</td>
+              <!-- /end RKC edit -->
               <td>
                 @switch (mail.status) {
                   @case ('SUCCESS') {

@@ -865,7 +865,7 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.0.14 (2025-01-12)**: Processed mail error details modal
+- **v1.0.14 (2025-01-12)**: Processed mail dialog enhancements
   - Enhanced error column in processed mail dialog with clickable modal for full tracebacks
   - **Problem**: Error messages were limited to 20 character preview on hover, making full tracebacks inaccessible
   - **Solution**: 
@@ -874,15 +874,20 @@ docker compose restart webserver
     - Made error text clickable with visual indicators (pointer cursor, dotted underline)
     - Click opens scrollable modal dialog showing complete error traceback
     - Modal includes email subject for context
+  - **Date/Time Display Enhancement**:
+    - Changed Received and Processed columns from date-only (`longDate`) to date+time (`short`)
+    - Now displays date with hours:minutes for better tracking of mail processing
+    - Format example: "1/12/25, 10:30 AM" instead of just "Jan 12, 2025"
   - **UX improvements**:
     - Compact table layout preserved (20 char limit)
     - Hover preview shows full error text in popover
     - Click opens large scrollable modal with full error content
     - Modal uses word-wrap for long lines
     - Clean close button in modal footer
+    - Time-of-day visibility improves troubleshooting
   - Files modified:
     - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.ts` (added NgbModal injection, showErrorDetails method, ErrorDetailModalComponent)
-    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html` (clickable error text with styling)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html` (clickable error text with styling, changed date format from 'longDate' to 'short')
   - All changes properly marked with RKC comments for maintainability
 
 - **v1.0.13 (2025-01-12)**: Processed mail pagination fix
