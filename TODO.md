@@ -23,13 +23,13 @@
 - [x] Handle auth failures gracefully
 
 ## Phase 5: Celery Configuration
-- [x] Add process_pending_mail_actions to celery beat schedule
-- [x] Configure 5-minute interval
-- [x] Find correct location in celery.py for beat schedule
+- [x] Add process_pending_mail_actions to celery beat schedule in settings.py
+- [x] Use PAPERLESS_EMAIL_TASK_CRON environment variable (same schedule as mail retrieval)
+- [x] Default schedule: every 10 minutes (*/10 * * * *)
 
 ## Phase 6: Documentation
 - [x] Update RKC_CUSTOMIZATIONS.md with v1.0.17 entry
-- [x] Document new status in implementation notes
+- [x] Document schedule configuration using PAPERLESS_EMAIL_TASK_CRON
 - [x] Add testing instructions
 
 ## Phase 7: Testing
@@ -52,7 +52,7 @@ All code changes have been implemented. The system is ready for deployment and t
 **Files Modified:**
 - `src/paperless_mail/models.py` - Documented PENDING_POST_ACTION status
 - `src/paperless_mail/mail.py` - Added 3 new tasks, modified queue_consumption_tasks
-- `src/paperless/celery.py` - Added Celery Beat schedule
+- `src/paperless/settings.py` - Added process_pending_mail_actions to Celery Beat schedule
 - `RKC_CUSTOMIZATIONS.md` - Added v1.0.17 entry
 - `IMPL_MAIL_ACTION_POOLING.md` - Implementation documentation
 

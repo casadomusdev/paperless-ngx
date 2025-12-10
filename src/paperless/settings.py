@@ -176,6 +176,17 @@ def _parse_beat_schedule() -> dict:
             },
         },
         {
+            "name": "Process pending mail actions",
+            "env_key": "PAPERLESS_EMAIL_TASK_CRON",
+            # Default every ten minutes (same as mail retrieval)
+            "env_default": "*/10 * * * *",
+            "task": "paperless_mail.mail.process_pending_mail_actions",
+            "options": {
+                # 1 minute before default schedule sends again
+                "expires": 9.0 * 60.0,
+            },
+        },
+        {
             "name": "Train the classifier",
             "env_key": "PAPERLESS_TRAIN_TASK_CRON",
             # Default hourly at 5 minutes past the hour

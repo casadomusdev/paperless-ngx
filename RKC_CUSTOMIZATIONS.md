@@ -872,23 +872,29 @@ docker compose restart webserver
   - **Solution**: 
     - Modified `queue_consumption_tasks()` to create PENDING_POST_ACTION entries instead of immediate callbacks
     - Added `update_mail_status()` helper task for asynchronous status updates
-    - Created `process_pending_mail_actions()` scheduled task (runs every 5 minutes via Celery Beat)
+    - Created `process_pending_mail_actions()` scheduled task via Celery Beat
     - Created `process_account_pending_actions()` batch processor that pools connections per account
     - One pooled IMAP connection per account per batch = eliminated authentication storm
   - **Architecture**:
     - PENDING_POST_ACTION is transient status - quickly transitions to SUCCESS/FAILED
     - Scheduled task groups pending entries by account for connection pooling  
     - Single authenticated IMAP session processes all actions for that account sequentially
-    - Natural rate limiting via 5-minute schedule interval
+    - Uses existing `PAPERLESS_EMAIL_TASK_CRON` schedule (default: every 10 minutes)
+  - **Configuration**:
+    - Schedule controlled by `PAPERLESS_EMAIL_TASK_CRON` environment variable
+    - Default: `*/10 * * * *` (every 10 minutes)
+    - Same schedule used for both mail retrieval and pending action processing
+    - Can be customized via environment variable for different intervals
   - **Benefits**:
     - Eliminates OAuth2 "AUTHENTICATE failed" errors from Microsoft rate limiting
     - Improved reliability through batch error handling
     - Better resource usage with predictable load patterns
     - Minimal code impact - backward compatible with existing entries
+    - No additional environment variables needed - reuses existing configuration
   - Files modified:
     - Backend: `src/paperless_mail/models.py` (documented PENDING_POST_ACTION status)
     - Backend: `src/paperless_mail/mail.py` (new tasks: update_mail_status, process_pending_mail_actions, process_account_pending_actions; modified queue_consumption_tasks)
-    - Backend: `src/paperless/celery.py` (added Celery Beat schedule for periodic processing)
+    - Backend: `src/paperless/settings.py` (added process_pending_mail_actions to Celery Beat schedule using PAPERLESS_EMAIL_TASK_CRON)
   - All changes properly marked with RKC comments for maintainability
   - See `IMPL_MAIL_ACTION_POOLING.md` for detailed implementation documentation
 
