@@ -351,6 +351,11 @@ class ProcessedMail(document_models.ModelWithOwner):
         editable=False,
     )
 
+    # RKC: Valid status values:
+    # - "SUCCESS": Post-action completed successfully
+    # - "FAILED": Processing or post-action failed
+    # - "PROCESSED_WO_CONSUMPTION": Mail processed but no files consumed
+    # - "PENDING_POST_ACTION": Files consumed, waiting for batched post-action (transient)
     status = models.CharField(
         _("status"),
         null=False,

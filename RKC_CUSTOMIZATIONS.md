@@ -865,6 +865,33 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.17 (2025-01-12)**: Mail action connection pooling to eliminate OAuth2 authentication storms
+  - Implemented batched mail action processing via scheduled tasks to eliminate Microsoft IMAP rate limiting
+  - **Problem**: Celery chord pattern created 100s of simultaneous OAuth2 authentication requests when processing emails
+  - **Root Cause**: Each email spawned async `apply_mail_action` task requiring new IMAP connection and OAuth2 auth
+  - **Solution**: 
+    - Modified `queue_consumption_tasks()` to create PENDING_POST_ACTION entries instead of immediate callbacks
+    - Added `update_mail_status()` helper task for asynchronous status updates
+    - Created `process_pending_mail_actions()` scheduled task (runs every 5 minutes via Celery Beat)
+    - Created `process_account_pending_actions()` batch processor that pools connections per account
+    - One pooled IMAP connection per account per batch = eliminated authentication storm
+  - **Architecture**:
+    - PENDING_POST_ACTION is transient status - quickly transitions to SUCCESS/FAILED
+    - Scheduled task groups pending entries by account for connection pooling  
+    - Single authenticated IMAP session processes all actions for that account sequentially
+    - Natural rate limiting via 5-minute schedule interval
+  - **Benefits**:
+    - Eliminates OAuth2 "AUTHENTICATE failed" errors from Microsoft rate limiting
+    - Improved reliability through batch error handling
+    - Better resource usage with predictable load patterns
+    - Minimal code impact - backward compatible with existing entries
+  - Files modified:
+    - Backend: `src/paperless_mail/models.py` (documented PENDING_POST_ACTION status)
+    - Backend: `src/paperless_mail/mail.py` (new tasks: update_mail_status, process_pending_mail_actions, process_account_pending_actions; modified queue_consumption_tasks)
+    - Backend: `src/paperless/celery.py` (added Celery Beat schedule for periodic processing)
+  - All changes properly marked with RKC comments for maintainability
+  - See `IMPL_MAIL_ACTION_POOLING.md` for detailed implementation documentation
+
 - **v1.0.16 (2025-01-12)**: Server-side filtering for Processed Mail
   - Migrated from client-side to server-side filtering for better search capabilities
   - **Problem**: Client-side filtering (v1.0.15) only worked on current page (max 50 items), could not search entire dataset

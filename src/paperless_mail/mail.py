@@ -301,6 +301,27 @@ def apply_mail_action(
         raise
 
 
+# RKC: Helper task for batched mail action processing (v1.0.17)
+@shared_task
+def update_mail_status(processed_mail_id: int, status: str, error: str = None):
+    """
+    Update status of a single ProcessedMail entry.
+    
+    Used by batched mail action processing to update individual mail statuses
+    after pooled connection processing completes.
+    """
+    try:
+        mail = ProcessedMail.objects.get(pk=processed_mail_id)
+        mail.status = status
+        if error:
+            mail.error = error
+        mail.save()
+    except ProcessedMail.DoesNotExist:
+        logger = logging.getLogger("paperless_mail")
+        logger.warning(f"ProcessedMail {processed_mail_id} not found for status update")
+# /end RKC edit
+
+
 @shared_task
 def error_callback(
     request,
@@ -337,15 +358,26 @@ def queue_consumption_tasks(
     """
     Queue a list of consumption tasks (Signatures for the consume_file shared
     task) with celery.
+    
+    RKC: Modified in v1.0.17 to create PENDING_POST_ACTION entries instead of
+    immediate post-actions, enabling batched processing via scheduled task.
     """
-
-    mail_action_task = apply_mail_action.s(
-        rule_id=rule.pk,
-        message_uid=message.uid,
-        message_subject=message.subject,
-        message_date=message.date,
+    
+    # RKC: Create PENDING status entry - will be processed by scheduled batch task
+    # This eliminates OAuth2 authentication storms by pooling connections per account
+    ProcessedMail.objects.create(
+        owner=rule.owner,
+        rule=rule,
+        folder=rule.folder,
+        uid=message.uid,
+        subject=message.subject,
+        received=make_aware(message.date) if is_naive(message.date) else message.date,
+        status="PENDING_POST_ACTION",
     )
-    chord(header=consume_tasks, body=mail_action_task).on_error(
+    
+    # Execute consumption tasks without post-action callback
+    # Error handling still creates FAILED entries via error_callback
+    chord(header=consume_tasks).on_error(
         error_callback.s(
             rule_id=rule.pk,
             message_uid=message.uid,
@@ -353,6 +385,7 @@ def queue_consumption_tasks(
             message_date=message.date,
         ),
     ).delay()
+    # /end RKC edit
 
 
 def get_rule_action(rule: MailRule, *, supports_gmail_labels: bool) -> BaseMailAction:
@@ -974,3 +1007,104 @@ class MailAccountHandler(LoggingMixin):
 
         processed_elements = 1
         return processed_elements
+
+
+# RKC: Batch processing tasks for mail actions (v1.0.17)
+@shared_task
+def process_pending_mail_actions():
+    """
+    Scheduled task to process all pending mail actions with pooled IMAP connections.
+    
+    Batches pending post-actions by account to use single connection per account,
+    eliminating OAuth2 authentication storms that trigger Microsoft rate limiting.
+    Runs every 5 minutes via Celery Beat schedule.
+    """
+    logger = logging.getLogger("paperless_mail")
+    
+    pending = ProcessedMail.objects.filter(
+        status="PENDING_POST_ACTION"
+    ).select_related('rule__account', 'rule')
+    
+    if not pending.exists():
+        return
+    
+    logger.info(f"Processing {pending.count()} pending mail actions")
+    
+    # Group by account to pool connections
+    by_account = {}
+    for mail in pending:
+        account_id = mail.rule.account.id
+        by_account.setdefault(account_id, []).append(mail.id)
+    
+    # Process each account with ONE pooled connection
+    for account_id, mail_ids in by_account.items():
+        process_account_pending_actions.delay(account_id, mail_ids)
+
+
+@shared_task
+def process_account_pending_actions(account_id: int, mail_ids: list[int]):
+    """
+    Process all pending actions for ONE account with ONE pooled IMAP connection.
+    
+    Processes multiple mail actions through single authenticated session,
+    avoiding per-action OAuth2 authentication that triggers rate limiting.
+    """
+    logger = logging.getLogger("paperless_mail")
+    
+    try:
+        account = MailAccount.objects.get(pk=account_id)
+    except MailAccount.DoesNotExist:
+        logger.error(f"Account {account_id} not found")
+        return
+    
+    logger.info(f"Processing {len(mail_ids)} actions for account {account}")
+    
+    try:
+        with get_mailbox(
+            account.imap_server,
+            account.imap_port,
+            account.imap_security,
+        ) as M:
+            supports_gmail_labels = "X-GM-EXT-1" in M.client.capabilities
+            mailbox_login(M, account)
+            
+            for mail_id in mail_ids:
+                try:
+                    mail = ProcessedMail.objects.get(pk=mail_id)
+                    M.folder.set(mail.rule.folder)
+                    action = get_rule_action(
+                        mail.rule,
+                        supports_gmail_labels=supports_gmail_labels
+                    )
+                    action.post_consume(M, mail.uid, mail.rule.action_parameter)
+                    
+                    update_mail_status.delay(mail_id, "SUCCESS")
+                    
+                except ProcessedMail.DoesNotExist:
+                    logger.warning(f"ProcessedMail {mail_id} not found")
+                except Exception as e:
+                    logger.exception(f"Error processing mail {mail_id}: {e}")
+                    update_mail_status.delay(
+                        mail_id,
+                        "FAILED",
+                        traceback.format_exc()
+                    )
+                    
+    except MailError as e:
+        logger.error(f"Mail error for account {account}: {e}")
+        # Mark all as failed if auth fails
+        for mail_id in mail_ids:
+            update_mail_status.delay(
+                mail_id,
+                "FAILED",
+                f"Account authentication failed: {str(e)}"
+            )
+    except Exception as e:
+        logger.exception(f"Unexpected error processing account {account}: {e}")
+        for mail_id in mail_ids:
+            update_mail_status.delay(
+                mail_id,
+                "FAILED",
+                f"Unexpected error: {str(e)}"
+            )
+# /end RKC edit
