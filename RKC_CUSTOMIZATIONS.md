@@ -58,6 +58,11 @@ The RKC customizations enhance Paperless-ngx with security controls, collaborati
   - Environment Variable: `PAPERLESS_SOCIALACCOUNT_DEBUG`
   - Backend: `src/paperless/settings.py`, `src/paperless/adapter.py`
 
+### UI Enhancements
+- **[Custom Field Filter Buttons](#6-custom-field-filter-buttons)** - Quick filter buttons for custom field values on document detail page, enabling instant filtering by any custom field value with support for all data types including null/empty values.
+  - Frontend: `src-ui/src/app/components/document-detail/` (TypeScript & HTML)
+  - Translations: `src-ui/src/locale/messages.en_US.xlf`, `messages.de_DE.xlf`
+
 ### Bug Fixes & Enhancements
 - **SSO UiSettings Auto-Creation** - Automatically creates UiSettings for new SSO users to prevent login errors.
   - Backend: `src/documents/signals/handlers.py`
@@ -412,6 +417,105 @@ saveGlobalViewsOrder() - Stores global view order (admin only)
 - Superuser-only access maintains security
 - Admin ordering provides organization-wide consistency
 - Clean upgrade path for future Paperless-ngx updates (all changes marked with RKC comments)
+
+### 5. SSO Debug Logging
+**Purpose**: Enable detailed debug logging for django-allauth SSO troubleshooting without full DEBUG mode
+
+Documented in [Environment Variables](#6-sso-debug-logging-paperless_debug_sso) section.
+
+### 6. Custom Field Filter Buttons
+**Purpose**: Enable quick filtering of documents by custom field values directly from the document detail page
+
+**Files Modified**:
+- `src-ui/src/app/components/document-detail/document-detail.component.ts` - Filter method implementation
+- `src-ui/src/app/components/document-detail/document-detail.component.html` - Filter button integration for all custom field types
+- `src-ui/src/locale/messages.en_US.xlf` - English translation
+- `src-ui/src/locale/messages.de_DE.xlf` - German translation
+
+**Key Features**:
+
+1. **Universal Custom Field Support**:
+   - Works with all 10 custom field data types: String, Date, Integer, Float, Monetary, Boolean, Url, DocumentLink, Select, LongText
+   - Filter buttons appear for ALL fields, even when value is null/empty
+   - Consistent with existing filter buttons (correspondent, document type, etc.)
+
+2. **Filter Mechanism**:
+   - Uses `FILTER_CUSTOM_FIELDS_QUERY` filter type (ID 42) from existing Paperless filter infrastructure
+   - Query format: `JSON.stringify(["FieldName", "exact", "value"])`
+   - Null/empty values converted to empty string for filtering
+   - Navigation via `DocumentListViewService.quickFilter()`
+
+3. **User Experience**:
+   - Filter icon button displayed to the right of each custom field value
+   - Tooltip on hover: "Filter documents with this custom field value" (EN) / "Dokumente mit diesem benutzerdefinierten Feldwert filtern" (DE)
+   - Single click navigates to document list with filter applied
+   - Works identically to other metadata filter buttons
+
+**Implementation**:
+
+**TypeScript Method** (`document-detail.component.ts`):
+```typescript
+// RKC: Filter documents by custom field value
+filterByCustomField(fieldInstance: CustomFieldInstance) {
+  const field = this.getCustomFieldFromInstance(fieldInstance)
+  if (!field) return
+  
+  const queryValue = JSON.stringify([
+    field.name,
+    'exact',
+    fieldInstance.value?.toString() ?? '',
+  ])
+  
+  const filterRule: FilterRule = {
+    rule_type: FILTER_CUSTOM_FIELDS_QUERY,
+    value: queryValue,
+  }
+  
+  this.documentListViewService.quickFilter([filterRule])
+}
+// /end RKC edit
+```
+
+**Template Integration** (`document-detail.component.html`):
+All 10 custom field input components enhanced with:
+```html
+[showFilter]="true" 
+(filterDocuments)="filterByCustomField(fieldInstance)"
+```
+
+Applied to:
+- `app-input-text` (String)
+- `app-input-date` (Date)
+- `app-input-number` (Integer, Float, Monetary)
+- `app-input-switch` (Boolean)
+- `app-input-url` (Url)
+- `app-input-document-link` (DocumentLink)
+- `app-input-select` (Select)
+- `app-input-longtext` (LongText)
+
+**Translation Integration**:
+Text-based translation ID to avoid numeric ID collisions:
+```xml
+<trans-unit id="rkc-custom-field-filter-tooltip">
+  <source>Filter documents with this custom field value</source>
+  <target>Filter documents with this custom field value</target>
+</trans-unit>
+```
+
+**Use Cases**:
+- User viewing invoice finds "Project: ABC-123" custom field → clicks filter → sees all invoices for that project
+- Reviewer sees "Status: Approved" on document → clicks filter → sees all approved documents
+- Accountant viewing document with "Fiscal Year: 2024" → clicks filter → finds all 2024 fiscal documents
+- User sees document with empty "Department" field → clicks filter → finds all documents without department assignment
+- Works with any custom field configuration without code changes
+
+**Benefits**:
+- Rapid document discovery based on custom metadata
+- Consistent UX with existing Paperless filter buttons
+- No configuration required - automatically works with all custom fields
+- Supports all custom field data types including null/empty values
+- Integrates seamlessly with existing filter infrastructure
+- All changes properly marked with RKC comments for easy maintenance
 
 ## Permission System
 

@@ -46,6 +46,7 @@ import {
   FILTER_CORRESPONDENT,
   FILTER_CREATED_AFTER,
   FILTER_CREATED_BEFORE,
+  FILTER_CUSTOM_FIELDS_QUERY,
   FILTER_DOCUMENT_TYPE,
   FILTER_FULLTEXT_MORELIKE,
   FILTER_HAS_TAGS_ALL,
@@ -1335,6 +1336,28 @@ export class DocumentDetailComponent
 
     this.documentListViewService.quickFilter(filterRules)
   }
+
+  // RKC: Filter documents by custom field value
+  filterByCustomField(fieldInstance: CustomFieldInstance) {
+    const field = this.getCustomFieldFromInstance(fieldInstance)
+    if (!field) return
+
+    // Construct the custom field query in the format: ["FieldName", "exact", "value"]
+    // The value can be null/empty - that's a valid filter condition
+    const queryValue = JSON.stringify([
+      field.name,
+      'exact',
+      fieldInstance.value?.toString() ?? '',
+    ])
+
+    const filterRule: FilterRule = {
+      rule_type: FILTER_CUSTOM_FIELDS_QUERY,
+      value: queryValue,
+    }
+
+    this.documentListViewService.quickFilter([filterRule])
+  }
+  // /end RKC edit
 
   private getCustomFields() {
     this.customFieldsService

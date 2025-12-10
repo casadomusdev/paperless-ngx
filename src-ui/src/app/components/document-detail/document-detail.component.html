@@ -142,31 +142,44 @@
                 <div [formGroup]="customFieldFormFields.controls[i]">
                   @switch (getCustomFieldFromInstance(fieldInstance)?.data_type) {
                     @case (CustomFieldDataType.String) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-text formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
                       [horizontal]="true"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-text>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.Date) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-date formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
                       [horizontal]="true"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-date>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.Integer) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-number formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
                       [horizontal]="true"
                       [showAdd]="false"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-number>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.Float) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-number formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [removable]="userCanEdit"
@@ -174,42 +187,62 @@
                       [horizontal]="true"
                       [showAdd]="false"
                       [step]=".1"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-number>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.Monetary) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-monetary formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [defaultCurrency]="getCustomFieldFromInstance(fieldInstance)?.extra_data?.default_currency"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
                       [horizontal]="true"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-monetary>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.Boolean) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-check formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
-                      [horizontal]="true"></pngx-input-check>
+                      [horizontal]="true"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"></pngx-input-check>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.Url) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-url formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
                       [horizontal]="true"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-url>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.DocumentLink) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-document-link formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [parentDocumentID]="documentId"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
                       [horizontal]="true"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-document-link>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.Select) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-select formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [items]="getCustomFieldFromInstance(fieldInstance)?.extra_data.select_options"
@@ -218,15 +251,22 @@
                       [horizontal]="true"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-select>
+                      <!-- /end RKC edit -->
                     }
                     @case (CustomFieldDataType.LongText) {
+                      <!-- RKC: Added showFilter and filterDocuments for custom field filtering -->
                       <pngx-input-textarea formControlName="value"
                       [title]="getCustomFieldFromInstance(fieldInstance)?.name"
                       [removable]="userCanEdit"
                       (removed)="removeField(fieldInstance)"
                       [horizontal]="true"
+                      [showFilter]="true"
+                      (filterDocuments)="filterByCustomField(fieldInstance)"
                       [error]="getCustomFieldError(i)"></pngx-input-textarea>
+                      <!-- /end RKC edit -->
                     }
                   }
                 </div>

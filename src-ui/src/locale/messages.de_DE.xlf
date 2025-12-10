@@ -11475,129 +11475,125 @@
         <target state="final">Abgeschlossen.</target>
       </trans-unit>
 
-      <!-- RKC: Global view management - TypeScript messages -->
-      <trans-unit id="4847819347865234567" datatype="html">
+      <!-- RKC: Custom translations with unique text-based IDs -->
+      
+      <!-- Global view management -->
+      <trans-unit id="rkc-global-views-superuser-only" datatype="html">
         <source>Only superusers can reorder global views.</source>
-        <target state="final">Nur Superuser können globale Ansichten neu ordnen.</target>
+        <target state="final">Nur Supernutzer können globale Ansichten neu anordnen.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/app-frame/app-frame.component.ts</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="7756234890123456789" datatype="html">
+      <trans-unit id="rkc-global-sidebar-views-updated" datatype="html">
         <source>Global sidebar views updated</source>
-        <target state="final">Globale Seitenleisten-Ansichten aktualisiert</target>
+        <target state="final">Globale Seitenleistenansichten aktualisiert</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/app-frame/app-frame.component.ts</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="8934567890234567890" datatype="html">
+      <trans-unit id="rkc-global-sidebar-views-error" datatype="html">
         <source>Error updating global sidebar views</source>
-        <target state="final">Fehler beim Aktualisieren der globalen Seitenleisten-Ansichten</target>
+        <target state="final">Fehler beim Aktualisieren der globalen Seitenleistenansichten</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/app-frame/app-frame.component.ts</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="9045678901234567891" datatype="html">
+      <trans-unit id="rkc-global-dashboard-views-updated" datatype="html">
         <source>Global dashboard views updated</source>
-        <target state="final">Globale Startseiten-Ansichten aktualisiert</target>
+        <target state="final">Globale Dashboard-Ansichten aktualisiert</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/dashboard/dashboard.component.ts</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="1234567890345678902" datatype="html">
+      <trans-unit id="rkc-global-dashboard-views-error" datatype="html">
         <source>Error updating global dashboard views</source>
-        <target state="final">Fehler beim Aktualisieren der globalen Startseiten-Ansichten</target>
+        <target state="final">Fehler beim Aktualisieren der globalen Dashboard-Ansichten</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/dashboard/dashboard.component.ts</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="2345678901456789013" datatype="html">
+      <trans-unit id="rkc-views-saved-successfully" datatype="html">
         <source>Views saved successfully.</source>
         <target state="final">Ansichten erfolgreich gespeichert.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.ts</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="3456789012567890124" datatype="html">
+      <trans-unit id="rkc-views-save-error" datatype="html">
         <source>Error while saving views.</source>
         <target state="final">Fehler beim Speichern der Ansichten.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.ts</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-
-      <!-- RKC: Global view management - HTML template messages -->
-      <trans-unit id="4567890123678901235" datatype="html">
+      <trans-unit id="rkc-global-shared-views" datatype="html">
         <source>Global Shared Views</source>
         <target state="final">Globale geteilte Ansichten</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="5678901234789012346" datatype="html">
+      <trans-unit id="rkc-global-views-description" datatype="html">
         <source>These views are visible to all users in the organization.</source>
-        <target state="final">Diese Ansichten sind für alle Benutzer der Organisation sichtbar.</target>
+        <target state="final">Diese Ansichten sind für alle Benutzer in der Organisation sichtbar.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="6789012345890123457" datatype="html">
+      <trans-unit id="rkc-global-badge" datatype="html">
         <source>GLOBAL</source>
         <target state="final">GLOBAL</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="7890123456901234568" datatype="html">
+      <trans-unit id="rkc-global-view-label" datatype="html">
         <source>Global View</source>
         <target state="final">Globale Ansicht</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="8901234567012345679" datatype="html">
+      <trans-unit id="rkc-make-global-checkbox" datatype="html">
         <source>Make global for all users</source>
         <target state="final">Für alle Benutzer global machen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="9012345678123456780" datatype="html">
+      <trans-unit id="rkc-personal-saved-views" datatype="html">
         <source>Personal Saved Views</source>
         <target state="final">Persönliche gespeicherte Ansichten</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="0123456789234567891" datatype="html">
+      <trans-unit id="rkc-personal-views-description" datatype="html">
         <source>These views are private to your account.</source>
         <target state="final">Diese Ansichten sind privat für Ihr Konto.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/manage/saved-views/saved-views.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="1234567890345678902" datatype="html">
+      <trans-unit id="rkc-shortcuts-label" datatype="html">
         <source>Shortcuts</source>
         <target state="final">Verknüpfungen</target>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/app-frame/app-frame.component.html</context>
-          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      
+      <!-- Custom field filter tooltip -->
+      <trans-unit id="rkc-custom-field-filter-tooltip" datatype="html">
+        <source>Filter documents with this custom field value</source>
+        <target state="final">Dokumente mit diesem benutzerdefinierten Feldwert filtern</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/components/document-detail/document-detail.component.html</context>
+        </context-group>
+        <note priority="1" from="description">RKC: Tooltip for custom field filter button</note>
+      </trans-unit>
+
       <!-- /end RKC edits -->
 
     </body>
