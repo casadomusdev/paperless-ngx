@@ -1,20 +1,39 @@
 import { SlicePipe } from '@angular/common'
-import { Component, inject, Input, OnInit } from '@angular/core'
+import { Component, inject, Input, OnDestroy, OnInit } from '@angular/core'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import {
   NgbActiveModal,
+  NgbDropdownModule,
   NgbModal,
   NgbPagination,
   NgbPopoverModule,
   NgbTooltipModule,
 } from '@ng-bootstrap/ng-bootstrap'
 import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
+// RKC: Import RxJS operators for filter debouncing
+import {
+  debounceTime,
+  distinctUntilChanged,
+  filter,
+  Subject,
+  takeUntil,
+} from 'rxjs'
+// /end RKC edit
 import { ConfirmButtonComponent } from 'src/app/components/common/confirm-button/confirm-button.component'
 import { MailRule } from 'src/app/data/mail-rule'
 import { ProcessedMail } from 'src/app/data/processed-mail'
 import { CustomDatePipe } from 'src/app/pipes/custom-date.pipe'
 import { ProcessedMailService } from 'src/app/services/rest/processed-mail.service'
 import { ToastService } from 'src/app/services/toast.service'
+
+// RKC: Filter target enum for processed mail filtering
+enum MailFilterTarget {
+  Error,
+  Subject,
+  Received,
+  Processed,
+}
+// /end RKC edit
 
 @Component({
   selector: 'pngx-processed-mail-dialog',
@@ -24,6 +43,7 @@ import { ToastService } from 'src/app/services/toast.service'
     NgbPagination,
     NgbPopoverModule,
     NgbTooltipModule,
+    NgbDropdownModule,
     NgxBootstrapIconsModule,
     FormsModule,
     ReactiveFormsModule,
@@ -32,7 +52,7 @@ import { ToastService } from 'src/app/services/toast.service'
   templateUrl: './processed-mail-dialog.component.html',
   styleUrl: './processed-mail-dialog.component.scss',
 })
-export class ProcessedMailDialogComponent implements OnInit {
+export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
   private readonly activeModal = inject(NgbActiveModal)
   private readonly processedMailService = inject(ProcessedMailService)
   private readonly toastService = inject(ToastService)
@@ -51,10 +71,80 @@ export class ProcessedMailDialogComponent implements OnInit {
   public collectionSize: number = 0
   // /end RKC edit
 
+  // RKC: Filter properties for client-side filtering (similar to file tasks page)
+  private _filterText: string = ''
+  get filterText() {
+    return this._filterText
+  }
+  set filterText(value: string) {
+    this.filterDebounce.next(value)
+  }
+
+  public filterTargetID: MailFilterTarget = MailFilterTarget.Error
+  public get filterTargetName(): string {
+    return this.filterTargets.find((t) => t.id == this.filterTargetID).name
+  }
+  private filterDebounce: Subject<string> = new Subject<string>()
+  private unsubscribeNotifier: Subject<void> = new Subject<void>()
+
+  public get filterTargets(): Array<{ id: number; name: string }> {
+    return [
+      { id: MailFilterTarget.Error, name: $localize`Error` },
+      { id: MailFilterTarget.Subject, name: $localize`Subject` },
+      { id: MailFilterTarget.Received, name: $localize`Received` },
+      { id: MailFilterTarget.Processed, name: $localize`Processed` },
+    ]
+  }
+
+  get filteredMails(): ProcessedMail[] {
+    if (!this._filterText.length) return this.processedMails
+
+    return this.processedMails.filter((mail) => {
+      const searchText = this._filterText.toLowerCase()
+      switch (this.filterTargetID) {
+        case MailFilterTarget.Error:
+          return mail.error?.toLowerCase().includes(searchText) ?? false
+        case MailFilterTarget.Subject:
+          return mail.subject?.toLowerCase().includes(searchText) ?? false
+        case MailFilterTarget.Received:
+          return mail.received
+            ?.toString()
+            .toLowerCase()
+            .includes(searchText) ?? false
+        case MailFilterTarget.Processed:
+          return mail.processed
+            ?.toString()
+            .toLowerCase()
+            .includes(searchText) ?? false
+        default:
+          return false
+      }
+    })
+  }
+  // /end RKC edit
+
   @Input() rule: MailRule
 
   ngOnInit(): void {
     this.loadProcessedMails()
+    
+    // RKC: Set up filter debouncing (100ms delay, min 3 chars, same as file tasks page)
+    this.filterDebounce
+      .pipe(
+        takeUntil(this.unsubscribeNotifier),
+        debounceTime(100),
+        distinctUntilChanged(),
+        filter((query) => !query.length || query.length > 2)
+      )
+      .subscribe((query) => (this._filterText = query))
+    // /end RKC edit
+  }
+
+  ngOnDestroy(): void {
+    // RKC: Clean up subscriptions
+    this.unsubscribeNotifier.next()
+    this.unsubscribeNotifier.complete()
+    // /end RKC edit
   }
 
   public close() {
@@ -112,6 +202,19 @@ export class ProcessedMailDialogComponent implements OnInit {
     })
     modalRef.componentInstance.errorContent = errorContent
     modalRef.componentInstance.subject = subject
+  }
+
+  // Filter helper methods (same pattern as file tasks page)
+  public resetFilter(): void {
+    this._filterText = ''
+  }
+
+  filterInputKeyup(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this._filterText = (event.target as HTMLInputElement).value
+    } else if (event.key === 'Escape') {
+      this.resetFilter()
+    }
   }
   // /end RKC edit
 }

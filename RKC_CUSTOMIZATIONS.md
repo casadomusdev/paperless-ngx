@@ -865,6 +865,35 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.15 (2025-01-12)**: Processed mail filtering capability
+  - Added client-side filtering to processed mail dialog matching file tasks page pattern
+  - **Filter Targets**:
+    - Error field (default) - key requirement for troubleshooting failed mail processing
+    - Subject field - filter by email subject line
+    - Received date - filter by email received timestamp
+    - Processed date - filter by processing timestamp
+  - **Implementation**:
+    - RxJS debouncing (100ms) with 3-character minimum for performance
+    - Enum-based filter target selection for type safety
+    - Filter input with dropdown for target selection and clear button
+    - Filter state resets on dialog open (minimal core code impact)
+    - Follows exact same pattern as file tasks page for UI consistency
+  - **UI Components**:
+    - Input field with placeholder "Filter..."
+    - Clear button (X) appears when filter text is present
+    - Dropdown selector for choosing filter target field
+    - Active filter target highlighted in dropdown
+    - Keyboard support via Enter key (clears filter)
+  - **Architecture**:
+    - MailFilterTarget enum: Error (0), Subject (1), Received (2), Processed (3)
+    - filteredMails getter with switch-case filtering logic
+    - Private filterDebounce Subject for reactive filtering
+    - Proper cleanup via OnDestroy to prevent memory leaks
+  - Files modified:
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.ts` (added filtering logic, enums, properties)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html` (added filter UI, changed loop to filteredMails)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.14 (2025-01-12)**: Processed mail dialog enhancements
   - Enhanced error column in processed mail dialog with clickable modal for full tracebacks
   - **Problem**: Error messages were limited to 20 character preview on hover, making full tracebacks inaccessible

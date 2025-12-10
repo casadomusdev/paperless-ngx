@@ -19,6 +19,28 @@
   } @else if (processedMails.length === 0) {
     <span i18n>No processed email messages found.</span>
   } @else {
+    <!-- RKC: Add filtering capability similar to file tasks page -->
+    <div class="input-group input-group-sm mb-3">
+      <input type="text" class="form-control" placeholder="Filter..." i18n-placeholder [(ngModel)]="filterText" (keyup)="filterInputKeyup($event)" />
+      @if (filterText.length > 0) {
+        <button class="btn btn-outline-secondary" type="button" (click)="resetFilter()" title="Clear filter" i18n-title>
+          <i-bs name="x"></i-bs>
+        </button>
+      }
+      <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" ngbDropdown #filterDropdown="ngbDropdown">
+        {{ filterTargetName }}
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end" ngbDropdownMenu>
+        @for (target of filterTargets; track target.id) {
+          <li>
+            <a class="dropdown-item" [class.active]="filterTargetID === target.id" (click)="filterTargetID = target.id; filterDropdown.close()" href="javascript:void(0)">
+              {{ target.name }}
+            </a>
+          </li>
+        }
+      </ul>
+    </div>
+    <!-- /end RKC edit -->
     <div class="table-responsive">
       <table class="table table-hover table-sm align-middle">
         <thead>
@@ -37,7 +59,9 @@
           </tr>
         </thead>
         <tbody>
-          @for (mail of processedMails; track mail.id) {
+          <!-- RKC: Use filteredMails instead of processedMails to apply client-side filtering -->
+          @for (mail of filteredMails; track mail.id) {
+          <!-- /end RKC edit -->
             <ng-template #statusTooltip>
               <div class="small text-light font-monospace">
                   {{mail.status}}
