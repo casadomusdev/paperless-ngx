@@ -3,6 +3,7 @@ import { Component, inject, Input, OnInit } from '@angular/core'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import {
   NgbActiveModal,
+  NgbModal,
   NgbPagination,
   NgbPopoverModule,
   NgbTooltipModule,
@@ -35,6 +36,9 @@ export class ProcessedMailDialogComponent implements OnInit {
   private readonly activeModal = inject(NgbActiveModal)
   private readonly processedMailService = inject(ProcessedMailService)
   private readonly toastService = inject(ToastService)
+  // RKC: Inject modal service for error detail popup
+  private readonly modalService = inject(NgbModal)
+  // /end RKC edit
 
   public processedMails: ProcessedMail[] = []
 
@@ -99,4 +103,40 @@ export class ProcessedMailDialogComponent implements OnInit {
       ? this.selectedMailIds.delete(mail.id)
       : this.selectedMailIds.add(mail.id)
   }
+
+  // RKC: Open modal dialog to display full error traceback
+  public showErrorDetails(errorContent: string, subject: string): void {
+    const modalRef = this.modalService.open(ErrorDetailModalComponent, {
+      size: 'lg',
+      scrollable: true,
+    })
+    modalRef.componentInstance.errorContent = errorContent
+    modalRef.componentInstance.subject = subject
+  }
+  // /end RKC edit
 }
+
+// RKC: Standalone modal component for displaying error details
+@Component({
+  selector: 'pngx-error-detail-modal',
+  standalone: true,
+  imports: [NgbActiveModal],
+  template: `
+    <div class="modal-header">
+      <h6 class="modal-title">Error Details: {{ subject }}</h6>
+      <button type="button" class="btn-close" aria-label="Close" (click)="activeModal.close()"></button>
+    </div>
+    <div class="modal-body">
+      <pre class="small mb-0" style="white-space: pre-wrap; word-wrap: break-word;">{{ errorContent }}</pre>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" (click)="activeModal.close()">Close</button>
+    </div>
+  `,
+})
+export class ErrorDetailModalComponent {
+  public readonly activeModal = inject(NgbActiveModal)
+  @Input() errorContent: string = ''
+  @Input() subject: string = ''
+}
+// /end RKC edit

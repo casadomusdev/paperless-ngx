@@ -865,6 +865,25 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.14 (2025-01-12)**: Processed mail error details modal
+  - Enhanced error column in processed mail dialog with clickable modal for full tracebacks
+  - **Problem**: Error messages were limited to 20 character preview on hover, making full tracebacks inaccessible
+  - **Solution**: 
+    - Increased hover preview from 20 to 50 characters for better quick reference
+    - Increased hover popover from full text to 200 characters for better preview
+    - Made error text clickable with visual indicators (pointer cursor, dotted underline)
+    - Opens scrollable modal dialog showing complete error traceback
+    - Modal includes email subject for context
+  - **UX improvements**:
+    - Hover preview still available for quick checks (0-50 chars visible, 0-200 in popover)
+    - Click opens large scrollable modal with full error content
+    - Modal uses word-wrap for long lines
+    - Clean close button in modal footer
+  - Files modified:
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.ts` (added NgbModal injection, showErrorDetails method, ErrorDetailModalComponent)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html` (clickable error text with styling)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.13 (2025-01-12)**: Processed mail pagination fix
   - Fixed bug where processed mail dialog pagination was broken
   - Problem: `ngb-pagination` was using `processedMails.length` (current page results only) instead of total count from API
