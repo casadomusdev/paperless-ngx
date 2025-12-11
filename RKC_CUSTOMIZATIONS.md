@@ -983,21 +983,24 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.0.23 (2025-01-12)**: Dashboard saved views race condition fix
-  - Fixed race condition where saved views wouldn't load when accessing `/dashboard` directly
-  - **Problem**: When loading dashboard URL directly, global saved views would appear empty because computed signal cached null value before settings loaded
-  - **Root Cause**: Computed signal `globalDashboardViews` depends on `globalDashboardViewsSortOrder` getter which reads from plain object, not a reactive signal. When the computed runs before settings are ready, it caches the null result and won't recalculate
-  - **Solution**: 
-    - Always call `initializeSettings()` before fetching saved views in dashboard constructor
-    - `initializeSettings()` is idempotent (safe to call multiple times)
-    - Fetching views updates `savedViewService.dashboardViews` signal
-    - Signal update triggers computed `globalDashboardViews` to recalculate with fresh settings
+- **v1.0.23 (2025-01-12)**: Dashboard saved views race condition fix (signal-based reactivity)
+  - Fixed race condition where dashboard would appear empty when directly accessing `/dashboard` URL
+  - **Root Cause**: Computed signals were reading from non-reactive getters that returned data from plain arrays. When HTTP response populated the array, computed signals didn't know to recalculate.
+  - **Solution**: Converted SavedViewService to use Angular signals for proper reactive data flow
+    - Changed `savedViews` array → `savedViewsSignal` signal
+    - Converted `sidebarViews` getter → computed signal
+    - Converted `dashboardViews` getter → computed signal
+    - Updated all consuming components to call signals as functions
+  - **Reactive Chain**: HTTP response updates `savedViewsSignal` → triggers `dashboardViews` computed → triggers `globalDashboardViews` computed → UI updates automatically
   - **Benefits**:
-    - Works reliably for both direct dashboard loads and SPA navigation
-    - Simple, clean code without conditional logic
-    - Dashboard-specific fix that doesn't impact other components
+    - Dashboard views load correctly on page refresh and direct URL access
+    - Proper Angular reactivity pattern eliminates race conditions
+    - Works reliably for both SPA navigation and direct page loads
+    - Clean, maintainable solution following Angular best practices
   - Files modified:
-    - Frontend: `src-ui/src/app/components/dashboard/dashboard.component.ts` (constructor)
+    - Frontend: `src-ui/src/app/services/rest/saved-view.service.ts` (signal conversion)
+    - Frontend: `src-ui/src/app/components/dashboard/dashboard.component.ts` (function call updates)
+    - Frontend: `src-ui/src/app/components/app-frame/app-frame.component.ts` (function call updates)
   - All changes properly marked with RKC comments for maintainability
 
 - **v1.0.22 (2025-01-12)**: Card views respect user date format preference (Paperless bug fix)

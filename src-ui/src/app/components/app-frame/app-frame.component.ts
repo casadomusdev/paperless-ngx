@@ -256,7 +256,7 @@ export class AppFrameComponent
   }
 
   onDrop(event: CdkDragDrop<SavedView[]>) {
-    const sidebarViews = this.savedViewService.sidebarViews.concat([])
+    const sidebarViews = this.savedViewService.sidebarViews().concat([])
     moveItemInArray(sidebarViews, event.previousIndex, event.currentIndex)
 
     // RKC: Filter to only save personal views (owner !== null) to user settings
@@ -351,7 +351,7 @@ export class AppFrameComponent
   // Global views appear in "Shortcuts" section at top, ordered by admin user's settings
   // User views appear underneath, ordered by user's own settings
   get globalSidebarViews(): SavedView[] {
-    const globalViews = this.savedViewService.sidebarViews.filter(v => v.owner === null)
+    const globalViews = this.savedViewService.sidebarViews().filter(v => v.owner === null)
     const globalSortOrder = this.settingsService.globalViewsSortOrder
     
     if (globalSortOrder && globalSortOrder.length > 0) {
@@ -373,7 +373,7 @@ export class AppFrameComponent
   }
 
   get userSidebarViews(): SavedView[] {
-    const userViews = this.savedViewService.sidebarViews.filter(v => v.owner !== null)
+    const userViews = this.savedViewService.sidebarViews().filter(v => v.owner !== null)
     const userSortOrder = this.settingsService.get(SETTINGS_KEYS.SIDEBAR_VIEWS_SORT_ORDER)
     
     // Apply user's custom sort order if it exists

@@ -53,8 +53,9 @@ export class DashboardComponent extends ComponentWithPermissions {
 
   // RKC: Separate global dashboard views (owner=null) from user dashboard views
   // Global views are ordered by admin's dashboard sort order, user views by current user's order
+  // Now properly reactive since savedViewService.dashboardViews is a computed signal
   globalDashboardViews = computed(() => {
-    const allViews = this.savedViewService.dashboardViews
+    const allViews = this.savedViewService.dashboardViews()
     const globalViews = allViews.filter((v) => v.owner === null)
 
     const globalSortOrder = this.settingsService.globalDashboardViewsSortOrder
@@ -68,7 +69,7 @@ export class DashboardComponent extends ComponentWithPermissions {
   })
 
   userDashboardViews = computed(() => {
-    return this.savedViewService.dashboardViews.filter((v) => v.owner !== null)
+    return this.savedViewService.dashboardViews().filter((v) => v.owner !== null)
   })
   // /end RKC edit
 
@@ -76,11 +77,9 @@ export class DashboardComponent extends ComponentWithPermissions {
     super()
 
     // RKC: Fix race condition - ensure settings are loaded before fetching saved views
-    // When loading /dashboard directly, settings may still be initializing via APP_INITIALIZER
-    // The globalDashboardViews computed signal needs globalDashboardViewsSortOrder from settings
-    // If settings aren't ready, the computed signal caches null and won't recalculate
-    // Solution: Always wait for settings, then fetch views (updates signal, triggers recomputation)
-    // initializeSettings() completes immediately if already initialized (safe to call always)
+    // With savedViewService.dashboardViews now as a computed signal (not a getter),
+    // it will automatically recalculate when the underlying savedViewsSignal updates
+    // Still need to ensure both settings and views are loaded on component init
     this.settingsService.initializeSettings().subscribe(() => {
       this.savedViewService.listAll().subscribe()
     })
