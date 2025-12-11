@@ -18,11 +18,30 @@ We have developed 23 customizations to Paperless-ngx for our deployment. After r
 
 ## Customization Categories & PR Strategy
 
-### TIER 1: High Priority - Strong PR Candidates
+### TIER 1: BUGFIXES - Highest Priority ⭐
 
-These have broad appeal, solve real problems, and minimal breaking change risk:
+**Bug fixes don't require feature requests and can be submitted immediately. These should be our first PRs:**
 
-#### 1. Card Views Date Format Bug Fix (v1.0.22)
+#### 1. Dashboard Race Condition Fix (v1.0.23) 🆕
+- **Type**: Bug fix
+- **Impact**: Fixes empty dashboard when directly accessing `/dashboard` URL or refreshing page
+- **Root Cause**: Computed signals reading from non-reactive getters
+- **Files**: 3 frontend files (SavedViewService + DashboardComponent + AppFrameComponent)
+- **Why excellent PR**: 
+  - **Fixes real user-facing bug** - dashboard appears broken on page refresh
+  - Clean Angular signals solution following framework best practices
+  - Well-documented with clear root cause analysis
+  - No breaking changes, pure reactivity fix
+  - Upstream will appreciate proper Angular patterns
+- **Effort**: Medium
+- **PR Strategy**: 
+  - Submit as bug fix (no feature request needed)
+  - Create reproduction steps in vanilla Paperless-ngx
+  - Emphasize proper reactive Angular patterns
+  - Reference Angular signals documentation
+  - Clear before/after behavior description
+
+#### 2. Card Views Date Format Bug Fix (v1.0.22)
 - **Type**: Bug fix
 - **Impact**: Fixes hardcoded date format in card views, makes them respect user preferences
 - **Files**: 2 template files
@@ -36,7 +55,26 @@ These have broad appeal, solve real problems, and minimal breaking change risk:
   - Search for related issues about card view date formatting
   - Simple, focused PR with clear before/after
 
-#### 2. Date+Time Format Options (v1.0.21)
+#### 3. Processed Mail Pagination Fix (v1.0.13)
+- **Type**: Bug fix
+- **Impact**: Fixed broken pagination in processed mail dialog
+- **Problem**: Pagination showed only "<< 1 >>" even with multiple pages
+- **Files**: 2 frontend files (TypeScript + HTML)
+- **Why good PR**: 
+  - Clear bug - pagination completely broken
+  - Simple fix - use correct total count from API
+  - Easy to reproduce and verify
+- **Effort**: Low
+- **PR Strategy**: 
+  - Submit as bug fix (no feature request needed)
+  - Provide steps to reproduce with many processed mails
+  - Show before/after screenshots
+
+### TIER 2: ENHANCEMENTS - High Priority
+
+**Strong PR candidates with broad appeal. Require feature request validation first:**
+
+#### 4. Date+Time Format Options (v1.0.21)
 - **Type**: Enhancement
 - **Impact**: Adds 4 new date+time display formats to complement existing date-only formats
 - **Files**: 1 template + 2 translation files
@@ -52,7 +90,7 @@ These have broad appeal, solve real problems, and minimal breaking change risk:
   - Emphasize zero performance impact
   - Provide screenshots showing the new options
 
-#### 3. Custom Field Filter Buttons (v1.0.6)
+#### 5. Custom Field Filter Buttons (v1.0.6)
 - **Type**: UX Enhancement
 - **Impact**: Quick filtering by custom field values (all 10 field types)
 - **Files**: 10 input components + translations
@@ -68,7 +106,7 @@ These have broad appeal, solve real problems, and minimal breaking change risk:
   - Emphasize "no configuration required"
   - Demonstrate with GIF/video of the feature
 
-#### 4. OAuth2 Email Sending Support (v1.0.18)
+#### 6. OAuth2 Email Sending Support (v1.0.18)
 - **Type**: Major Feature
 - **Impact**: Enables OAuth2 for outgoing SMTP (Gmail/Outlook)
 - **Files**: Backend models, migrations, new OAuth backend
@@ -87,7 +125,7 @@ These have broad appeal, solve real problems, and minimal breaking change risk:
   - Provide detailed testing instructions
   - Document fallback to SMTP behavior
 
-#### 5. Mail Action "Process All Mails" (v1.0.19)
+#### 7. Mail Action "Process All Mails" (v1.0.19)
 - **Type**: Feature Enhancement
 - **Impact**: Process read+unread mails without modification
 - **Files**: 2 backend files (enum + action class)
@@ -101,29 +139,20 @@ These have broad appeal, solve real problems, and minimal breaking change risk:
   - Emphasize use case: processing historical archives
   - Highlight non-invasive nature (leaves mails untouched)
 
-### TIER 2: Medium Priority - Context-Dependent
+### TIER 3: Medium Priority - Context-Dependent
 
-These are valuable but may need feature request validation:
+**Valuable but may need feature request validation:**
 
-#### 6. Processed Mail Enhancements (v1.0.13-15, v1.0.20)
-- **Components**: Pagination fix, filtering, error details modal, UID column
+#### 8. Processed Mail Enhancements (v1.0.14-15, v1.0.20)
+- **Components**: Filtering, error details modal, UID column
 - **Why possibly good**: Significantly improves mail debugging
 - **Concern**: Multiple related changes - may need bundling discussion
 - **PR Strategy**: 
   - Could bundle as single "Mail Management UX Improvements" PR
-  - Or split into separate PRs (pagination fix vs. filtering vs. enhancements)
+  - Or split into separate PRs (filtering vs. enhancements)
   - Search for issues about mail processing debugging
 
-#### 7. Dashboard Race Condition Fix (v1.0.23)
-- **Type**: Bug fix
-- **Why good**: Fixes direct `/dashboard` URL loading
-- **Concern**: Edge case - may not affect many users
-- **PR Strategy**: 
-  - Try to reproduce issue on vanilla Paperless-ngx first
-  - If reproducible, submit as bug fix (no feature request needed)
-  - If not reproducible, may be specific to our global views customization
-
-#### 8. Mail-Document Correlation via Custom Fields (v1.0.12)
+#### 9. Mail-Document Correlation via Custom Fields (v1.0.12)
 - **Type**: Feature
 - **Why possibly good**: Enables email tracking
 - **Concern**: Requires custom field setup, may be niche use case
@@ -132,7 +161,7 @@ These are valuable but may need feature request validation:
   - Emphasize value for auditing/compliance scenarios
   - Make it optional via environment variable
 
-#### 9. Mail Action Connection Pooling (v1.0.17)
+#### 10. Mail Action Connection Pooling (v1.0.17)
 - **Type**: Performance Fix
 - **Why good**: Eliminates OAuth2 rate limiting storms
 - **Concern**: Complex change to Celery architecture
@@ -141,45 +170,56 @@ These are valuable but may need feature request validation:
   - Provide detailed explanation of the problem
   - Include performance metrics if possible
 
-### TIER 3: Low Priority - Organization-Specific
+### TIER 4: Low Priority - Organization-Specific
 
-These are valuable for our use case but may not have broad appeal:
+**Valuable for our use case but may not have broad appeal:**
 
-#### 10. Global Saved Views (v1.0.6, 9, 10, 11)
+#### 11. Global Saved Views (v1.0.6, 9, 10, 11)
 - **Concern**: Very organization-specific, complex UI changes
 - **Strategy**: Probably keep private unless many users request it
 
-#### 11. PDF Editor Restriction (v1.0.8)
+#### 12. PDF Editor Restriction (v1.0.8)
 - **Concern**: Optional security feature, not universal need
 - **Strategy**: Could propose as optional env var if there's interest
 
-#### 12. UI Defaults (Theme, Language, Dark Mode)
+#### 13. UI Defaults (Theme, Language, Dark Mode)
 - **Concern**: Personal preference, not core functionality
 - **Strategy**: Low priority unless specifically requested
 
-#### 13. SSO Debug Logging (v1.0.5)
+#### 14. SSO Debug Logging (v1.0.5)
 - **Concern**: Troubleshooting aid, not production feature
 - **Strategy**: Very low priority
 
 ## Recommended First PRs
 
-I suggest starting with **2-3 PRs maximum** to build trust and establish the contribution pattern:
+**Start with bugfixes first to build trust and establish contribution pattern. Bug fixes are always welcome and don't require feature request discussions:**
 
-### Immediate Submissions (No Feature Request Needed)
+### Phase 1: Immediate Bug Fix Submissions (No Feature Request Needed)
 
-1. **Card Views Date Format Bug Fix** (v1.0.22)
+1. **Dashboard Race Condition Fix** (v1.0.23) - NEW! ⭐
+   - Critical bug affecting user experience
+   - Clean reactive solution
+   - Shows understanding of Angular best practices
+   - Will impress maintainers
+
+2. **Card Views Date Format Bug Fix** (v1.0.22)
    - Pure bug fix
-   - Simple, focused
+   - Simple, focused  
    - Easy review
 
-### After Feature Request Discussion
+3. **Processed Mail Pagination Fix** (v1.0.13)
+   - Simple fix
+   - Clear before/after
+   - Low risk
 
-2. **Date+Time Format Options** (v1.0.21)
+### Phase 2: After Feature Request Discussion
+
+4. **Date+Time Format Options** (v1.0.21)
    - Small, clean enhancement
    - Clear user value
    - Low risk
 
-3. **Custom Field Filter Buttons** (v1.0.6) OR **OAuth2 Email Sending** (v1.0.18)
+5. **Custom Field Filter Buttons** (v1.0.6) OR **OAuth2 Email Sending** (v1.0.18)
    - Choose based on which has more community interest
    - OAuth2 is bigger impact but requires more review
    - Custom field filters are safer bet for acceptance
@@ -193,15 +233,24 @@ I suggest starting with **2-3 PRs maximum** to build trust and establish the con
 - [ ] Fork the paperless-ngx repository
 - [ ] Set up local development environment
 
-### Phase 2: Bug Fix PR (Card Views)
-- [ ] Create feature branch from `dev`
-- [ ] Extract card view date format fix (clean, isolated changes)
-- [ ] Write pytest tests if applicable
-- [ ] Run `ruff` formatter on Python code
-- [ ] Test changes locally
-- [ ] Create PR with clear description
-- [ ] Reference any related issues
+### Phase 2: Bug Fix PRs (All Three)
+- [ ] Create feature branch for dashboard race condition
+- [ ] Extract dashboard signal conversion fix (clean, isolated changes)
+- [ ] Test changes locally on vanilla Paperless-ngx
+- [ ] Create PR with detailed root cause analysis
+- [ ] Reference Angular signals best practices
 - [ ] Respond to review feedback
+
+- [ ] Create feature branch for card view date format
+- [ ] Extract card view fixes (2 template files)
+- [ ] Test with different user date format preferences
+- [ ] Create PR with before/after screenshots
+- [ ] Simple, focused description
+
+- [ ] Create feature branch for pagination fix
+- [ ] Extract pagination fix changes
+- [ ] Test wit many processed mails
+- [ ] Create PR with reproduction steps
 
 ### Phase 3: Small Enhancement PR (Date+Time Formats)
 - [ ] Create or find feature request discussion
@@ -241,12 +290,12 @@ git pull origin dev
 # Create feature branch
 git checkout dev
 git pull origin dev
-git checkout -b fix/card-view-date-format
+git checkout -b fix/dashboard-race-condition
 
 # Make changes (extract from RKC customization)
 # ... edit files ...
 
-# Format Python code
+# Format Python code (if applicable)
 ruff format .
 
 # Test
@@ -254,16 +303,22 @@ pytest
 
 # Commit with descriptive message
 git add .
-git commit -m "[FIX] Card views respect user date format preference
+git commit -m "[FIX] Dashboard views empty on page refresh
 
-Fixes hardcoded 'mediumDate' format in small and large card views.
-Now respects DATE_FORMAT setting from Settings > General, matching
-table view behavior.
+Fixes race condition where computed signals cache null before HTTP
+data loads. Converted SavedViewService to use Angular signals for
+proper reactivity.
 
-Resolves #XXXX"
+- Changed savedViews array to savedViewsSignal
+- Converted dashboardViews/sidebarViews to computed signals
+- Updated consumers to call signals as functions
+
+Proper reactive chain now works: HTTP → signal → computed → UI
+
+Related to #XXXX"
 
 # Push to fork
-git push fork fix/card-view-date-format
+git push fork fix/dashboard-race-condition
 
 # Create PR on GitHub
 ```
@@ -323,7 +378,7 @@ When extracting customizations for PRs:
    - Squash if needed before final PR
 
 4. **Test in isolation**
-   - Test each customization independently
+   - Test each customization independently on vanilla Paperless-ngx
    - Ensure no dependencies on other RKC changes
 
 ## Monitoring & Maintenance
@@ -348,7 +403,7 @@ When extracting customizations for PRs:
 ## Success Metrics
 
 ### Short-term (3 months)
-- Get 1-2 bug fixes merged
+- Get 3 bug fixes merged
 - Build rapport with maintainers
 - Understand project's contribution style
 
@@ -368,7 +423,8 @@ When extracting customizations for PRs:
 - **Be patient**: Maintainers are volunteers
 - **Be helpful**: Answer questions, help other users
 - **Be respectful**: Accept decisions about project direction
-- **Quality over quantity**: Better to have 2 well-crafted PRs than 10 rushed ones
+- **Quality over quantity**: Better to have 3 well-crafted bug fix PRs than 10 rushed ones
+- **Bug fixes first**: They're always welcome and build trust
 
 ## Resources
 
