@@ -983,6 +983,39 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.21 (2025-01-12)**: Date+time format options for user preferences
+  - Added 4 new date format options that include time display in addition to date
+  - **Problem**: Users could only select date-only formats (shortDate, mediumDate, longDate) with no way to see timestamps
+  - **Solution**: 
+    - Added 4 new format options leveraging Angular's built-in DatePipe time formats
+    - No backend changes needed - DatePipe natively supports these formats
+    - Formats: `short`, `medium`, `long`, `full` (vs. existing `shortDate`, `mediumDate`, `longDate`)
+  - **New Format Options**:
+    - **Short with time**: `1/12/25, 3:50 PM` - Compact format with hours:minutes
+    - **Medium with time**: `Jan 12, 2025, 3:50:36 PM` - Balanced format with hours:minutes:seconds
+    - **Long with time**: Full date with timezone (e.g., `January 12, 2025 at 3:50:36 PM GMT+1`)
+    - **Full with time**: Complete format with day of week and full timezone
+  - **User Experience**:
+    - Options appear in Settings > General > Date display > Date format section
+    - Live preview shows actual formatted date+time for each option
+    - Compatible with all locale settings (uses user's selected language)
+    - Setting stored per-user in ui_settings (key: `general-settings:date-display:date-format`)
+  - **Implementation**:
+    - Leverages existing customDate pipe infrastructure
+    - No changes to pipe logic - simply passes new format strings to Angular's DatePipe
+    - Maintains backward compatibility with existing date-only formats
+    - All text properly internationalized with i18n support
+  - **Benefits**:
+    - Users can see precise timestamps on documents for time-sensitive workflows
+    - Minimal code impact - extends existing dropdown with 4 new options
+    - No performance overhead - uses native Angular functionality
+    - Consistent with Angular framework patterns
+  - Files modified:
+    - Frontend: `src-ui/src/app/components/admin/settings/settings.component.html` (added 4 radio button options)
+    - Frontend: `src-ui/src/locale/messages.en_US.xlf` (added 4 English translation entries)
+    - Frontend: `src-ui/src/locale/messages.de_DE.xlf` (added 4 German translation entries)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.20 (2025-01-12)**: Mail UID column in processed mail overview
   - Added Mail UID as first visible data column in processed mail dialog
   - Mail UID is now searchable/filterable via existing filter dropdown

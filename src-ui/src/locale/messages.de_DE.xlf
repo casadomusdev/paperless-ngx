@@ -11602,6 +11602,34 @@
           <context context-type="sourcefile">src/app/components/common/edit-dialog/mail-rule-edit-dialog/mail-rule-edit-dialog.component.ts</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="rkc-date-format-short-time" datatype="html">
+        <source>Short with time: <x id="INTERPOLATION" equiv-text="{{today | customDate:'short':null:computedDateLocale}}"/></source>
+        <target state="final">Kurz mit Uhrzeit: <x id="INTERPOLATION" equiv-text="{{today | customDate:'short':null:computedDateLocale}}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/components/admin/settings/settings.component.html</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="rkc-date-format-medium-time" datatype="html">
+        <source>Medium with time: <x id="INTERPOLATION" equiv-text="{{today | customDate:'medium':null:computedDateLocale}}"/></source>
+        <target state="final">Mittel mit Uhrzeit: <x id="INTERPOLATION" equiv-text="{{today | customDate:'medium':null:computedDateLocale}}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/components/admin/settings/settings.component.html</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="rkc-date-format-long-time" datatype="html">
+        <source>Long with time: <x id="INTERPOLATION" equiv-text="{{today | customDate:'long':null:computedDateLocale}}"/></source>
+        <target state="final">Lang mit Uhrzeit: <x id="INTERPOLATION" equiv-text="{{today | customDate:'long':null:computedDateLocale}}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/components/admin/settings/settings.component.html</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="rkc-date-format-full-time" datatype="html">
+        <source>Full with time: <x id="INTERPOLATION" equiv-text="{{today | customDate:'full':null:computedDateLocale}}"/></source>
+        <target state="final">Vollständig mit Uhrzeit: <x id="INTERPOLATION" equiv-text="{{today | customDate:'full':null:computedDateLocale}}"/></target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/components/admin/settings/settings.component.html</context>
+        </context-group>
+      </trans-unit>
 
       <!-- /end RKC edits -->
 

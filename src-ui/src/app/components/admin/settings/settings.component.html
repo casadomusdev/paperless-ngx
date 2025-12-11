@@ -98,6 +98,26 @@
                   <input type="radio" id="dateFormatLong" name="dateFormat" class="form-check-input" formControlName="dateFormat" value="longDate">
                   <label class="form-check-label" for="dateFormatLong" i18n>Long: {{today | customDate:'longDate':null:computedDateLocale}}</label>
                 </div>
+                <!-- RKC: Added date+time format options to allow users to display time in addition to date
+                     Uses Angular's built-in DatePipe formats that include time components
+                     These formats provide hours:minutes or hours:minutes:seconds depending on verbosity -->
+                <div class="form-check">
+                  <input type="radio" id="dateFormatShortTime" name="dateFormat" class="form-check-input" formControlName="dateFormat" value="short">
+                  <label class="form-check-label" for="dateFormatShortTime" i18n>Short with time: {{today | customDate:'short':null:computedDateLocale}}</label>
+                </div>
+                <div class="form-check">
+                  <input type="radio" id="dateFormatMediumTime" name="dateFormat" class="form-check-input" formControlName="dateFormat" value="medium">
+                  <label class="form-check-label" for="dateFormatMediumTime" i18n>Medium with time: {{today | customDate:'medium':null:computedDateLocale}}</label>
+                </div>
+                <div class="form-check">
+                  <input type="radio" id="dateFormatLongTime" name="dateFormat" class="form-check-input" formControlName="dateFormat" value="long">
+                  <label class="form-check-label" for="dateFormatLongTime" i18n>Long with time: {{today | customDate:'long':null:computedDateLocale}}</label>
+                </div>
+                <div class="form-check">
+                  <input type="radio" id="dateFormatFullTime" name="dateFormat" class="form-check-input" formControlName="dateFormat" value="full">
+                  <label class="form-check-label" for="dateFormatFullTime" i18n>Full with time: {{today | customDate:'full':null:computedDateLocale}}</label>
+                </div>
+                <!-- /end RKC edit -->
 
               </div>
             </div>
