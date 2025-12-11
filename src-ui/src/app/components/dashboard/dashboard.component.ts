@@ -78,18 +78,12 @@ export class DashboardComponent extends ComponentWithPermissions {
     // RKC: Fix race condition - ensure settings are loaded before fetching saved views
     // When loading /dashboard directly, settings may still be initializing via APP_INITIALIZER
     // The globalDashboardViews computed signal needs globalDashboardViewsSortOrder from settings
-    // If settings aren't ready, the sort order is null and views appear empty/unsorted
-    // Solution: Check if settings initialized, if not wait for initializeSettings() to complete
-    if (Object.keys(this.settingsService['settings']).length > 0) {
-      // Settings already initialized (navigating from another page via SPA routing)
+    // If settings aren't ready, the computed signal caches null and won't recalculate
+    // Solution: Always wait for settings, then fetch views (updates signal, triggers recomputation)
+    // initializeSettings() completes immediately if already initialized (safe to call always)
+    this.settingsService.initializeSettings().subscribe(() => {
       this.savedViewService.listAll().subscribe()
-    } else {
-      // Settings still initializing (direct browser load to /dashboard URL)
-      // Wait for settings to be ready, then fetch views
-      this.settingsService.initializeSettings().subscribe(() => {
-        this.savedViewService.listAll().subscribe()
-      })
-    }
+    })
     // /end RKC edit
   }
 
