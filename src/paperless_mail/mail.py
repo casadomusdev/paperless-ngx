@@ -206,6 +206,24 @@ class TagMailAction(BaseMailAction):
             raise MailError("No keyword specified.")
 
 
+# RKC: Action that processes all mails without filtering or marking (v1.0.19)
+class ProcessAllMailAction(BaseMailAction):
+    """
+    A mail action that processes all matching mails regardless of read status
+    and performs no post-processing action. Each mail is still only processed
+    once due to ProcessedMail UID tracking.
+    """
+
+    def get_criteria(self):
+        # Return empty dict - no additional filtering beyond rule filters
+        return {}
+
+    def post_consume(self, M: MailBox, message_uid: str, parameter: str):
+        # No action performed - mail is left in original state
+        pass
+# /end RKC edit
+
+
 def mailbox_login(mailbox: MailBox, account: MailAccount):
     logger = logging.getLogger("paperless_mail")
 
@@ -344,6 +362,10 @@ def get_rule_action(rule: MailRule, *, supports_gmail_labels: bool) -> BaseMailA
             rule.action_parameter,
             supports_gmail_labels=supports_gmail_labels,
         )
+    # RKC: Handle PROCESS_ALL action (v1.0.19)
+    elif rule.action == MailRule.MailAction.PROCESS_ALL:
+        return ProcessAllMailAction()
+    # /end RKC edit
     else:
         raise NotImplementedError("Unknown action.")  # pragma: no cover
 

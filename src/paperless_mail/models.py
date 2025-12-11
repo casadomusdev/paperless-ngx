@@ -166,6 +166,9 @@ class MailRule(document_models.ModelWithOwner):
         MARK_READ = 3, _("Mark as read, don't process read mails")
         FLAG = 4, _("Flag the mail, don't process flagged mails")
         TAG = 5, _("Tag the mail with specified tag, don't process tagged mails")
+        # RKC: Process all mails regardless of read status without marking (v1.0.19)
+        PROCESS_ALL = 6, _("Process all mails (read and unread), no marking")
+        # /end RKC edit
 
     class TitleSource(models.IntegerChoices):
         FROM_SUBJECT = 1, _("Use subject as title")

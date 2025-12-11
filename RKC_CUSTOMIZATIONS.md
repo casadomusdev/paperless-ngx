@@ -969,7 +969,30 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.0.18 (2025-01-12)**: OAuth2 Email Sending Support
+- **v1.0.19 (2025-11-12)**: Mail action "Process all mails (read and unread)"
+  - Added new mail rule action that processes all mails regardless of read status without marking them
+  - **Problem**: Existing actions either filter out read mails (MARK_READ) or modify mail state (FLAG, TAG, MOVE, DELETE)
+  - **Solution**: 
+    - Added PROCESS_ALL action (value 6) to MailAction enum
+    - Created ProcessAllMailAction class with empty get_criteria() and no-op post_consume()
+    - Processes ALL matching mails (read or unread) without any post-processing
+    - Each mail still only processed once due to ProcessedMail UID tracking
+  - **Use Cases**:
+    - Archive folders where mails are already marked as read
+    - Shared mailboxes where read status is managed by other systems
+    - Bulk processing existing mail archives
+    - Mail rules that should run on historical data without modifying it
+  - **Benefits**:
+    - No duplication - ProcessedMail table prevents reprocessing
+    - Read status agnostic - processes both read and unread mails
+    - Non-invasive - leaves mails completely untouched
+    - Clean architecture - follows existing BaseMailAction pattern
+  - Files modified:
+    - Backend: `src/paperless_mail/models.py` (added PROCESS_ALL to MailAction enum)
+    - Backend: `src/paperless_mail/mail.py` (added ProcessAllMailAction class and handler)
+  - All changes properly marked with RKC comments for maintainability
+
+- **v1.0.18 (2025-11-12)**: OAuth2 Email Sending Support
   - Added OAuth2 authentication for outgoing SMTP emails
   - **Problem**: Organizations using OAuth2 for mail retrieval still needed separate SMTP credentials for sending
   - **Solution**: 
@@ -996,7 +1019,7 @@ docker compose restart webserver
     - Migration: `src/paperless_mail/migrations/0030_add_oauth_sending_fields.py`
   - All changes properly marked with RKC comments for maintainability
 
-- **v1.0.17 (2025-01-12)**: Mail action connection pooling to eliminate OAuth2 authentication storms
+- **v1.0.17 (2025-11-12)**: Mail action connection pooling to eliminate OAuth2 authentication storms
   - Implemented batched mail action processing via scheduled tasks to eliminate Microsoft IMAP rate limiting
   - **Problem**: Celery chord pattern created 100s of simultaneous OAuth2 authentication requests when processing emails
   - **Root Cause**: Each email spawned async `apply_mail_action` task requiring new IMAP connection and OAuth2 auth
@@ -1029,7 +1052,7 @@ docker compose restart webserver
   - All changes properly marked with RKC comments for maintainability
   - See `IMPL_MAIL_ACTION_POOLING.md` for detailed implementation documentation
 
-- **v1.0.16 (2025-01-12)**: Server-side filtering for Processed Mail
+- **v1.0.16 (2025-11-12)**: Server-side filtering for Processed Mail
   - Migrated from client-side to server-side filtering for better search capabilities
   - **Problem**: Client-side filtering (v1.0.15) only worked on current page (max 50 items), could not search entire dataset
   - **Solution**: 
