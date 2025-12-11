@@ -102,6 +102,12 @@ const ACTION_OPTIONS = [
     id: MailAction.Tag,
     name: $localize`Tag the mail with specified tag, don't process tagged mails`,
   },
+  // RKC: Process all mails action (v1.0.19)
+  {
+    id: MailAction.ProcessAll,
+    name: $localize`Process all mails (read and unread), no marking`,
+  },
+  // /end RKC edit
 ]
 
 const METADATA_TITLE_OPTIONS = [

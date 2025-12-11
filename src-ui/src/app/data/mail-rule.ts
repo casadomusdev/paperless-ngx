@@ -25,6 +25,9 @@ export enum MailAction {
   MarkRead = 3,
   Flag = 4,
   Tag = 5,
+  // RKC: Process all mails regardless of read status without marking (v1.0.19)
+  ProcessAll = 6,
+  // /end RKC edit
 }
 
 export enum MailMetadataTitleOption {
