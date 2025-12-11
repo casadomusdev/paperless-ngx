@@ -11,7 +11,8 @@
         </div>
       }
       <div [ngClass]="{'col-md-9': horizontal, 'align-items-center': horizontal, 'd-flex': horizontal}">
-        <div class="form-check">
+        <!-- RKC: Custom field filter support - make checkbox inline when filter button shown -->
+        <div class="form-check" [class.d-inline-block]="showFilter">
           <input #inputField type="checkbox" class="form-check-input" [id]="inputId" [(ngModel)]="value" (change)="onChange(value)" (blur)="onTouched()" [disabled]="disabled">
           @if (!horizontal) {
             <label class="form-check-label" [for]="inputId">{{title}}</label>
@@ -20,6 +21,13 @@
             <div class="form-text text-muted">{{hint}}</div>
           }
         </div>
+        <!-- RKC: Custom field filter support - add filter button next to checkbox -->
+        @if (showFilter) {
+          <button class="btn btn-sm btn-outline-secondary ms-2" type="button" (click)="onFilterDocuments()" [disabled]="this.value === null" title="{{ filterButtonTitle }}">
+            <i-bs width="1.2em" height="1.2em" name="filter"></i-bs>
+          </button>
+        }
+        <!-- /end RKC edit -->
       </div>
     </div>
   </div>

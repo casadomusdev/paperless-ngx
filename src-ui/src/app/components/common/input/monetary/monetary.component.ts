@@ -1,5 +1,5 @@
 import { CurrencyPipe, getLocaleCurrencyCode } from '@angular/common'
-import { Component, forwardRef, inject, Input, LOCALE_ID } from '@angular/core'
+import { Component, EventEmitter, forwardRef, inject, Input, LOCALE_ID, Output } from '@angular/core'
 import {
   FormsModule,
   NG_VALUE_ACCESSOR,
@@ -47,6 +47,14 @@ export class MonetaryComponent extends AbstractInputComponent<string> {
     if (currency) this.defaultCurrencyCode = currency
   }
 
+  // RKC: Custom field filter support - enable filter button for monetary inputs
+  @Input()
+  showFilter: boolean = false
+
+  @Output()
+  filterDocuments = new EventEmitter<string[]>()
+  // /end RKC edit
+
   constructor() {
     super()
     this.currency = this.defaultCurrencyCode =
@@ -91,4 +99,14 @@ export class MonetaryComponent extends AbstractInputComponent<string> {
     const val: number = parseFloat(value.toString().replace(/[^0-9.,-]+/g, ''))
     return fixed ? val.toFixed(2) : val.toString()
   }
+
+  // RKC: Custom field filter support - emit filter event
+  onFilterDocuments() {
+    this.filterDocuments.emit([this.value])
+  }
+
+  get filterButtonTitle() {
+    return $localize`Filter documents with this ${this.title}`
+  }
+  // /end RKC edit
 }

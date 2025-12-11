@@ -11,7 +11,16 @@
         }
       </div>
       <div class="position-relative" [class.col-md-9]="horizontal">
-        <input #inputField type="text" class="form-control" [class.is-invalid]="error" [id]="inputId" [(ngModel)]="value" (change)="onChange(value)" [disabled]="disabled" [autocomplete]="autocomplete" [placeholder]="placeholder">
+        <!-- RKC: Custom field filter support - wrap input in input-group and add filter button -->
+        <div [class.input-group]="showFilter">
+          <input #inputField type="text" class="form-control" [class.is-invalid]="error" [id]="inputId" [(ngModel)]="value" (change)="onChange(value)" [disabled]="disabled" [autocomplete]="autocomplete" [placeholder]="placeholder">
+          @if (showFilter) {
+            <button class="btn btn-outline-secondary" type="button" (click)="onFilterDocuments()" [disabled]="this.value === null || this.value === ''" title="{{ filterButtonTitle }}">
+              <i-bs width="1.2em" height="1.2em" name="filter"></i-bs>
+            </button>
+          }
+        </div>
+        <!-- /end RKC edit -->
         @if (hint) {
           <small class="form-text text-muted" [innerHTML]="hint | safeHtml"></small>
         }

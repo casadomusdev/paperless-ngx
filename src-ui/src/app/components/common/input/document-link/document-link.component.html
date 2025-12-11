@@ -14,7 +14,18 @@
         }
       </div>
       <div [class.col-md-9]="horizontal">
-        <ng-container *ngTemplateOutlet="select"></ng-container>
+        <!-- RKC: Custom field filter support - wrap in input-group when filter button is shown -->
+        <div [class.input-group]="showFilter">
+        <!-- /end RKC edit -->
+          <ng-container *ngTemplateOutlet="select"></ng-container>
+          <!-- RKC: Custom field filter support - add filter button for document link inputs -->
+          @if (showFilter) {
+            <button class="btn btn-outline-secondary" type="button" (click)="onFilterDocuments()" [disabled]="this.value === null || this.value?.length === 0" title="{{ filterButtonTitle }}">
+              <i-bs width="1.2em" height="1.2em" name="filter"></i-bs>
+            </button>
+          }
+          <!-- /end RKC edit -->
+        </div>
         @if (hint) {
           <small class="form-text text-muted">{{hint}}</small>
         }

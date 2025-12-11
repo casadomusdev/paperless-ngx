@@ -1,4 +1,4 @@
-import { Component, forwardRef, inject, Input } from '@angular/core'
+import { Component, EventEmitter, forwardRef, inject, Input, Output } from '@angular/core'
 import {
   FormsModule,
   NG_VALUE_ACCESSOR,
@@ -30,6 +30,14 @@ export class NumberComponent extends AbstractInputComponent<number> {
   @Input()
   step: number = 1
 
+  // RKC: Custom field filter support - enable filter button for number inputs
+  @Input()
+  showFilter: boolean = false
+
+  @Output()
+  filterDocuments = new EventEmitter<number[]>()
+  // /end RKC edit
+
   nextAsn() {
     if (this.value) {
       return
@@ -55,4 +63,14 @@ export class NumberComponent extends AbstractInputComponent<number> {
     if (this.step === 0.01) newValue = parseFloat(newValue).toFixed(2)
     super.writeValue(newValue)
   }
+
+  // RKC: Custom field filter support - emit filter event
+  onFilterDocuments() {
+    this.filterDocuments.emit([this.value])
+  }
+
+  get filterButtonTitle() {
+    return $localize`Filter documents with this ${this.title}`
+  }
+  // /end RKC edit
 }

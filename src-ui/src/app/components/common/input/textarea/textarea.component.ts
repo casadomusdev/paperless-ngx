@@ -1,4 +1,4 @@
-import { Component, Input, forwardRef } from '@angular/core'
+import { Component, EventEmitter, Input, Output, forwardRef } from '@angular/core'
 import {
   FormsModule,
   NG_VALUE_ACCESSOR,
@@ -33,7 +33,25 @@ export class TextAreaComponent extends AbstractInputComponent<string> {
   @Input()
   monospace: boolean = false
 
+  // RKC: Custom field filter support - enable filter button for long text inputs
+  @Input()
+  showFilter: boolean = false
+
+  @Output()
+  filterDocuments = new EventEmitter<string[]>()
+  // /end RKC edit
+
   constructor() {
     super()
   }
+
+  // RKC: Custom field filter support - emit filter event
+  onFilterDocuments() {
+    this.filterDocuments.emit([this.value])
+  }
+
+  get filterButtonTitle() {
+    return $localize`Filter documents with this ${this.title}`
+  }
+  // /end RKC edit
 }

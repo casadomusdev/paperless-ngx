@@ -15,6 +15,13 @@
         <span class="input-group-text fw-bold bg-light">{{ monetaryValue | currency: currency }}</span>
         <input #currencyField class="form-control text-muted mw-60" [(ngModel)]="currency" (input)="currencyChange()" maxlength="3" [class.is-invalid]="error" [disabled]="disabled">
         <input #monetaryValueField type="number" class="form-control text-muted" step=".01" [(ngModel)]="monetaryValue" (input)="monetaryValueChange()" (change)="monetaryValueChange(true)" [class.is-invalid]="error" [disabled]="disabled">
+        <!-- RKC: Custom field filter support - add filter button to monetary input-group -->
+        @if (showFilter) {
+          <button class="btn btn-outline-secondary" type="button" (click)="onFilterDocuments()" [disabled]="this.value === null || this.value === ''" title="{{ filterButtonTitle }}">
+            <i-bs width="1.2em" height="1.2em" name="filter"></i-bs>
+          </button>
+        }
+        <!-- /end RKC edit -->
       </div>
       <div class="invalid-feedback position-absolute top-100">
         {{error}}

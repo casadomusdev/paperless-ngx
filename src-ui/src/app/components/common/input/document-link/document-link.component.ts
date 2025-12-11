@@ -1,11 +1,13 @@
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common'
 import {
   Component,
+  EventEmitter,
   forwardRef,
   inject,
   Input,
   OnDestroy,
   OnInit,
+  Output,
 } from '@angular/core'
 import {
   FormsModule,
@@ -79,6 +81,14 @@ export class DocumentLinkComponent
 
   @Input()
   placeholder: string = $localize`Search for documents`
+
+  // RKC: Custom field filter support - enable filter button for document-link inputs
+  @Input()
+  showFilter: boolean = false
+
+  @Output()
+  filterDocuments = new EventEmitter<any[]>()
+  // /end RKC edit
 
   get selectedDocumentIDs(): number[] {
     return this.selectedDocuments.map((d) => d.id)
@@ -154,6 +164,16 @@ export class DocumentLinkComponent
   trackByFn(item: Document) {
     return item.id
   }
+
+  // RKC: Custom field filter support - emit filter event
+  onFilterDocuments() {
+    this.filterDocuments.emit([this.value])
+  }
+
+  get filterButtonTitle() {
+    return $localize`Filter documents with this ${this.title}`
+  }
+  // /end RKC edit
 
   ngOnDestroy(): void {
     this.unsubscribeNotifier.next(true)

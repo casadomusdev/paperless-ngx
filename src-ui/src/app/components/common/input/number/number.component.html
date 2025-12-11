@@ -16,6 +16,13 @@
           @if (showAdd) {
             <button class="btn btn-outline-secondary" type="button" id="button-addon1" (click)="nextAsn()" [disabled]="disabled">+1</button>
           }
+          <!-- RKC: Custom field filter support - add filter button to number input-group -->
+          @if (showFilter) {
+            <button class="btn btn-outline-secondary" type="button" (click)="onFilterDocuments()" [disabled]="this.value === null" title="{{ filterButtonTitle }}">
+              <i-bs width="1.2em" height="1.2em" name="filter"></i-bs>
+            </button>
+          }
+          <!-- /end RKC edit -->
         </div>
         <div class="invalid-feedback position-absolute top-100">
           {{error}}

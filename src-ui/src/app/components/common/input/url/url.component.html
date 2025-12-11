@@ -11,9 +11,17 @@
     <div [class.col-md-9]="horizontal">
       <div class="input-group" [class.is-invalid]="error">
         <input #inputField type="url" class="form-control" [class.is-invalid]="error" placeholder="https://" [id]="inputId" [(ngModel)]="value" (change)="onChange(value)" [disabled]="disabled">
-        <a class="btn btn-outline-secondary rounded-end" title="Open link" i18n-title [href]="value" target="_blank">
+        <!-- RKC: Custom field filter support - conditionally round open-link button based on filter button presence -->
+        <a class="btn btn-outline-secondary" [class.rounded-end]="!showFilter" title="Open link" i18n-title [href]="value" target="_blank">
           <i-bs width="1.2em" height="1.2em" name="box-arrow-up-right"></i-bs>
         </a>
+        <!-- RKC: Custom field filter support - add filter button after open-link button -->
+        @if (showFilter) {
+          <button class="btn btn-outline-secondary rounded-end" type="button" (click)="onFilterDocuments()" [disabled]="this.value === null || this.value === ''" title="{{ filterButtonTitle }}">
+            <i-bs width="1.2em" height="1.2em" name="filter"></i-bs>
+          </button>
+        }
+        <!-- /end RKC edit -->
         <div class="invalid-feedback position-absolute top-100">
           {{error}}
         </div>

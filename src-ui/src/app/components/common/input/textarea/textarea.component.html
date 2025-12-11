@@ -11,17 +11,28 @@
         }
       </div>
       <div class="position-relative" [class.col-md-9]="horizontal">
-        <textarea #inputField
-          [id]="inputId"
-          class="form-control"
-          [class.is-invalid]="error"
-          [class.font-monospace]="monospace"
-          [(ngModel)]="value"
-          (change)="onChange(value)"
-          [disabled]="disabled"
-          [placeholder]="placeholder"
-          rows="4">
-        </textarea>
+        <!-- RKC: Custom field filter support - wrap in input-group when filter button is shown -->
+        <div [class.input-group]="showFilter">
+        <!-- /end RKC edit -->
+          <textarea #inputField
+            [id]="inputId"
+            class="form-control"
+            [class.is-invalid]="error"
+            [class.font-monospace]="monospace"
+            [(ngModel)]="value"
+            (change)="onChange(value)"
+            [disabled]="disabled"
+            [placeholder]="placeholder"
+            rows="4">
+          </textarea>
+          <!-- RKC: Custom field filter support - add filter button for long text inputs -->
+          @if (showFilter) {
+            <button class="btn btn-outline-secondary" type="button" (click)="onFilterDocuments()" [disabled]="this.value === null || this.value === ''" title="{{ filterButtonTitle }}">
+              <i-bs width="1.2em" height="1.2em" name="filter"></i-bs>
+            </button>
+          }
+          <!-- /end RKC edit -->
+        </div>
         @if (hint) {
           <small class="form-text text-muted" [innerHTML]="hint | safeHtml"></small>
         }

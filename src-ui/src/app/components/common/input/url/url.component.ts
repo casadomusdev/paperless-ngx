@@ -1,4 +1,4 @@
-import { Component, forwardRef } from '@angular/core'
+import { Component, EventEmitter, forwardRef, Input, Output } from '@angular/core'
 import {
   FormsModule,
   NG_VALUE_ACCESSOR,
@@ -21,7 +21,25 @@ import { AbstractInputComponent } from '../abstract-input'
   imports: [NgxBootstrapIconsModule, FormsModule, ReactiveFormsModule],
 })
 export class UrlComponent extends AbstractInputComponent<string> {
+  // RKC: Custom field filter support - enable filter button for URL inputs
+  @Input()
+  showFilter: boolean = false
+
+  @Output()
+  filterDocuments = new EventEmitter<string[]>()
+  // /end RKC edit
+
   constructor() {
     super()
   }
+
+  // RKC: Custom field filter support - emit filter event
+  onFilterDocuments() {
+    this.filterDocuments.emit([this.value])
+  }
+
+  get filterButtonTitle() {
+    return $localize`Filter documents with this ${this.title}`
+  }
+  // /end RKC edit
 }

@@ -429,6 +429,20 @@ Documented in [Environment Variables](#6-sso-debug-logging-paperless_debug_sso) 
 **Files Modified**:
 - `src-ui/src/app/components/document-detail/document-detail.component.ts` - Filter method implementation
 - `src-ui/src/app/components/document-detail/document-detail.component.html` - Filter button integration for all custom field types
+- `src-ui/src/app/components/common/input/text/text.component.ts` - Added filter support
+- `src-ui/src/app/components/common/input/text/text.component.html` - Filter button UI
+- `src-ui/src/app/components/common/input/number/number.component.ts` - Added filter support
+- `src-ui/src/app/components/common/input/number/number.component.html` - Filter button UI
+- `src-ui/src/app/components/common/input/monetary/monetary.component.ts` - Added filter support
+- `src-ui/src/app/components/common/input/monetary/monetary.component.html` - Filter button UI
+- `src-ui/src/app/components/common/input/check/check.component.ts` - Added filter support
+- `src-ui/src/app/components/common/input/check/check.component.html` - Filter button UI
+- `src-ui/src/app/components/common/input/url/url.component.ts` - Added filter support
+- `src-ui/src/app/components/common/input/url/url.component.html` - Filter button UI
+- `src-ui/src/app/components/common/input/document-link/document-link.component.ts` - Added filter support
+- `src-ui/src/app/components/common/input/document-link/document-link.component.html` - Filter button UI
+- `src-ui/src/app/components/common/input/textarea/textarea.component.ts` - Added filter support
+- `src-ui/src/app/components/common/input/textarea/textarea.component.html` - Filter button UI
 - `src-ui/src/locale/messages.en_US.xlf` - English translation
 - `src-ui/src/locale/messages.de_DE.xlf` - German translation
 
