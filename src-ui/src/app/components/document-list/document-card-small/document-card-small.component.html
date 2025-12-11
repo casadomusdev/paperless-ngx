@@ -69,6 +69,9 @@
               <small>{{document.storage_path | storagePathName | async}}</small>
             </button>
           }
+          <!-- RKC: Removed hardcoded 'mediumDate' format to respect user's date format preference
+               Bug fix: Card views were ignoring the DATE_FORMAT setting from Settings > General
+               Now uses the same format as table view, allowing date+time formats to work properly -->
           @if (displayFields.includes(DisplayField.CREATED)) {
             <div class="list-group-item bg-transparent p-0 border-0 d-flex flex-wrap-reverse justify-content-between">
               <ng-template #dateCreatedTooltip>
@@ -80,7 +83,7 @@
               </ng-template>
               <div class="ps-0 p-1" placement="top" [ngbTooltip]="dateCreatedTooltip">
                 <i-bs width="1em" height="1em" class="me-2 text-muted" name="calendar-event"></i-bs>
-                <small>{{document.created | customDate:'mediumDate'}}</small>
+                <small>{{document.created | customDate}}</small>
               </div>
             </div>
           }
@@ -95,10 +98,11 @@
               </ng-template>
               <div class="ps-0 p-1" placement="top" [ngbTooltip]="dateAddedTooltip">
                 <i-bs width="1em" height="1em" class="me-2 text-muted" name="calendar-event"></i-bs>
-                <small>{{document.added | customDate:'mediumDate'}}</small>
+                <small>{{document.added | customDate}}</small>
               </div>
             </div>
           }
+          <!-- /end RKC edit -->
           @if (displayFields.includes(DisplayField.PAGE_COUNT) && document.page_count) {
             <div class="list-group-item bg-transparent p-0 border-0 d-flex flex-wrap-reverse justify-content-between">
               <div class="ps-0 p-1" placement="top">

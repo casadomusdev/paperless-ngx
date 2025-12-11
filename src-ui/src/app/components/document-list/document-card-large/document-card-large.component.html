@@ -109,6 +109,9 @@
                   <i-bs width=".9em" height=".9em" class="me-2 text-muted" name="upc-scan"></i-bs><small>#{{document.archive_serial_number}}</small>
                 </div>
               }
+              <!-- RKC: Removed hardcoded 'mediumDate' format to respect user's date format preference
+                   Bug fix: Card views were ignoring the DATE_FORMAT setting from Settings > General
+                   Now uses the same format as table view, allowing date+time formats to work properly -->
               @if (displayFields.includes(DisplayField.CREATED) || displayFields.includes(DisplayField.ADDED)) {
                 <ng-template #dateTooltip>
                   <div class="d-flex flex-column text-light">
@@ -119,15 +122,16 @@
                 </ng-template>
                 @if (displayFields.includes(DisplayField.CREATED)) {
                   <div class="list-group-item bg-light text-dark p-1 border-0 d-flex align-items-center" [ngbTooltip]="dateTooltip">
-                    <i-bs width=".9em" height=".9em" class="me-2 text-muted" name="calendar-event"></i-bs><small>{{document.created | customDate:'mediumDate'}}</small>
+                    <i-bs width=".9em" height=".9em" class="me-2 text-muted" name="calendar-event"></i-bs><small>{{document.created | customDate}}</small>
                   </div>
                 }
                 @if (displayFields.includes(DisplayField.ADDED)) {
                   <div class="list-group-item bg-light text-dark p-1 border-0 d-flex align-items-center" [ngbTooltip]="dateTooltip">
-                    <i-bs width=".9em" height=".9em" class="me-2 text-muted" name="calendar-event"></i-bs><small>{{document.added | customDate:'mediumDate'}}</small>
+                    <i-bs width=".9em" height=".9em" class="me-2 text-muted" name="calendar-event"></i-bs><small>{{document.added | customDate}}</small>
                   </div>
                 }
               }
+              <!-- /end RKC edit -->
               @if (displayFields.includes(DisplayField.PAGE_COUNT) && document.page_count) {
                 <div class="list-group-item bg-light text-dark p-1 border-0 d-flex align-items-center">
                   <i-bs width=".9em" height=".9em" class="me-2 text-muted" name="files"></i-bs>

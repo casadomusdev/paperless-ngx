@@ -11602,6 +11602,8 @@
           <context context-type="sourcefile">src/app/components/common/edit-dialog/mail-rule-edit-dialog/mail-rule-edit-dialog.component.ts</context>
         </context-group>
       </trans-unit>
+
+      <!-- RKC: Date+time format options (v1.0.21) -->
       <trans-unit id="rkc-date-format-short-time" datatype="html">
         <source>Short with time: <x id="INTERPOLATION" equiv-text="{{today | customDate:'short':null:computedDateLocale}}"/></source>
         <target state="final">Kurz mit Uhrzeit: <x id="INTERPOLATION" equiv-text="{{today | customDate:'short':null:computedDateLocale}}"/></target>

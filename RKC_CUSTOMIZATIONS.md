@@ -983,6 +983,29 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.22 (2025-01-12)**: Card views respect user date format preference (Paperless bug fix)
+  - Fixed bug where small cards and large cards views ignored the user's date format setting
+  - **Problem**: Card views hardcoded `'mediumDate'` format, completely ignoring the DATE_FORMAT setting from Settings > General
+  - **Root Cause**: Template files explicitly passed `'mediumDate'` parameter to customDate pipe, overriding user preference
+  - **Solution**: 
+    - Removed hardcoded format parameter from both card view templates
+    - Now respects user's date format preference just like table view does
+    - Enables date+time formats (from v1.0.21) to work in card views
+  - **Impact**:
+    - Small cards and large cards now use same format as table view
+    - User can select date+time formats and see actual timestamps in card views
+    - `added` and `modified` fields will show real time data when using time formats
+    - `created` field shows 00:00:00 because it's a DATE field (no time component in database)
+  - **Files Modified**:
+    - Frontend: `src-ui/src/app/components/document-list/document-card-small/document-card-small.component.html`
+    - Frontend: `src-ui/src/app/components/document-list/document-card-large/document-card-large.component.html`
+  - **User Experience**:
+    - Consistent date formatting across all three view modes (table, small cards, large cards)
+    - Date+time formats now work properly in card views
+    - To see actual timestamps, users should display "Added" field instead of "Created" field
+  - All changes properly marked with RKC comments for maintainability
+  - This is a Paperless-ngx bug fix, not an RKC enhancement
+
 - **v1.0.21 (2025-01-12)**: Date+time format options for user preferences
   - Added 4 new date format options that include time display in addition to date
   - **Problem**: Users could only select date-only formats (shortDate, mediumDate, longDate) with no way to see timestamps
