@@ -32,6 +32,7 @@ enum MailFilterTarget {
   Subject,
   Received,
   Processed,
+  Uid, // RKC: Added Mail UID filtering support (v1.0.20)
 }
 // /end RKC edit
 
@@ -96,6 +97,7 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
       { id: MailFilterTarget.Subject, name: $localize`Subject` },
       { id: MailFilterTarget.Received, name: $localize`Received` },
       { id: MailFilterTarget.Processed, name: $localize`Processed` },
+      { id: MailFilterTarget.Uid, name: $localize`Mail UID` }, // RKC: Added Mail UID filter option (v1.0.20)
     ]
   }
 
@@ -110,6 +112,10 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
         return 'received'
       case MailFilterTarget.Processed:
         return 'processed'
+      case MailFilterTarget.Uid:
+        // RKC: Added uid field mapping for Mail UID filtering (v1.0.20)
+        return 'uid'
+        // /end RKC edit
       default:
         return 'error'
     }

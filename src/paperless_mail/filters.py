@@ -18,7 +18,7 @@ class ProcessedMailFilterSet(FilterSet):
         }
 
     # RKC: Custom filter method that applies text search to specified field
-    # Supports filtering on error, subject, received, and processed fields
+    # Supports filtering on error, subject, received, processed, and uid fields
     def filter_by_text(self, queryset, name, value):
         """
         Filter the queryset based on filter_field and filter_text parameters.
@@ -40,6 +40,10 @@ class ProcessedMailFilterSet(FilterSet):
             return queryset.filter(received__icontains=value)
         elif filter_field == "processed":
             return queryset.filter(processed__icontains=value)
+        elif filter_field == "uid":
+            # RKC: Added uid filtering for mail UID column (v1.0.20)
+            return queryset.filter(uid__icontains=value)
+            # /end RKC edit
         else:
             # Default to error field if unknown filter_field
             return queryset.filter(error__icontains=value)

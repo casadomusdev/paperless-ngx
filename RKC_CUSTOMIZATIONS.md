@@ -983,6 +983,30 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.20 (2025-01-12)**: Mail UID column in processed mail overview
+  - Added Mail UID as first visible data column in processed mail dialog
+  - Mail UID is now searchable/filterable via existing filter dropdown
+  - **Column Order**: Checkbox, Mail UID, Subject, Received, Processed, Status, Error
+  - **Filter Capability**: Mail UID added to filter targets alongside Error, Subject, Received, and Processed
+  - **Implementation**:
+    - Backend: Added UID filtering support to `ProcessedMailFilterSet.filter_by_text()` method
+    - Frontend TypeScript: Added `Uid` to `MailFilterTarget` enum, added "Mail UID" filter option, updated `getFilterFieldName()` method
+    - Frontend HTML: Added Mail UID column header and data cells
+  - **Use Cases**:
+    - Find specific emails by their IMAP UID
+    - Cross-reference emails between mail server and processed mail log
+    - Debug mail processing issues by tracking specific UIDs
+  - **Benefits**:
+    - Uses existing server-side filtering infrastructure (no performance issues)
+    - Consistent with existing filter patterns (Error, Subject, etc.)
+    - 3-character minimum search for performance
+    - Case-insensitive contains search via Django ORM
+  - Files modified:
+    - Backend: `src/paperless_mail/filters.py` (added uid field filtering)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.ts` (enum, filter targets, field mapping)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html` (column header and data cells)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.19 (2025-11-12)**: Mail action "Process all mails (read and unread)"
   - Added new mail rule action that processes all mails regardless of read status without marking them
   - **Problem**: Existing actions either filter out read mails (MARK_READ) or modify mail state (FLAG, TAG, MOVE, DELETE)

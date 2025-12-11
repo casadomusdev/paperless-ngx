@@ -74,6 +74,9 @@
                 <label class="form-check-label" for="all-objects"></label>
               </div>
             </th>
+            <!-- RKC: Added Mail UID column as first data column (v1.0.20) -->
+            <th scope="col" i18n>Mail UID</th>
+            <!-- /end RKC edit -->
             <th scope="col" i18n>Subject</th>
             <th scope="col" i18n>Received</th>
             <th scope="col" i18n>Processed</th>
@@ -97,6 +100,9 @@
                   <label class="form-check-label" [for]="mail.id"></label>
                 </div>
               </td>
+              <!-- RKC: Display Mail UID as first data column (v1.0.20) -->
+              <td>{{ mail.uid }}</td>
+              <!-- /end RKC edit -->
               <td>{{ mail.subject }}</td>
               <!-- RKC: Show date and time (hours:minutes) instead of date only -->
               <td>{{ mail.received | customDate:'short' }}</td>
