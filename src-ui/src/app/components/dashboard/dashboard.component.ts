@@ -51,9 +51,7 @@ export class DashboardComponent extends ComponentWithPermissions {
   constructor() {
     super()
 
-    this.savedViewService.listAll().subscribe(() => {
-      this.dashboardViews = this.savedViewService.dashboardViews
-    })
+    this.savedViewService.listAll().subscribe()
   }
 
   get subtitle() {
@@ -81,14 +79,15 @@ export class DashboardComponent extends ComponentWithPermissions {
   }
 
   onDrop(event: CdkDragDrop<SavedView[]>) {
+    const dashboardViews = this.savedViewService.dashboardViews()
     moveItemInArray(
-      this.dashboardViews,
+      dashboardViews,
       event.previousIndex,
       event.currentIndex
     )
 
     this.settingsService
-      .updateDashboardViewsSort(this.dashboardViews)
+      .updateDashboardViewsSort(dashboardViews)
       .subscribe({
         next: () => {
           this.toastService.showInfo($localize`Dashboard updated`)

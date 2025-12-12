@@ -256,7 +256,7 @@ export class AppFrameComponent
   }
 
   onDrop(event: CdkDragDrop<SavedView[]>) {
-    const sidebarViews = this.savedViewService.sidebarViews.concat([])
+    const sidebarViews = this.savedViewService.sidebarViews().concat([])
     moveItemInArray(sidebarViews, event.previousIndex, event.currentIndex)
 
     this.settingsService.updateSidebarViewsSort(sidebarViews).subscribe({

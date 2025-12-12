@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { inject, Injectable } from '@angular/core'
+import { computed, inject, Injectable, signal } from '@angular/core'
 import { combineLatest, Observable, Subject } from 'rxjs'
 import { takeUntil, tap } from 'rxjs/operators'
 import { Results } from 'src/app/data/results'
@@ -17,7 +17,7 @@ export class SavedViewService extends AbstractPaperlessService<SavedView> {
   private settingsService = inject(SettingsService)
   private documentService = inject(DocumentService)
 
-  private savedViews: SavedView[] = []
+  private savedViewsSignal = signal<SavedView[]>([])
   private savedViewDocumentCounts: Map<number, number> = new Map()
   private unsubscribeNotifier: Subject<void> = new Subject<void>()
 
@@ -36,10 +36,10 @@ export class SavedViewService extends AbstractPaperlessService<SavedView> {
     return super.list(page, pageSize, sortField, sortReverse, extraParams).pipe(
       tap({
         next: (r) => {
-          this.savedViews = r.results
+          this.savedViewsSignal.set(r.results)
           this._loading = false
           this.settingsService.dashboardIsEmpty =
-            this.dashboardViews.length === 0
+            this.dashboardViews().length === 0
         },
         error: () => {
           this._loading = false
@@ -62,11 +62,11 @@ export class SavedViewService extends AbstractPaperlessService<SavedView> {
   }
 
   get allViews() {
-    return this.savedViews
+    return this.savedViewsSignal()
   }
 
-  get sidebarViews(): SavedView[] {
-    const sidebarViews = this.savedViews.filter((v) => v.show_in_sidebar)
+  sidebarViews = computed(() => {
+    const sidebarViews = this.savedViewsSignal().filter((v) => v.show_in_sidebar)
 
     const sorted: number[] = this.settingsService.get(
       SETTINGS_KEYS.SIDEBAR_VIEWS_SORT_ORDER
@@ -78,10 +78,10 @@ export class SavedViewService extends AbstractPaperlessService<SavedView> {
           .concat(sidebarViews.filter((v) => !sorted.includes(v.id)))
           .filter((v) => v)
       : [...sidebarViews]
-  }
+  })
 
-  get dashboardViews(): SavedView[] {
-    const dashboardViews = this.savedViews.filter((v) => v.show_on_dashboard)
+  dashboardViews = computed(() => {
+    const dashboardViews = this.savedViewsSignal().filter((v) => v.show_on_dashboard)
 
     const sorted: number[] = this.settingsService.get(
       SETTINGS_KEYS.DASHBOARD_VIEWS_SORT_ORDER
@@ -93,7 +93,7 @@ export class SavedViewService extends AbstractPaperlessService<SavedView> {
           .concat(dashboardViews.filter((v) => !sorted.includes(v.id)))
           .filter((v) => v)
       : [...dashboardViews]
-  }
+  })
 
   create(o: SavedView) {
     return super.create(o).pipe(tap(() => this.reload()))
@@ -122,7 +122,7 @@ export class SavedViewService extends AbstractPaperlessService<SavedView> {
     return super.delete(o).pipe(tap(() => this.reload()))
   }
 
-  public maybeRefreshDocumentCounts(views: SavedView[] = this.sidebarViews) {
+  public maybeRefreshDocumentCounts(views: SavedView[] = this.sidebarViews()) {
     if (!this.settingsService.get(SETTINGS_KEYS.SIDEBAR_VIEWS_SHOW_COUNT)) {
       return
     }
