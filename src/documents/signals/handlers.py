@@ -595,6 +595,29 @@ def cleanup_custom_field_deletion(sender, instance: CustomField, **kwargs):
         )
 
 
+@receiver(models.signals.post_save, sender=User)
+def create_ui_settings_for_new_user(sender, instance: User, created: bool, **kwargs):
+    """
+    Auto-create UiSettings for new users to prevent SSO signup errors.
+
+    When new users sign up via SSO, they need UiSettings to exist even with empty settings.
+    This signal ensures a UiSettings object is created as soon as a User is created.
+
+    CRITICAL: This signal must not raise exceptions or it will break user signup.
+    """
+    if created:
+        try:
+            UiSettings.objects.get_or_create(
+                user=instance,
+                defaults={"settings": {}},
+            )
+        except Exception as e:
+            # Log errors but don't raise - user signup must succeed
+            logger.exception(
+                f"Failed to create UiSettings for user {instance.username}: {e}",
+            )
+
+
 @receiver(models.signals.post_delete, sender=User)
 @receiver(models.signals.post_delete, sender=Group)
 def cleanup_user_deletion(sender, instance: User | Group, **kwargs):
