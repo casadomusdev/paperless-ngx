@@ -147,19 +147,58 @@ class ProcessedMailViewSet(ReadOnlyModelViewSet, PassUserMixin):
 
     queryset = ProcessedMail.objects.all().order_by("-processed")
 
+    # RKC: Enhanced bulk_delete to support filter-based deletion for "select all in database" functionality
     @action(methods=["post"], detail=False)
     def bulk_delete(self, request):
-        mail_ids = request.data.get("mail_ids", [])
-        if not isinstance(mail_ids, list) or not all(
-            isinstance(i, int) for i in mail_ids
-        ):
-            return HttpResponseBadRequest("mail_ids must be a list of integers")
-        mails = ProcessedMail.objects.filter(id__in=mail_ids)
-        for mail in mails:
-            if not has_perms_owner_aware(request.user, "delete_processedmail", mail):
-                return HttpResponseForbidden("Insufficient permissions")
-            mail.delete()
-        return Response({"result": "OK", "deleted_mail_ids": mail_ids})
+        delete_all = request.data.get("delete_all", False)
+        
+        if delete_all:
+            # Filter-based deletion - delete all entries matching filter criteria
+            rule_id = request.data.get("rule")
+            filter_field = request.data.get("filter_field", "")
+            filter_text = request.data.get("filter_text", "")
+            
+            if not rule_id:
+                return HttpResponseBadRequest("rule is required for delete_all")
+            
+            # Build filtered queryset using the same filter logic as list view
+            mails = ProcessedMail.objects.filter(rule_id=rule_id)
+            
+            # Apply text filter if provided (min 3 chars)
+            if filter_text and len(filter_text) >= 3:
+                if filter_field == "error":
+                    mails = mails.filter(error__icontains=filter_text)
+                elif filter_field == "subject":
+                    mails = mails.filter(subject__icontains=filter_text)
+                elif filter_field == "received":
+                    mails = mails.filter(received__icontains=filter_text)
+                elif filter_field == "processed":
+                    mails = mails.filter(processed__icontains=filter_text)
+                elif filter_field == "uid":
+                    mails = mails.filter(uid__icontains=filter_text)
+            
+            # Check permissions for all mails before deleting any
+            for mail in mails:
+                if not has_perms_owner_aware(request.user, "delete_processedmail", mail):
+                    return HttpResponseForbidden("Insufficient permissions")
+            
+            count = mails.count()
+            mails.delete()
+            return Response({"result": "OK", "deleted": count})
+        else:
+            # ID-based deletion (existing behavior)
+            mail_ids = request.data.get("mail_ids", [])
+            if not isinstance(mail_ids, list) or not all(
+                isinstance(i, int) for i in mail_ids
+            ):
+                return HttpResponseBadRequest("mail_ids must be a list of integers")
+            mails = ProcessedMail.objects.filter(id__in=mail_ids)
+            for mail in mails:
+                if not has_perms_owner_aware(request.user, "delete_processedmail", mail):
+                    return HttpResponseForbidden("Insufficient permissions")
+                mail.delete()
+            return Response({"result": "OK", "deleted_mail_ids": mail_ids})
+    # /end RKC edit
 
 
 class MailRuleViewSet(ModelViewSet, PassUserMixin):

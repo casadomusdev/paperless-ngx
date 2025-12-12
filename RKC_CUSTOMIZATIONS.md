@@ -983,6 +983,51 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.24 (2025-12-12)**: Processed mail "select all in database" with selection count
+  - Added ability to select and delete all processed mail entries matching current filter criteria
+  - Displays selection count in UI to show how many items are currently selected
+  - **User Experience**:
+    - Check header checkbox → selects current page items (max 50)
+    - Banner appears: "X items selected. Select all Y items?" (with filter context if active)
+    - Click "Select all Y items" → enables database-wide selection
+    - Shows "All Y items are selected" with clear selection link
+    - Delete button shows count: "Delete N" with badge
+    - Confirmation dialog with exact count and filter context
+  - **Frontend Changes**:
+    - Added `selectAllInDatabase` boolean flag to track selection mode
+    - Added `selectedCount` getter: returns either selectedMailIds.size or collectionSize
+    - Added `selectAllInDb()` method to enable database-wide selection
+    - Added selection banner component (info alert when page selected, primary when all selected)
+    - Enhanced `deleteSelected()` with confirmation dialog showing count and filter context
+    - Updated button toolbar to display selection count in badges
+    - Modified `toggleAll()` and `clearSelection()` to reset selectAllInDatabase flag
+  - **Backend Changes**:
+    - Enhanced `bulk_delete` endpoint to accept `delete_all` parameter
+    - Filter-based deletion using same criteria as list view (rule, filter_field, filter_text)
+    - Supports all filter fields: error, subject, received, processed, uid
+    - Permission checking before deletion for security
+    - Returns deleted count for user feedback
+  - **Service Layer**:
+    - Added `bulk_delete_filtered()` method to ProcessedMailService
+    - Sends delete_all: true with rule, filter_field, and filter_text parameters
+  - **Filter Context**:
+    - "Select all" applies only to currently filtered results
+    - Clear indication in banners and confirmation dialogs when filter is active
+    - Example: "Delete 89 processed mail entries matching filter 'timeout'?"
+    - Without filter: "Delete 347 processed mail entries matching current view?"
+  - **Benefits**:
+    - Enables bulk cleanup of mail processing errors or specific subsets
+    - Clear visual feedback at every step with counts
+    - Safe operation with confirmation dialogs
+    - Works seamlessly with existing server-side filtering (v1.0.16)
+    - Gmail/Google Drive-style UX pattern familiar to users
+  - Files modified:
+    - Backend: `src/paperless_mail/views.py` (enhanced bulk_delete method)
+    - Frontend: `src-ui/src/app/services/rest/processed-mail.service.ts` (added bulk_delete_filtered)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.ts` (selection logic)
+    - Frontend: `src-ui/src/app/components/manage/mail/processed-mail-dialog/processed-mail-dialog.component.html` (selection UI)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.23 (2025-01-12)**: Dashboard saved views race condition fix (signal-based reactivity)
   - Fixed race condition where dashboard would appear empty when directly accessing `/dashboard` URL
   - **Root Cause**: Computed signals were reading from non-reactive getters that returned data from plain arrays. When HTTP response populated the array, computed signals didn't know to recalculate.

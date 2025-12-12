@@ -55,6 +55,23 @@
     </div>
     <!-- /end RKC edit -->
     
+    <!-- RKC: Selection banner - shows count and "select all in DB" option when items are selected -->
+    @if (selectedMailIds.size > 0 && !selectAllInDatabase) {
+      <div class="alert alert-info py-2 mb-3">
+        <strong>{{selectedMailIds.size}}</strong><ng-container i18n> items selected.</ng-container>
+        <a href="javascript:void(0)" (click)="selectAllInDb()" class="alert-link ms-2">
+          <ng-container i18n>Select all</ng-container> <strong>{{collectionSize}}</strong> <ng-container i18n>items</ng-container>@if (filterText) {<ng-container i18n> matching filter</ng-container>}?
+        </a>
+      </div>
+    }
+    @if (selectAllInDatabase) {
+      <div class="alert alert-primary py-2 mb-3">
+        <ng-container i18n>All</ng-container> <strong>{{collectionSize}}</strong> <ng-container i18n>items are selected</ng-container>@if (filterText) {<ng-container i18n> (filtered)</ng-container>}.
+        <a href="javascript:void(0)" (click)="clearSelection()" class="alert-link ms-2" i18n>Clear selection</a>
+      </div>
+    }
+    <!-- /end RKC edit -->
+    
     <!-- RKC: Show appropriate message when no results found, keep filter UI visible -->
     @if (processedMails.length === 0 && !filterText?.length) {
       <div class="alert alert-info" i18n>No processed email messages found.</div>
@@ -145,18 +162,23 @@
     </div>
     }
     
+    <!-- RKC: Updated button toolbar to show selection count -->
     <div class="btn-toolbar">
-      <button type="button" class="btn btn-outline-secondary me-2" (click)="clearSelection()" [disabled]="selectedMailIds.size === 0" i18n>Clear</button>
-      <pngx-confirm-button
-        label="Delete selected"
-        i18n-label
-        title="Delete selected"
-        i18n-title
-        buttonClasses="btn-outline-danger"
-        iconName="trash"
-        [disabled]="selectedMailIds.size === 0"
-        (confirm)="deleteSelected()">
-      </pngx-confirm-button>
+      <button type="button" class="btn btn-outline-secondary me-2" (click)="clearSelection()" [disabled]="selectedCount === 0">
+        <ng-container i18n>Clear</ng-container>
+        @if (selectedCount > 0) {
+          <span class="badge bg-secondary ms-1">{{selectedCount}}</span>
+        }
+      </button>
+      <button type="button" class="btn btn-outline-danger me-2" (click)="deleteSelected()" [disabled]="selectedCount === 0">
+        <i-bs name="trash" width="1em" height="1em"></i-bs>
+        @if (selectedCount > 0) {
+          <ng-container i18n>Delete</ng-container> <span class="badge bg-danger ms-1">{{selectedCount}}</span>
+        } @else {
+          <ng-container i18n>Delete selected</ng-container>
+        }
+      </button>
+      <!-- /end RKC edit -->
       <div class="ms-auto">
         <!-- RKC: Use collectionSize from API instead of processedMails.length to fix pagination bug -->
         <ngb-pagination

@@ -67,6 +67,14 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
   public loading: boolean = true
   public toggleAllEnabled: boolean = false
   public readonly selectedMailIds: Set<number> = new Set<number>()
+  // RKC: Track whether user has selected all items in database (not just current page)
+  public selectAllInDatabase: boolean = false
+
+  // Computed property to get total selected count (either IDs or all in database)
+  public get selectedCount(): number {
+    return this.selectAllInDatabase ? this.collectionSize : this.selectedMailIds.size
+  }
+  // /end RKC edit
 
   public page: number = 1
   // RKC: Store total count for pagination (fixes bug where pagination only showed current page count)
@@ -184,17 +192,55 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
       })
   }
 
+  // RKC: Enhanced to handle both ID-based and filter-based deletion with confirmation dialog
   public deleteSelected(): void {
-    this.processedMailService
-      .bulk_delete(Array.from(this.selectedMailIds))
-      .subscribe(() => {
-        this.toastService.showInfo($localize`Processed mail(s) deleted`)
-        this.loadProcessedMails()
-      })
+    const count = this.selectedCount
+    
+    // Build confirmation message with count and filter context
+    let filterMsg = ''
+    if (this.selectAllInDatabase) {
+      filterMsg = this._filterText 
+        ? ` matching filter '${this._filterText}'` 
+        : ' matching current view'
+    }
+    
+    const confirmMsg = count === 1
+      ? $localize`Delete 1 processed mail entry${filterMsg}?`
+      : $localize`Delete ${count} processed mail entries${filterMsg}?`
+    
+    if (!confirm(confirmMsg)) {
+      return
+    }
+    
+    if (this.selectAllInDatabase) {
+      // Delete all filtered results via backend filter
+      this.processedMailService
+        .bulk_delete_filtered(
+          this.rule.id,
+          this.getFilterFieldName(),
+          this._filterText || ''
+        )
+        .subscribe(() => {
+          this.toastService.showInfo($localize`${count} processed mail entries deleted`)
+          this.clearSelection()
+          this.loadProcessedMails()
+        })
+    } else {
+      // Delete selected IDs (existing behavior)
+      this.processedMailService
+        .bulk_delete(Array.from(this.selectedMailIds))
+        .subscribe(() => {
+          this.toastService.showInfo($localize`${count} processed mail entries deleted`)
+          this.loadProcessedMails()
+        })
+    }
   }
+  // /end RKC edit
 
+  // RKC: Modified to reset selectAllInDatabase flag when selecting current page
   public toggleAll(event: PointerEvent) {
     if ((event.target as HTMLInputElement).checked) {
+      this.selectAllInDatabase = false // Reset database-wide selection
       this.selectedMailIds.clear()
       this.processedMails.forEach((mail) => this.selectedMailIds.add(mail.id))
     } else {
@@ -202,10 +248,18 @@ export class ProcessedMailDialogComponent implements OnInit, OnDestroy {
     }
   }
 
+  // RKC: Modified to also clear selectAllInDatabase flag
   public clearSelection() {
     this.toggleAllEnabled = false
     this.selectedMailIds.clear()
+    this.selectAllInDatabase = false
   }
+
+  // RKC: Enable selection of all items in database matching current filter
+  public selectAllInDb() {
+    this.selectAllInDatabase = true
+  }
+  // /end RKC edit
 
   public toggleSelected(mail: ProcessedMail) {
     this.selectedMailIds.has(mail.id)
