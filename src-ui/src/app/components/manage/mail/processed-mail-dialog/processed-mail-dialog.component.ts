@@ -43,6 +43,7 @@ export class ProcessedMailDialogComponent implements OnInit {
   public readonly selectedMailIds: Set<number> = new Set<number>()
 
   public page: number = 1
+  public collectionSize: number = 0
 
   @Input() rule: MailRule
 
@@ -61,6 +62,7 @@ export class ProcessedMailDialogComponent implements OnInit {
       .list(this.page, 50, 'processed_at', true, { rule: this.rule.id })
       .subscribe((result) => {
         this.processedMails = result.results
+        this.collectionSize = result.count
         this.loading = false
       })
   }
