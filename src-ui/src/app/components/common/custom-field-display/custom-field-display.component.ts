@@ -1,20 +1,24 @@
 import { CurrencyPipe, getLocaleCurrencyCode, SlicePipe } from '@angular/common'
-import { Component, inject, Input, LOCALE_ID, OnInit } from '@angular/core'
+import { Component, EventEmitter, inject, Input, LOCALE_ID, OnInit, Output } from '@angular/core'
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap'
+import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { takeUntil } from 'rxjs'
 import { CustomField, CustomFieldDataType } from 'src/app/data/custom-field'
+import { CustomFieldInstance } from 'src/app/data/custom-field-instance'
 import { DisplayField, Document } from 'src/app/data/document'
 import { Results } from 'src/app/data/results'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
 import { CustomDatePipe } from 'src/app/pipes/custom-date.pipe'
 import { CustomFieldsService } from 'src/app/services/rest/custom-fields.service'
 import { DocumentService } from 'src/app/services/rest/document.service'
+import { SettingsService } from 'src/app/services/settings.service'
 import { LoadingComponentWithPermissions } from '../../loading-component/loading.component'
 
 @Component({
   selector: 'pngx-custom-field-display',
   templateUrl: './custom-field-display.component.html',
   styleUrl: './custom-field-display.component.scss',
-  imports: [CustomDatePipe, CurrencyPipe, NgbTooltipModule, SlicePipe],
+  imports: [CustomDatePipe, CurrencyPipe, NgbTooltipModule, SlicePipe, NgxBootstrapIconsModule],
 })
 export class CustomFieldDisplayComponent
   extends LoadingComponentWithPermissions
@@ -22,6 +26,7 @@ export class CustomFieldDisplayComponent
 {
   private customFieldService = inject(CustomFieldsService)
   private documentService = inject(DocumentService)
+  private settings = inject(SettingsService)
 
   CustomFieldDataType = CustomFieldDataType
 
@@ -54,6 +59,14 @@ export class CustomFieldDisplayComponent
 
   @Input()
   showNameIfEmpty: boolean = false
+
+  // RKC: Support for showing filter buttons in card views
+  @Input()
+  showFilter: boolean = false
+
+  @Output()
+  filterClick = new EventEmitter<CustomFieldInstance>()
+  // /end RKC edit
 
   value: any
   currency: string
@@ -121,4 +134,25 @@ export class CustomFieldDisplayComponent
   public getSelectValue(field: CustomField, id: string): string {
     return field.extra_data.select_options?.find((o) => o.id === id)?.label
   }
+
+  // RKC: Check if custom field names should be shown in card views
+  get showFieldName(): boolean {
+    return this.settings.get(SETTINGS_KEYS.SHOW_CUSTOM_FIELD_NAMES_IN_CARDS)
+  }
+
+  // RKC: Emit filter event when filter button is clicked
+  onFilterClick(event: Event) {
+    event.preventDefault()
+    event.stopPropagation()
+    
+    const fieldInstance: CustomFieldInstance = {
+      field: this._fieldId,
+      value: this.value,
+      document: this._document.id,
+      created: new Date(),
+    }
+    
+    this.filterClick.emit(fieldInstance)
+  }
+  // /end RKC edit
 }

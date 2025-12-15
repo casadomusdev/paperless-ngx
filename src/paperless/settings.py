@@ -1389,6 +1389,15 @@ PDF_EDITOR_RESTRICT_TO_SUPERUSER = __get_boolean(
 PAPERLESS_MAIL_CORRELATION_FIELD = "Mail UID"
 # /end RKC edit
 
+# RKC: Show custom field names in card views
+# When disabled (default), only field values are shown (compact display)
+# When enabled, displays "FieldName: Value" format for better context
+SHOW_CUSTOM_FIELD_NAMES_IN_CARDS = __get_boolean(
+    "PAPERLESS_SHOW_CUSTOM_FIELD_NAMES_IN_CARDS",
+    "NO",
+)
+# /end RKC edit
+
 ###############################################################################
 # Machine Learning                                                            #
 ###############################################################################

@@ -5,44 +5,93 @@
                 {{field.name}}
             </div>
         </ng-template>
-        @switch (field.data_type) {
-            @case (CustomFieldDataType.Monetary) {
-                <span [ngbTooltip]="nameTooltip">{{value | currency: currency}}</span>
-            }
-            @case (CustomFieldDataType.Date) {
-                <span [ngbTooltip]="nameTooltip">{{value | customDate}}</span>
-            }
-            @case (CustomFieldDataType.Url) {
-                <a [ngbTooltip]="nameTooltip" [href]="value" class="btn-link text-dark text-decoration-none" target="_blank">{{value}}</a>
-            }
-            @case (CustomFieldDataType.DocumentLink) {
-                <div [ngbTooltip]="nameTooltip" class="d-flex gap-1 flex-wrap">
-                    @for (docId of value; track docId) {
-                      @if (getDocumentTitle(docId)) {
-                          <a routerLink="/documents/{{docId}}" class="badge bg-body text-primary" title="View" i18n-title>
-                              <i-bs width="0.9em" height="0.9em" name="file-text"></i-bs>&nbsp;<span>{{ getDocumentTitle(docId) }}</span>
-                          </a>
-                      }
+        <!-- RKC: Wrapper for field name + value + filter button -->
+        <div class="d-flex align-items-center gap-1">
+            @switch (field.data_type) {
+                @case (CustomFieldDataType.Monetary) {
+                    <!-- RKC: Show field name when enabled (except Boolean which already shows it) -->
+                    @if (showFieldName) {
+                        <span>{{field.name}}:</span>
                     }
-                </div>
+                    <span [ngbTooltip]="showFieldName ? null : nameTooltip">{{value | currency: currency}}</span>
+                }
+                @case (CustomFieldDataType.Date) {
+                    @if (showFieldName) {
+                        <span>{{field.name}}:</span>
+                    }
+                    <span [ngbTooltip]="showFieldName ? null : nameTooltip">{{value | customDate}}</span>
+                }
+                @case (CustomFieldDataType.Url) {
+                    @if (showFieldName) {
+                        <span>{{field.name}}:</span>
+                    }
+                    <a [ngbTooltip]="showFieldName ? null : nameTooltip" [href]="value" class="btn-link text-dark text-decoration-none" target="_blank">{{value}}</a>
+                }
+                @case (CustomFieldDataType.DocumentLink) {
+                    @if (showFieldName) {
+                        <span>{{field.name}}:</span>
+                    }
+                    <div [ngbTooltip]="showFieldName ? null : nameTooltip" class="d-flex gap-1 flex-wrap">
+                        @for (docId of value; track docId) {
+                          @if (getDocumentTitle(docId)) {
+                              <a routerLink="/documents/{{docId}}" class="badge bg-body text-primary" title="View" i18n-title>
+                                  <i-bs width="0.9em" height="0.9em" name="file-text"></i-bs>&nbsp;<span>{{ getDocumentTitle(docId) }}</span>
+                              </a>
+                          }
+                        }
+                    </div>
+                }
+                @case (CustomFieldDataType.Boolean) {
+                    <div class="d-flex flex-row align-items-center">
+                        <span>{{field.name}}:</span>
+                        <input type="checkbox" id="{{field.name}}" name="{{field.name}}" [checked]="value" value="" class="form-check-input ms-2 mt-0 pe-none">
+                    </div>
+                }
+                @case (CustomFieldDataType.Select) {
+                    @if (showFieldName) {
+                        <span>{{field.name}}:</span>
+                    }
+                    <span [ngbTooltip]="showFieldName ? null : nameTooltip">{{getSelectValue(field, value)}}</span>
+                }
+                @case (CustomFieldDataType.LongText) {
+                    @if (showFieldName) {
+                        <span>{{field.name}}:</span>
+                    }
+                    <p class="mb-0" [ngbTooltip]="showFieldName ? null : nameTooltip">{{value | slice:0:20}}{{value.length > 20 ? '...' : ''}}</p>
+                }
+                @default {
+                  @if (showFieldName) {
+                      <span>{{field.name}}:</span>
+                  }
+                  <span [ngbTooltip]="showFieldName ? null : nameTooltip">{{value}}</span>
+                }
             }
-            @case (CustomFieldDataType.Boolean) {
-                <div class="d-flex flex-row align-items-center">
-                    <span>{{field.name}}:</span>
-                    <input type="checkbox" id="{{field.name}}" name="{{field.name}}" [checked]="value" value="" class="form-check-input ms-2 mt-0 pe-none">
-                </div>
+            <!-- RKC: Filter button aligned to the right when showFilter is enabled -->
+            @if (showFilter) {
+                <button 
+                    class="btn btn-link btn-sm text-muted p-0 ms-auto" 
+                    (click)="onFilterClick($event)"
+                    [ngbTooltip]="'Show all with this value' | i18n"
+                    i18n-ngbTooltip>
+                    <i-bs width="0.9em" height="0.9em" name="funnel"></i-bs>
+                </button>
             }
-            @case (CustomFieldDataType.Select) {
-                <span [ngbTooltip]="nameTooltip">{{getSelectValue(field, value)}}</span>
-            }
-            @case (CustomFieldDataType.LongText) {
-                <p class="mb-0" [ngbTooltip]="nameTooltip">{{value | slice:0:20}}{{value.length > 20 ? '...' : ''}}</p>
-            }
-            @default {
-              <span [ngbTooltip]="nameTooltip">{{value}}</span>
-            }
-        }
+            <!-- /end RKC edit -->
+        </div>
     } @else if (showNameIfEmpty) {
-        <span class="fst-italic text-muted">{{field.name}}</span>
+        <!-- RKC: Show italicized field name for empty values + filter button -->
+        <div class="d-flex align-items-center gap-1">
+            <span class="fst-italic text-muted">{{field.name}}</span>
+            @if (showFilter) {
+                <button 
+                    class="btn btn-link btn-sm text-muted p-0 ms-auto" 
+                    (click)="onFilterClick($event)"
+                    [ngbTooltip]="'Show all with this value' | i18n"
+                    i18n-ngbTooltip>
+                    <i-bs width="0.9em" height="0.9em" name="funnel"></i-bs>
+                </button>
+            }
+        </div>
+        <!-- /end RKC edit -->
     }
 }

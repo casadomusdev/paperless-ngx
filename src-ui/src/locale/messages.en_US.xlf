@@ -2454,6 +2454,14 @@
         </context-group>
         <note priority="1" from="description">RKC: Tooltip for custom field filter button</note>
       </trans-unit>
+      <trans-unit id="rkc-show-all-with-this-value" datatype="html">
+        <source>Show all with this value</source>
+        <target state="final">Show all with this value</target>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/components/common/custom-field-display/custom-field-display.component.html</context>
+        </context-group>
+        <note priority="1" from="description">RKC: Tooltip for custom field filter button in card views</note>
+      </trans-unit>
 
       <!-- Mail action - Process all mails (v1.0.19) -->
       <trans-unit id="rkc-mail-action-process-all" datatype="html">

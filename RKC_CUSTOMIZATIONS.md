@@ -983,6 +983,52 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.25 (2025-12-12)**: Custom field names and filter buttons in card views
+  - Enhanced document card views (small and large) with optional field name display and quick filter buttons
+  - **Problem**: Card views only showed custom field values without context, no way to quickly filter by field value
+  - **Solution**: 
+    - Added optional field name display in "FieldName: Value" format with environment variable control
+    - Added filter buttons to all custom field types in card views matching document detail page functionality
+    - Filter buttons aligned right with funnel icon, same as other metadata filter buttons
+  - **Environment Variable**: `PAPERLESS_SHOW_CUSTOM_FIELD_NAMES_IN_CARDS` (default: NO)
+    - When disabled (default): Shows only values for compact display (original behavior)
+    - When enabled: Shows "FieldName: Value" format for better context
+    - Boolean field always shows name (unchanged from original)
+  - **Filter Button Features**:
+    - Appears for ALL custom field types including null/empty values
+    - Tooltip: "Show all with this value" (EN) / "Alle mit diesem Wert anzeigen" (DE)
+    - Uses FILTER_CUSTOM_FIELDS_QUERY filter type (ID 42) same as document detail page
+    - Single click navigates to document list with filter applied
+    - Works with all 10 field types: String, Date, Integer, Float, Monetary, Boolean, Url, DocumentLink, Select, LongText
+  - **Implementation**:
+    - Created reusable `custom-field-display` component with inputs for custom field instances
+    - Component accepts `showFilter` input and emits `filterClick` event
+    - Both card components implement `filterByCustomField()` handler method
+    - Field name display controlled by `showFieldName` getter reading from settings service
+    - Filter buttons use same query format as document detail filters for consistency
+  - **User Experience**:
+    - Compact default display (values only) reduces clutter in card views
+    - Opt-in field name display via environment variable for those who need context
+    - Quick one-click filtering matches workflow of correspondent/type/tag filter buttons
+    - Works identically across small cards, large cards, and document detail page
+  - **Benefits**:
+    - Rapid document discovery based on custom field values in card views
+    - Consistent UX with existing Paperless filter buttons
+    - Optional field names prevent UI clutter while providing context when needed
+    - No configuration required - automatically works with all custom fields
+    - Environment variable allows org-level policy without user-level settings
+  - Files modified:
+    - Backend: `src/paperless/settings.py` (added SHOW_CUSTOM_FIELD_NAMES_IN_CARDS env var)
+    - Backend: `src/documents/views.py` (exposed setting to frontend)
+    - Frontend: `src-ui/src/app/data/ui-settings.ts` (added settings key)
+    - Frontend: `src-ui/src/app/components/common/custom-field-display/custom-field-display.component.ts` (inputs, outputs, logic)
+    - Frontend: `src-ui/src/app/components/common/custom-field-display/custom-field-display.component.html` (field names, filter buttons)
+    - Frontend: `src-ui/src/app/components/document-list/document-card-small/` (filter handler and template)
+    - Frontend: `src-ui/src/app/components/document-list/document-card-large/` (filter handler and template)
+    - Translations: `src-ui/src/locale/messages.en_US.xlf` (tooltip translation)
+    - Translations: `src-ui/src/locale/messages.de_DE.xlf` (tooltip translation)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.24 (2025-12-12)**: Processed mail "select all in database" with selection count
   - Added ability to select and delete all processed mail entries matching current filter criteria
   - Displays selection count in UI to show how many items are currently selected

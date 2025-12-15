@@ -2455,6 +2455,12 @@ class UiSettingsView(GenericAPIView):
         )
         # /end RKC edit
 
+        # RKC: Pass custom field name display setting to frontend
+        ui_settings["show_custom_field_names_in_cards"] = getattr(
+            settings, "SHOW_CUSTOM_FIELD_NAMES_IN_CARDS", False
+        )
+        # /end RKC edit
+
         # RKC: Read global saved views ordering from ApplicationConfiguration singleton
         # This system-wide setting can be updated by any superuser and is shared by all users
         global_views_sort_order = None
