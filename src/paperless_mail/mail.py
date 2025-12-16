@@ -836,8 +836,12 @@ class MailAccountHandler(LoggingMixin):
                     source=DocumentSource.MailFetch,
                     original_file=temp_filename,
                     mailrule_id=rule.pk,
-                    # RKC: Pass mail UID for document correlation
+                    # RKC: Pass email metadata for custom fields (v1.0.26)
                     mail_uid=message.uid,
+                    mail_from=message.from_values.email if message.from_values else None,
+                    mail_sender=message.from_values.name if message.from_values else None,
+                    mail_subject=message.subject,
+                    mail_date=message.date.date() if message.date else None,
                     # /end RKC edit
                 )
                 doc_overrides = DocumentMetadataOverrides(
@@ -941,8 +945,12 @@ class MailAccountHandler(LoggingMixin):
             source=DocumentSource.MailFetch,
             original_file=temp_filename,
             mailrule_id=rule.pk,
-            # RKC: Pass mail UID for document correlation
+            # RKC: Pass email metadata for custom fields (v1.0.26)
             mail_uid=message.uid,
+            mail_from=message.from_values.email if message.from_values else None,
+            mail_sender=message.from_values.name if message.from_values else None,
+            mail_subject=message.subject,
+            mail_date=message.date.date() if message.date else None,
             # /end RKC edit
         )
         doc_overrides = DocumentMetadataOverrides(

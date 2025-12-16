@@ -1384,9 +1384,28 @@ PDF_EDITOR_RESTRICT_TO_SUPERUSER = __get_boolean(
 )
 # /end RKC edit
 
-# RKC: Custom field name for storing email UID correlation
-# Hardcoded to avoid requiring environment variable configuration
-PAPERLESS_MAIL_CORRELATION_FIELD = "Mail UID"
+# RKC: Custom field names for email metadata (v1.0.26)
+# Configurable to support different languages and naming conventions
+PAPERLESS_MAIL_CORRELATION_FIELD = os.getenv(
+    "PAPERLESS_MAIL_UID_FIELD",
+    "Mail UID",
+)
+PAPERLESS_MAIL_FROM_FIELD = os.getenv(
+    "PAPERLESS_MAIL_FROM_FIELD",
+    "Mail From",
+)
+PAPERLESS_MAIL_SENDER_FIELD = os.getenv(
+    "PAPERLESS_MAIL_SENDER_FIELD",
+    "Mail Sender",
+)
+PAPERLESS_MAIL_SUBJECT_FIELD = os.getenv(
+    "PAPERLESS_MAIL_SUBJECT_FIELD",
+    "Mail Subject",
+)
+PAPERLESS_MAIL_DATE_FIELD = os.getenv(
+    "PAPERLESS_MAIL_DATE_FIELD",
+    "Mail Date",
+)
 # /end RKC edit
 
 # RKC: Show custom field names in card views

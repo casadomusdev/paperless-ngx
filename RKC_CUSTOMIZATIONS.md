@@ -983,6 +983,58 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.26 (2025-12-15)**: Email metadata custom fields
+  - Expanded mail UID correlation (v1.0.12) to capture comprehensive email metadata as custom fields
+  - **Problem**: Only IMAP UID was being saved, limiting searchability and context for email-sourced documents
+  - **Solution**: 
+    - Added 4 new metadata fields: Mail From, Mail Sender, Mail Subject, Mail Date
+    - All 5 fields (including Mail UID) now automatically captured when document consumed from email
+    - Each field name configurable via environment variable for multilingual support
+    - Mail Date stored as DATE type custom field (YYYY-MM-DD format)
+  - **Metadata Fields Captured**:
+    - **Mail UID**: IMAP unique identifier (existing from v1.0.12)
+    - **Mail From**: Sender's email address (e.g., "john@company.com")
+    - **Mail Sender**: Sender's display name (e.g., "John Smith")
+    - **Mail Subject**: Email subject line
+    - **Mail Date**: Email received date in YYYY-MM-DD format (DATE custom field type)
+  - **Environment Variables**:
+    - `PAPERLESS_MAIL_UID_FIELD` (default: "Mail UID") - IMAP UID field name
+    - `PAPERLESS_MAIL_FROM_FIELD` (default: "Mail From") - Sender email address field name
+    - `PAPERLESS_MAIL_SENDER_FIELD` (default: "Mail Sender") - Sender display name field name
+    - `PAPERLESS_MAIL_SUBJECT_FIELD` (default: "Mail Subject") - Subject line field name
+    - `PAPERLESS_MAIL_DATE_FIELD` (default: "Mail Date") - Received date field name
+  - **Implementation**:
+    - Extended `ConsumableDocument` dataclass with 4 new optional fields: mail_from, mail_sender, mail_subject, mail_date
+    - Updated mail.py to extract metadata from imap_tools MailMessage (from_values.email, from_values.name, subject, date)
+    - Refactored consumer helper from `_attach_mail_uid_custom_field()` to `_attach_mail_metadata_custom_fields()`
+    - Helper creates CustomField definitions on first run, then CustomFieldInstance for each document
+    - Uses value_text for STRING fields (UID, From, Sender, Subject) and value_date for DATE field
+    - Non-critical enhancement: failures log warnings without aborting document consumption
+  - **Data Flow**:
+    - Mail retrieval: imap_tools extracts metadata → passed to ConsumableDocument
+    - Document consumption: consumer.py creates custom field definitions and instances
+    - All 5 fields stored as separate custom fields on document
+    - Fields appear in document detail view and can be searched/filtered
+  - **Use Cases**:
+    - Search all documents from specific sender email address
+    - Find documents by sender name (handles display name changes)
+    - Filter documents by email subject keywords
+    - Find documents received on specific dates
+    - Correlate documents with original emails via UID
+  - **Benefits**:
+    - Rich metadata preservation without database schema changes
+    - Configurable field names support multilingual deployments
+    - Works with existing custom field search and filter infrastructure
+    - Clean separation: v1.0.26 captures metadata, v1.0.27 will add smart correspondent matching
+    - Minimal performance impact - fields created once, reused for all documents
+  - Files modified:
+    - Backend: `src/paperless/settings.py` (added 5 environment variables with defaults)
+    - Backend: `src/documents/data_models.py` (added 4 new fields to ConsumableDocument)
+    - Backend: `src/paperless_mail/mail.py` (extract and pass metadata in _process_attachments and _process_eml)
+    - Backend: `src/documents/consumer.py` (refactored helper function to handle all 5 fields)
+  - All changes properly marked with RKC comments for maintainability
+  - **Note**: Mail To field intentionally excluded - separate mail rules per account handle recipient targeting
+
 - **v1.0.25 (2025-12-12)**: Custom field names and filter buttons in card views
   - Enhanced document card views (small and large) with optional field name display and quick filter buttons
   - **Problem**: Card views only showed custom field values without context, no way to quickly filter by field value

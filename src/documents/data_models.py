@@ -158,8 +158,12 @@ class ConsumableDocument:
     original_file: Path
     original_path: Path | None = None
     mailrule_id: int | None = None
-    # RKC: Store mail UID for correlation with ProcessedMail table
-    mail_uid: str | None = None
+    # RKC: Email metadata fields for custom field population (v1.0.26)
+    mail_uid: str | None = None          # IMAP UID (from v1.0.12)
+    mail_from: str | None = None         # Sender email address
+    mail_sender: str | None = None       # Sender display name
+    mail_subject: str | None = None      # Email subject
+    mail_date: datetime.date | None = None  # Email received date
     # /end RKC edit
     mime_type: str = dataclasses.field(init=False, default=None)
 

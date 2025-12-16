@@ -51,48 +51,105 @@ from documents.utils import run_subprocess
 from paperless_mail.parsers import MailDocumentParser
 
 
-# RKC: Helper function to attach mail UID as custom field for correlation with ProcessedMail
-def _attach_mail_uid_custom_field(document, mail_uid: str):
+# RKC: Helper function to attach email metadata as custom fields
+def _attach_mail_metadata_custom_fields(
+    document,
+    mail_uid: str | None = None,
+    mail_from: str | None = None,
+    mail_sender: str | None = None,
+    mail_subject: str | None = None,
+    mail_date: datetime.date | None = None,
+):
     """
-    Attaches the mail UID to the document as a custom field.
-    Creates the custom field definition if it doesn't exist.
+    Attaches email metadata to the document as custom fields.
+    Creates custom field definitions if they don't exist.
     
     Args:
-        document: The Document instance to attach the field to
+        document: The Document instance to attach fields to
         mail_uid: The IMAP UID from the source email
+        mail_from: The sender's email address
+        mail_sender: The sender's display name
+        mail_subject: The email subject line
+        mail_date: The email received date
     """
-    if not mail_uid:
-        return
-    
     logger = logging.getLogger("paperless.consumer")
     
-    try:
-        # Get or create the mail correlation custom field definition
-        field_name = settings.PAPERLESS_MAIL_CORRELATION_FIELD
-        field, created = CustomField.objects.get_or_create(
-            name=field_name,
-            defaults={
-                'data_type': CustomField.FieldDataType.STRING,
-            }
-        )
+    # Define all metadata fields with their settings keys and data types
+    metadata_fields = [
+        {
+            'value': mail_uid,
+            'setting_key': 'PAPERLESS_MAIL_CORRELATION_FIELD',
+            'data_type': CustomField.FieldDataType.STRING,
+            'value_field': 'value_text',
+            'label': 'Mail UID',
+        },
+        {
+            'value': mail_from,
+            'setting_key': 'PAPERLESS_MAIL_FROM_FIELD',
+            'data_type': CustomField.FieldDataType.STRING,
+            'value_field': 'value_text',
+            'label': 'Mail From',
+        },
+        {
+            'value': mail_sender,
+            'setting_key': 'PAPERLESS_MAIL_SENDER_FIELD',
+            'data_type': CustomField.FieldDataType.STRING,
+            'value_field': 'value_text',
+            'label': 'Mail Sender',
+        },
+        {
+            'value': mail_subject,
+            'setting_key': 'PAPERLESS_MAIL_SUBJECT_FIELD',
+            'data_type': CustomField.FieldDataType.STRING,
+            'value_field': 'value_text',
+            'label': 'Mail Subject',
+        },
+        {
+            'value': mail_date,
+            'setting_key': 'PAPERLESS_MAIL_DATE_FIELD',
+            'data_type': CustomField.FieldDataType.DATE,
+            'value_field': 'value_date',
+            'label': 'Mail Date',
+        },
+    ]
+    
+    # Process each metadata field
+    for field_config in metadata_fields:
+        # Skip if no value provided
+        if field_config['value'] is None:
+            continue
         
-        if created:
-            logger.info(f"Created mail correlation custom field: {field_name}")
-        
-        # Set the custom field value for this document
-        CustomFieldInstance.objects.update_or_create(
-            document=document,
-            field=field,
-            defaults={
-                'value_text': mail_uid,
-            }
-        )
-        
-        logger.debug(f"Attached mail UID {mail_uid} to document {document.pk}")
-        
-    except Exception as e:
-        logger.error(f"Failed to attach mail UID custom field: {e}")
-        # Don't raise - this is a non-critical enhancement
+        try:
+            # Get or create the custom field definition
+            field_name = getattr(settings, field_config['setting_key'])
+            field, created = CustomField.objects.get_or_create(
+                name=field_name,
+                defaults={
+                    'data_type': field_config['data_type'],
+                }
+            )
+            
+            if created:
+                logger.info(f"Created mail metadata custom field: {field_name}")
+            
+            # Set the custom field value for this document
+            CustomFieldInstance.objects.update_or_create(
+                document=document,
+                field=field,
+                defaults={
+                    field_config['value_field']: field_config['value'],
+                }
+            )
+            
+            logger.debug(
+                f"Attached {field_config['label']} to document {document.pk}"
+            )
+            
+        except Exception as e:
+            logger.warning(
+                f"Failed to attach {field_config['label']} custom field: {e}"
+            )
+            # Don't raise - this is a non-critical enhancement
 # /end RKC edit
 
 
@@ -578,9 +635,22 @@ class ConsumerPlugin(
                 # This triggers things like file renaming
                 document.save()
 
-                # RKC: Attach mail UID custom field if document came from mail
-                if self.input_doc.mail_uid:
-                    _attach_mail_uid_custom_field(document, self.input_doc.mail_uid)
+                # RKC: Attach email metadata as custom fields if document came from mail
+                if any([
+                    self.input_doc.mail_uid,
+                    self.input_doc.mail_from,
+                    self.input_doc.mail_sender,
+                    self.input_doc.mail_subject,
+                    self.input_doc.mail_date,
+                ]):
+                    _attach_mail_metadata_custom_fields(
+                        document,
+                        mail_uid=self.input_doc.mail_uid,
+                        mail_from=self.input_doc.mail_from,
+                        mail_sender=self.input_doc.mail_sender,
+                        mail_subject=self.input_doc.mail_subject,
+                        mail_date=self.input_doc.mail_date,
+                    )
                 # /end RKC edit
 
                 # Delete the file only if it was successfully consumed
