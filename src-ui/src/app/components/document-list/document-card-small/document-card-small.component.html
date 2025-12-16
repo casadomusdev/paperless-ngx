@@ -134,7 +134,7 @@
               <div class="ps-0 p-1 d-flex align-items-center overflow-hidden">
                 <i-bs width="1em" height="1em" class="me-2 text-muted" name="ui-radios"></i-bs>
                 <!-- RKC: Added filter button support for custom fields in card views -->
-                <small><pngx-custom-field-display [document]="document" [fieldId]="field.field" showNameIfEmpty="true" [showFilter]="true" (filterClick)="filterByCustomField($event)"></pngx-custom-field-display></small>
+                <small class="w-100"><pngx-custom-field-display [document]="document" [fieldId]="field.field" showNameIfEmpty="true" [showFilter]="true" (filterClick)="filterByCustomField($event)"></pngx-custom-field-display></small>
                 <!-- /end RKC edit -->
               </div>
             }

@@ -158,7 +158,7 @@
                 @if (displayFields.includes(DisplayField.CUSTOM_FIELD + field.field)) {
                   <div class="list-group-item bg-light text-dark p-1 border-0 d-flex align-items-center">
                     <i-bs width=".9em" height=".9em" class="me-2 text-muted" name="ui-radios"></i-bs>
-                    <small>
+                    <small class="w-100">
                       <!-- RKC: Added filter button support for custom fields in card views -->
                       <pngx-custom-field-display [document]="document" [fieldId]="field.field" showNameIfEmpty="true" [showFilter]="true" (filterClick)="filterByCustomField($event)"></pngx-custom-field-display>
                       <!-- /end RKC edit -->
