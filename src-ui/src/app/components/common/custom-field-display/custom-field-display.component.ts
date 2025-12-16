@@ -16,6 +16,7 @@ import { LoadingComponentWithPermissions } from '../../loading-component/loading
 
 @Component({
   selector: 'pngx-custom-field-display',
+  standalone: true,
   templateUrl: './custom-field-display.component.html',
   styleUrl: './custom-field-display.component.scss',
   imports: [CustomDatePipe, CurrencyPipe, NgbTooltipModule, SlicePipe, NgxBootstrapIconsModule],

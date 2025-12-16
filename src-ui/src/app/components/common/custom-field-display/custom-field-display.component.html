@@ -1,4 +1,8 @@
 @if (field) {
+    <!-- RKC: Tooltip for filter button (at top level so both blocks can access it) -->
+    <ng-template #filterTooltip>
+        <div class="text-light" i18n="@@rkc-show-all-with-this-value">Show all with this value</div>
+    </ng-template>
     @if (value?.toString().length > 0) {
         <ng-template #nameTooltip>
             <div class="d-flex flex-column text-light">
@@ -6,7 +10,7 @@
             </div>
         </ng-template>
         <!-- RKC: Wrapper for field name + value + filter button -->
-        <div class="d-flex align-items-center gap-1">
+        <div class="d-flex align-items-center gap-1 w-100">
             @switch (field.data_type) {
                 @case (CustomFieldDataType.Monetary) {
                     <!-- RKC: Show field name when enabled (except Boolean which already shows it) -->
@@ -71,8 +75,7 @@
                 <button 
                     class="btn btn-link btn-sm text-muted p-0 ms-auto" 
                     (click)="onFilterClick($event)"
-                    ngbTooltip="Show all with this value"
-                    i18n-ngbTooltip="@@rkc-show-all-with-this-value">
+                    [ngbTooltip]="filterTooltip">
                     <i-bs width="0.9em" height="0.9em" name="funnel"></i-bs>
                 </button>
             }
@@ -80,14 +83,13 @@
         </div>
     } @else if (showNameIfEmpty) {
         <!-- RKC: Show italicized field name for empty values + filter button -->
-        <div class="d-flex align-items-center gap-1">
+        <div class="d-flex align-items-center gap-1 w-100">
             <span class="fst-italic text-muted">{{field.name}}</span>
             @if (showFilter) {
                 <button 
                     class="btn btn-link btn-sm text-muted p-0 ms-auto" 
                     (click)="onFilterClick($event)"
-                    ngbTooltip="Show all with this value"
-                    i18n-ngbTooltip="@@rkc-show-all-with-this-value">
+                    [ngbTooltip]="filterTooltip">
                     <i-bs width="0.9em" height="0.9em" name="funnel"></i-bs>
                 </button>
             }
