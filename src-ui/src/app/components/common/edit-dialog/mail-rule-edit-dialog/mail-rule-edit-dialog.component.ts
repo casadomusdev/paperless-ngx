@@ -138,6 +138,12 @@ const METADATA_CORRESPONDENT_OPTIONS = [
     id: MailMetadataCorrespondentOption.FromName,
     name: $localize`Use name (or mail address if not available)`,
   },
+  // RKC: Smart correspondent matching option (v1.0.27)
+  {
+    id: MailMetadataCorrespondentOption.FromSmart,
+    name: $localize`Use smart format (Name <email>)`,
+  },
+  // /end RKC edit
   {
     id: MailMetadataCorrespondentOption.FromCustom,
     name: $localize`Use correspondent selected below`,

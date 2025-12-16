@@ -1009,6 +1009,7 @@ docker compose restart webserver
     - Backend: Added `_get_or_create_correspondent_smart()` matching method
     - Backend: Updated `_get_correspondent()` to handle FROM_SMART mode
     - Frontend: Added `FromSmart = 5` to `MailMetadataCorrespondentOption` enum
+    - Frontend: Added option to `METADATA_CORRESPONDENT_OPTIONS` array in mail rule edit dialog
     - Translations: Automatically generated from Django backend strings
   - **Benefits**:
     - **Readable**: Human-friendly names in UI (`"John Smith <john@company.com>"`)
