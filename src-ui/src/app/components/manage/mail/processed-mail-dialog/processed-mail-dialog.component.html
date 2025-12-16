@@ -58,15 +58,15 @@
     <!-- RKC: Selection banner - shows count and "select all in DB" option when items are selected -->
     @if (selectedMailIds.size > 0 && !selectAllInDatabase) {
       <div class="alert alert-info py-2 mb-3">
-        <strong>{{selectedMailIds.size}}</strong><ng-container i18n> items selected.</ng-container>
+        <strong>{{selectedMailIds.size}}</strong>&nbsp;<ng-container i18n>items selected.</ng-container>
         <a href="javascript:void(0)" (click)="selectAllInDb()" class="alert-link ms-2">
-          <ng-container i18n>Select all</ng-container> <strong>{{collectionSize}}</strong> <ng-container i18n>items</ng-container>@if (filterText) {<ng-container i18n> matching filter</ng-container>}?
+          <ng-container i18n>Select all</ng-container>&nbsp;<strong>{{collectionSize}}</strong>&nbsp;<ng-container i18n>items</ng-container>@if (filterText) {<ng-container i18n> matching filter</ng-container>}?
         </a>
       </div>
     }
     @if (selectAllInDatabase) {
       <div class="alert alert-primary py-2 mb-3">
-        <ng-container i18n>All</ng-container> <strong>{{collectionSize}}</strong> <ng-container i18n>items are selected</ng-container>@if (filterText) {<ng-container i18n> (filtered)</ng-container>}.
+        <ng-container i18n>All</ng-container>&nbsp;<strong>{{collectionSize}}</strong>&nbsp;<ng-container i18n>items are selected</ng-container>@if (filterText) {<ng-container i18n> (filtered)</ng-container>}.
         <a href="javascript:void(0)" (click)="clearSelection()" class="alert-link ms-2" i18n>Clear selection</a>
       </div>
     }
