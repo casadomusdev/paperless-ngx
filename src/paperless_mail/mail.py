@@ -471,6 +471,68 @@ class MailAccountHandler(LoggingMixin):
             self.log.error(f"Error while retrieving correspondent {name}: {e}")
             return None
 
+    # RKC: Smart correspondent matching - email extraction helper (v1.0.27)
+    def _extract_email_from_correspondent_name(self, name: str) -> str | None:
+        """
+        Extract email address from correspondent name in format "Name <email@domain.com>".
+        Returns email address or None if not found.
+        """
+        import re
+        match = re.search(r'<([^>]+)>', name)
+        return match.group(1) if match else None
+    # /end RKC edit
+
+    # RKC: Smart correspondent matching - creation and matching (v1.0.27)
+    def _get_or_create_correspondent_smart(
+        self,
+        message: MailMessage,
+    ) -> Correspondent | None:
+        """
+        Get or create correspondent using smart matching.
+
+        Creates correspondents in RFC format: "Name <email@domain.com>"
+        Matches by email address extracted from existing correspondent names.
+        
+        Matching strategy:
+        1. Try exact name match first
+        2. Try partial match on email address extracted from angle brackets
+        3. Create new correspondent in smart format if no match found
+        """
+        from_values = message.from_values
+        if not from_values or not from_values.email:
+            return None
+
+        # Build smart format name
+        if from_values.name:
+            smart_name = f"{from_values.name} <{from_values.email}>"
+        else:
+            smart_name = f"<{from_values.email}>"
+
+        # Try exact match first
+        try:
+            correspondent = Correspondent.objects.get(name=smart_name)
+            self.log.debug(f"Exact match found: {correspondent.name}")
+            return correspondent
+        except Correspondent.DoesNotExist:
+            pass
+
+        # Try partial match on email address
+        all_correspondents = Correspondent.objects.all()
+        for correspondent in all_correspondents:
+            extracted_email = self._extract_email_from_correspondent_name(
+                correspondent.name,
+            )
+            if extracted_email and extracted_email.lower() == from_values.email.lower():
+                self.log.debug(
+                    f"Matched correspondent '{correspondent.name}' via email '{extracted_email}'",
+                )
+                return correspondent
+
+        # No match found, create new correspondent in smart format
+        self.log.debug(f"Creating new correspondent: {smart_name}")
+        return self._correspondent_from_name(smart_name)
+    # /end RKC edit
+
     def _get_title(
         self,
         message: MailMessage,
@@ -513,6 +575,11 @@ class MailAccountHandler(LoggingMixin):
 
         elif c_from == MailRule.CorrespondentSource.FROM_CUSTOM:
             return rule.assign_correspondent
+
+        # RKC: Smart correspondent matching (v1.0.27)
+        elif c_from == MailRule.CorrespondentSource.FROM_SMART:
+            return self._get_or_create_correspondent_smart(message)
+        # /end RKC edit
 
         else:
             raise NotImplementedError(

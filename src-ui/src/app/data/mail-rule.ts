@@ -41,6 +41,9 @@ export enum MailMetadataCorrespondentOption {
   FromEmail = 2,
   FromName = 3,
   FromCustom = 4,
+  // RKC: Smart correspondent matching (v1.0.27)
+  FromSmart = 5,
+  // /end RKC edit
 }
 
 export interface MailRule extends ObjectWithPermissions {

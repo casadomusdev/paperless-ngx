@@ -180,6 +180,9 @@ class MailRule(document_models.ModelWithOwner):
         FROM_EMAIL = 2, _("Use mail address")
         FROM_NAME = 3, _("Use name (or mail address if not available)")
         FROM_CUSTOM = 4, _("Use correspondent selected below")
+        # RKC: Smart correspondent matching (v1.0.27)
+        FROM_SMART = 5, _("Use smart format (Name <email>)")
+        # /end RKC edit
 
     name = models.CharField(_("name"), max_length=256)
 

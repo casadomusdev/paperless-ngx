@@ -983,6 +983,52 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.27 (2025-12-16)**: Smart correspondent matching for mail rules
+  - Added intelligent correspondent matching based on email addresses to solve sender name change issues
+  - **Problem**: Existing correspondent assignment modes break when sender changes display name or creates ugly correspondent names
+    - `FROM_EMAIL` mode creates ugly correspondents like "accounts@company.com"
+    - `FROM_NAME` mode breaks when sender changes their display name (e.g., "John Smith" → "John S.")
+    - Neither approach provides stable+readable correspondent names
+  - **Solution - Part 1: Smart Correspondent Creation**:
+    - Added `FROM_SMART` mode (value 5) to CorrespondentSource enum
+    - Creates correspondents in RFC 5322 format: `"Sender Name <sender@email.com>"`
+    - Clean readable names with stable email address embedded
+    - Example: `"John Smith <john@company.com>"`
+  - **Solution - Part 2: Partial Email Matching**:
+    - Intelligent three-tier matching strategy when assigning correspondents:
+      1. **Exact match**: Try to find correspondent with exact name match
+      2. **Email extraction match**: Extract email from angle brackets `<email>` and compare
+      3. **Create new**: If no match, create new correspondent in smart format
+  - **Smart Matching Examples**:
+    - Existing: `"Accounts <accounts@company.com>"` + Incoming: `"John <accounts@company.com>"` = Match (email matches)
+    - Admin renames to: `"Company.com Accounts <accounts@company.com>"` + Next mail: `"Jane <accounts@company.com>"` = Still matches
+    - Incoming: `"New Sender <new@example.com>"` = Creates new correspondent `"New Sender <new@example.com>"`
+  - **Implementation**:
+    - Backend: Added `FROM_SMART` to `MailRule.CorrespondentSource` enum
+    - Backend: Added `_extract_email_from_correspondent_name()` helper using regex
+    - Backend: Added `_get_or_create_correspondent_smart()` matching method
+    - Backend: Updated `_get_correspondent()` to handle FROM_SMART mode
+    - Frontend: Added `FromSmart = 5` to `MailMetadataCorrespondentOption` enum
+    - Translations: Automatically generated from Django backend strings
+  - **Benefits**:
+    - **Readable**: Human-friendly names in UI (`"John Smith <john@company.com>"`)
+    - **Stable**: Email-based matching survives name changes
+    - **Flexible**: Admins can rename correspondents without breaking automation
+    - **Backward Compatible**: Existing rules continue working unchanged
+    - **Case Insensitive**: Email matching ignores case differences
+  - **Use Cases**:
+    - Shared department emails: `"Accounts <accounts@company.com>"` matches all senders from that address
+    - Dynamic sender names: Email address provides stable identifier across name changes
+    - Multi-user shared mailboxes: Different people sending from same address matched to same correspondent
+    - Renamed correspondents: Organization renames still work via email extraction
+  - **Database Impact**: No migrations needed - IntegerChoices enum values are application-level only
+  - Files modified:
+    - Backend: `src/paperless_mail/models.py` (added FROM_SMART enum value)
+    - Backend: `src/paperless_mail/mail.py` (added helper methods and matching logic)
+    - Frontend: `src-ui/src/app/data/mail-rule.ts` (added FromSmart enum value)
+  - All changes properly marked with RKC comments for maintainability
+  - **Note**: This is Part 1 of intelligent correspondent matching - creates foundation for future enhancements
+
 - **v1.0.26 (2025-12-15)**: Email metadata custom fields
   - Expanded mail UID correlation (v1.0.12) to capture comprehensive email metadata as custom fields
   - **Problem**: Only IMAP UID was being saved, limiting searchability and context for email-sourced documents
