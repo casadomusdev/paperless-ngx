@@ -8,6 +8,7 @@ import {
 import { EditDialogComponent } from 'src/app/components/common/edit-dialog/edit-dialog.component'
 import { Correspondent } from 'src/app/data/correspondent'
 import { DEFAULT_MATCHING_ALGORITHM } from 'src/app/data/matching-model'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
 import { IfOwnerDirective } from 'src/app/directives/if-owner.directive'
 import { CorrespondentService } from 'src/app/services/rest/correspondent.service'
 import { UserService } from 'src/app/services/rest/user.service'
@@ -48,9 +49,15 @@ export class CorrespondentEditDialogComponent extends EditDialogComponent<Corres
   }
 
   getForm(): FormGroup {
+    // RKC: Read default matching algorithm from backend setting (v1.0.28)
+    const defaultAlgorithm = this.settingsService.get(
+      SETTINGS_KEYS.MAIL_CORRESPONDENT_MATCHING_ALG
+    ) ?? DEFAULT_MATCHING_ALGORITHM
+    // /end RKC edit
+    
     return new FormGroup({
       name: new FormControl(''),
-      matching_algorithm: new FormControl(DEFAULT_MATCHING_ALGORITHM),
+      matching_algorithm: new FormControl(defaultAlgorithm),
       match: new FormControl(''),
       is_insensitive: new FormControl(true),
       permissions_form: new FormControl(null),

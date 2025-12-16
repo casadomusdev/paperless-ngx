@@ -981,7 +981,78 @@ docker compose restart webserver
 - Backend: `src/paperless/adapter.py` - Debug logging in `CustomSocialAccountAdapter` (respects `paperless.auth` logger level)
 - Backend: `src/documents/signals/handlers.py` - Conditional debug logging in `create_ui_settings_for_new_user` signal
 
+### 7. Mail Correspondent Matching Algorithm (`PAPERLESS_MAIL_CORRESPONDENT_MATCHING_ALGORITHM`)
+**Purpose**: Control what matching algorithm is used when creating new correspondents from mail rules
+
+**Type**: Integer (MatchingModel algorithm value)
+**Default**: `6` (MATCH_AUTO - Automatic matching)
+**Example**: `PAPERLESS_MAIL_CORRESPONDENT_MATCHING_ALGORITHM=1`
+
+**Behavior**:
+- Sets the `matching_algorithm` field for correspondents created by mail rules
+- Defaults to MATCH_AUTO (6) to match UI behavior where manually-created correspondents use "Automatic" by default
+- Without this setting, mail-created correspondents would use model default (MATCH_ANY = 1 "Any word")
+- User can still manually change the matching algorithm for any correspondent in the UI
+
+**Available Algorithm Values**:
+- `0` - MATCH_NONE: No matching (disabled)
+- `1` - MATCH_ANY: Any word
+- `2` - MATCH_ALL: All words
+- `3` - MATCH_LITERAL: Exact match
+- `4` - MATCH_REGEX: Regular expression
+- `5` - MATCH_FUZZY: Fuzzy matching
+- `6` - MATCH_AUTO: Automatic (default - recommended)
+
+**Use Cases**:
+- Organizations wanting consistent matching behavior between UI-created and mail-created correspondents
+- Ensuring mail automation uses intelligent "Automatic" matching by default
+- Customizing matching strictness for specific deployment needs
+
+**Why This Matters**:
+- **Problem**: Originally, `_correspondent_from_name()` didn't specify `matching_algorithm`, so new correspondents got the Django model default (MATCH_ANY = 1)
+- **UI Inconsistency**: When users manually create correspondents in the UI, they get MATCH_AUTO (6) by default
+- **Result**: Mail-created vs UI-created correspondents behaved differently during document matching
+- **Solution**: This environment variable makes mail-created correspondents use MATCH_AUTO (6) by default, matching UI behavior
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads `PAPERLESS_MAIL_CORRESPONDENT_MATCHING_ALGORITHM` env var with default value 6
+- Backend: `src/paperless_mail/mail.py` - `_correspondent_from_name()` includes `matching_algorithm` in defaults dict
+- Uses `settings.MAIL_CORRESPONDENT_MATCHING_ALG` when creating new correspondents
+
 ## Version History
+
+- **v1.0.28 (2025-12-16)**: Mail correspondent matching algorithm fix
+  - Fixed inconsistency where mail-created correspondents used different matching algorithm than UI-created correspondents
+  - **Problem**: 
+    - Mail-created correspondents (from any mode: FROM_EMAIL, FROM_NAME, FROM_SMART) were using Django model default (MATCH_ANY = 1 "Any word")
+    - UI-created correspondents use MATCH_AUTO (6 "Automatic") by default
+    - This caused inconsistent matching behavior between mail-created and manually-created correspondents
+  - **Solution - Backend**:
+    - Added `PAPERLESS_MAIL_CORRESPONDENT_MATCHING_ALGORITHM` environment variable (default: 6)
+    - Updated `_correspondent_from_name()` method to include `matching_algorithm` in defaults dict
+    - Uses `settings.MAIL_CORRESPONDENT_MATCHING_ALG` when creating new correspondents via mail rules
+  - **Solution - Frontend**:
+    - Exposed `mail_correspondent_matching_algorithm` setting to frontend via UiSettingsView
+    - Updated correspondent edit dialog to read default from settings instead of hardcoded constant
+    - UI now respects environment variable when creating correspondents manually
+  - **Impact**:
+    - Applies to ALL correspondent creation: mail rules AND manual UI creation
+    - Both backend and frontend use same configurable default
+    - Only affects newly created correspondents - existing ones unchanged
+    - Default behavior is MATCH_AUTO (6 "Automatic") matching UI expectation
+    - Customizable via environment variable if different algorithm needed
+  - **Benefits**:
+    - Complete consistency across all correspondent creation methods (mail rules, UI)
+    - Eliminates confusion from different default behaviors
+    - Single environment variable controls both backend and frontend defaults
+    - Configurable for organizations with specific matching requirements
+  - Files modified:
+    - Backend: `src/paperless/settings.py` (added environment variable with default value 6)
+    - Backend: `src/paperless_mail/mail.py` (updated `_correspondent_from_name()` method)
+    - Backend: `src/documents/views.py` (exposed setting to frontend via UiSettingsView)
+    - Frontend: `src-ui/src/app/data/ui-settings.ts` (added MAIL_CORRESPONDENT_MATCHING_ALG key)
+    - Frontend: `src-ui/src/app/components/common/edit-dialog/correspondent-edit-dialog/correspondent-edit-dialog.component.ts` (read from settings)
+  - All changes properly marked with RKC comments for maintainability
 
 - **v1.0.27 (2025-12-16)**: Smart correspondent matching for mail rules
   - Added intelligent correspondent matching based on email addresses to solve sender name change issues

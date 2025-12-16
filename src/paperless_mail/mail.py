@@ -460,16 +460,20 @@ class MailAccountHandler(LoggingMixin):
             self.log.debug(f"Skipping mail preprocessor {preprocessor_type.NAME}")
 
     def _correspondent_from_name(self, name: str) -> Correspondent | None:
+        # RKC: Use configurable matching algorithm (v1.0.27)
+        # Defaults to MATCH_AUTO (6) to match UI behavior
         try:
             return Correspondent.objects.get_or_create(
                 name=name,
                 defaults={
                     "match": name,
+                    "matching_algorithm": settings.MAIL_CORRESPONDENT_MATCHING_ALG,
                 },
             )[0]
         except DatabaseError as e:
             self.log.error(f"Error while retrieving correspondent {name}: {e}")
             return None
+        # /end RKC edit
 
     # RKC: Smart correspondent matching - email extraction helper (v1.0.27)
     def _extract_email_from_correspondent_name(self, name: str) -> str | None:

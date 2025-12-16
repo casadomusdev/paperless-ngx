@@ -31,6 +31,7 @@ export const SETTINGS_KEYS = {
   PDF_EDITOR_RESTRICT_TO_SUPERUSER: 'pdf_editor_restrict_to_superuser',
   GLOBAL_VIEWS_ADMIN_USER_ID: 'global_views_admin_user_id',
   SHOW_CUSTOM_FIELD_NAMES_IN_CARDS: 'show_custom_field_names_in_cards',
+  MAIL_CORRESPONDENT_MATCHING_ALG: 'mail_correspondent_matching_algorithm',
   // /end RKC edit
   // maintain old general-settings: for backwards compatibility
   BULK_EDIT_CONFIRMATION_DIALOGS:
@@ -319,6 +320,11 @@ export const SETTINGS: UiSetting[] = [
     key: SETTINGS_KEYS.SHOW_CUSTOM_FIELD_NAMES_IN_CARDS,
     type: 'boolean',
     default: false,
+  },
+  {
+    key: SETTINGS_KEYS.MAIL_CORRESPONDENT_MATCHING_ALG,
+    type: 'number',
+    default: 6, // MATCH_AUTO
   },
   // /end RKC edit
 ]

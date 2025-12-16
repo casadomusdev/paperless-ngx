@@ -1417,6 +1417,16 @@ SHOW_CUSTOM_FIELD_NAMES_IN_CARDS = __get_boolean(
 )
 # /end RKC edit
 
+# RKC: Matching algorithm for mail-created correspondents (v1.0.27)
+# Controls what matching algorithm is used when creating new correspondents from mail rules
+# Options: 0=None, 1=AnyWord, 2=AllWords, 3=ExactMatch, 4=Regex, 5=Fuzzy, 6=Automatic
+# Default is 6 (Automatic) to match UI behavior
+MAIL_CORRESPONDENT_MATCHING_ALG = __get_int(
+    "PAPERLESS_MAIL_CORRESPONDENT_MATCHING_ALGORITHM",
+    6,  # MATCH_AUTO
+)
+# /end RKC edit
+
 ###############################################################################
 # Machine Learning                                                            #
 ###############################################################################

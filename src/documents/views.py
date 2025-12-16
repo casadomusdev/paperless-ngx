@@ -2461,6 +2461,12 @@ class UiSettingsView(GenericAPIView):
         )
         # /end RKC edit
 
+        # RKC: Pass mail correspondent matching algorithm setting to frontend
+        ui_settings["mail_correspondent_matching_algorithm"] = getattr(
+            settings, "MAIL_CORRESPONDENT_MATCHING_ALG", 6
+        )
+        # /end RKC edit
+
         # RKC: Read global saved views ordering from ApplicationConfiguration singleton
         # This system-wide setting can be updated by any superuser and is shared by all users
         global_views_sort_order = None

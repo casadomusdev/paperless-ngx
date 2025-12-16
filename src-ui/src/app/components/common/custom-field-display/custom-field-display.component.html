@@ -73,7 +73,7 @@
             <!-- RKC: Filter button aligned to the right when showFilter is enabled -->
             @if (showFilter) {
                 <button 
-                    style="position: relative; top: -1px;"
+                    style="position: relative; top: -5px; height: 15px;"
                     class="btn btn-link btn-sm text-muted p-0 ms-auto" 
                     (click)="onFilterClick($event)"
                     [ngbTooltip]="filterTooltip">
@@ -88,7 +88,7 @@
             <span class="fst-italic text-muted">{{field.name}}</span>
             @if (showFilter) {
                 <button 
-                    style="position: relative; top: -1px;"
+                    style="position: relative; top: -5px; height: 15px;"
                     class="btn btn-link btn-sm text-muted p-0 ms-auto" 
                     (click)="onFilterClick($event)"
                     [ngbTooltip]="filterTooltip">
