@@ -1427,6 +1427,16 @@ MAIL_CORRESPONDENT_MATCHING_ALG = __get_int(
 )
 # /end RKC edit
 
+# RKC: Default setting for saved views unsaved changes warning (v1.0.29)
+# Controls whether users see a warning when closing saved views with unsaved changes
+# When disabled, app behaves like original Paperless-ngx with warning enabled (default: true)
+# This setting acts as the org-wide default without overriding existing user preferences
+SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT = __get_boolean(
+    "PAPERLESS_SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT",
+    "true",
+)
+# /end RKC edit
+
 ###############################################################################
 # Machine Learning                                                            #
 ###############################################################################

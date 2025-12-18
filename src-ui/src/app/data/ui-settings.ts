@@ -32,6 +32,7 @@ export const SETTINGS_KEYS = {
   GLOBAL_VIEWS_ADMIN_USER_ID: 'global_views_admin_user_id',
   SHOW_CUSTOM_FIELD_NAMES_IN_CARDS: 'show_custom_field_names_in_cards',
   MAIL_CORRESPONDENT_MATCHING_ALG: 'mail_correspondent_matching_algorithm',
+  SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT: 'saved_views_warn_on_unsaved_change_default',
   // /end RKC edit
   // maintain old general-settings: for backwards compatibility
   BULK_EDIT_CONFIRMATION_DIALOGS:
@@ -325,6 +326,11 @@ export const SETTINGS: UiSetting[] = [
     key: SETTINGS_KEYS.MAIL_CORRESPONDENT_MATCHING_ALG,
     type: 'number',
     default: 6, // MATCH_AUTO
+  },
+  {
+    key: SETTINGS_KEYS.SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT,
+    type: 'boolean',
+    default: true,
   },
   // /end RKC edit
 ]

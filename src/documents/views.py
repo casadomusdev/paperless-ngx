@@ -2467,6 +2467,12 @@ class UiSettingsView(GenericAPIView):
         )
         # /end RKC edit
 
+        # RKC: Pass saved views warn on unsaved changes default setting to frontend (v1.0.29)
+        ui_settings["saved_views_warn_on_unsaved_change_default"] = getattr(
+            settings, "SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT", True
+        )
+        # /end RKC edit
+
         # RKC: Read global saved views ordering from ApplicationConfiguration singleton
         # This system-wide setting can be updated by any superuser and is shared by all users
         global_views_sort_order = None

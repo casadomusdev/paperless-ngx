@@ -568,6 +568,13 @@ export class SettingsService {
         return envDefault
       }
     }
+
+    if (key === SETTINGS_KEYS.SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE && value === undefined) {
+      const envDefault = this.get(SETTINGS_KEYS.SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT)
+      if (envDefault !== undefined) {
+        return envDefault
+      }
+    }
     // /end RKC edit
 
     if (value !== undefined) {

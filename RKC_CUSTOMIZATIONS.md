@@ -1021,6 +1021,46 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.0.29 (2025-12-16)**: Saved views unsaved changes warning default
+  - Added environment variable to control default value of "Show warning when closing saved views with unsaved changes" option
+  - **Problem**: Organizations have different policies around accidental data loss - some want warnings enabled by default, others prefer streamlined workflow without warnings
+  - **Solution**: 
+    - Added `PAPERLESS_SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT` environment variable (default: true)
+    - Acts as org-wide default without overriding existing user preferences
+    - Users can still toggle the setting in Settings > Saved Views
+    - Maintains current Paperless-ngx behavior when not configured (warning enabled)
+  - **Environment Variable**: `PAPERLESS_SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT`
+    - **Type**: Boolean
+    - **Default**: `true` (maintains current Paperless-ngx behavior - warnings enabled)
+    - **Example**: `PAPERLESS_SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT=false`
+  - **Behavior**:
+    - When `true` (default): New users and users without preference see warning when closing unsaved views
+    - When `false`: New users and users without preference don't see warnings (streamlined workflow)
+    - Existing user preferences always take priority
+    - Only acts as fallback when user has not explicitly set their preference
+  - **Implementation Pattern**: Follows exact same pattern as v1.0.1 and v1.0.2 customizations
+    - Backend reads environment variable and exposes to frontend via UiSettingsView
+    - Frontend uses as fallback in settings.service.ts get() method
+    - User preference checked first, env default used only when undefined
+    - No database changes required - pure runtime fallback logic
+  - **Use Cases**:
+    - Power user organizations: Disable warnings for experienced users who rarely make mistakes
+    - Training environments: Enable warnings to prevent accidental data loss during onboarding
+    - Mixed deployments: Different defaults per environment (production vs. staging)
+    - Policy compliance: Organization-wide defaults without restricting user choice
+  - **Benefits**:
+    - Clean separation between org policy (env var) and user preference (db setting)
+    - Zero impact on existing user configurations
+    - No migrations needed - works immediately after restart
+    - Follows established RKC customization pattern for consistency
+    - User autonomy preserved - can override at any time
+  - Files modified:
+    - Backend: `src/paperless/settings.py` (added SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT env var with default true)
+    - Backend: `src/documents/views.py` (exposed setting to frontend via UiSettingsView)
+    - Frontend: `src-ui/src/app/data/ui-settings.ts` (added SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT key and boolean setting)
+    - Frontend: `src-ui/src/app/services/settings.service.ts` (added fallback logic in get() method)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.0.28 (2025-12-16)**: Mail correspondent matching algorithm fix
   - Fixed inconsistency where mail-created correspondents used different matching algorithm than UI-created correspondents
   - **Problem**: 
