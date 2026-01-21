@@ -86,7 +86,7 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
         self.mail_account.refresh_from_db()
         
         # RKC: Log token info (without exposing the actual token)
-        token_preview = self.mail_account.password[:50] + "..." if self.mail_account.password else "MISSING"
+        token_preview = self.mail_account.password if self.mail_account.password else "MISSING"
         logger.info(f"[OAuth2 SMTP] Access token preview: {token_preview}")
         logger.info(f"[OAuth2 SMTP] Token length: {len(self.mail_account.password) if self.mail_account.password else 0} chars")
         # RKC: Verify XOAUTH2 string format
