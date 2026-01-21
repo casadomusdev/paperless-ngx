@@ -86,9 +86,12 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
         self.mail_account.refresh_from_db()
         
         # RKC: Log token info (without exposing the actual token)
-        token_preview = self.mail_account.password if self.mail_account.password else "MISSING"
-        logger.info(f"[OAuth2 SMTP] Access token: {token_preview}")
+        token_preview = self.mail_account.password[:50] + "..." if self.mail_account.password else "MISSING"
+        logger.info(f"[OAuth2 SMTP] Access token preview: {token_preview}")
         logger.info(f"[OAuth2 SMTP] Token length: {len(self.mail_account.password) if self.mail_account.password else 0} chars")
+        # RKC: Verify XOAUTH2 string format
+        test_xoauth = self._build_xoauth2_string(self.mail_account.username, "TEST_TOKEN")
+        logger.info(f"[OAuth2 SMTP] XOAUTH2 format test: {test_xoauth[:100]}...")
         # /end RKC edit
         
         try:
@@ -121,15 +124,27 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
             # Use auth() with XOAUTH2 mechanism
             # The auth_string is already base64 encoded, return it directly
             # smtplib will encode it to bytes internally
+            
+            # RKC: Enable SMTP debug output to see full protocol exchange
+            self.connection.set_debuglevel(2)
+            logger.info(f"[OAuth2 SMTP] Attempting XOAUTH2 authentication")
+            logger.info(f"[OAuth2 SMTP] Auth string length: {len(auth_string)} chars")
+            # /end RKC edit
+            
             code, resp = self.connection.auth(
                 'XOAUTH2',
                 lambda: auth_string,
             )
             
+            # RKC: Disable debug output after auth
+            self.connection.set_debuglevel(0)
+            # /end RKC edit
+            
             if code != 235:  # 235 = Authentication successful
                 logger.error(
                     f"OAuth2 SMTP authentication failed with code {code}: {resp}"
                 )
+                logger.error(f"[OAuth2 SMTP] Response details: {resp}")
                 raise Exception(f"OAuth2 authentication failed: {code} {resp}")
             
             logger.debug(f"OAuth2 SMTP connection established for {self.mail_account.name}")
