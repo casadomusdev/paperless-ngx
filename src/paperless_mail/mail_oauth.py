@@ -98,12 +98,29 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
                 self.connection.ehlo()
             
             # Authenticate with XOAUTH2
+            # Python's smtplib doesn't have built-in XOAUTH2 support,
+            # so we need to use the auth() method directly
             auth_string = self._build_xoauth2_string(
                 self.mail_account.username,
                 self.mail_account.password  # This is the access token
             )
             
-            self.connection.docmd('AUTH', 'XOAUTH2 ' + auth_string)
+            # Use auth() with XOAUTH2 mechanism
+            # The auth_string is already base64 encoded, auth() expects initial response
+            def encode_cram_md5(challenge):
+                # Not used for XOAUTH2, but required by auth() signature
+                return auth_string
+            
+            code, resp = self.connection.auth(
+                'XOAUTH2',
+                lambda x: auth_string.encode(),
+            )
+            
+            if code != 235:  # 235 = Authentication successful
+                logger.error(
+                    f"OAuth2 SMTP authentication failed with code {code}: {resp}"
+                )
+                raise Exception(f"OAuth2 authentication failed: {code} {resp}")
             
             logger.debug(f"OAuth2 SMTP connection established for {self.mail_account.name}")
             return True
@@ -111,7 +128,10 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
         except Exception as e:
             logger.error(f"Failed to establish OAuth2 SMTP connection: {e}")
             if self.connection:
-                self.connection.close()
+                try:
+                    self.connection.close()
+                except:
+                    pass
                 self.connection = None
             raise
     

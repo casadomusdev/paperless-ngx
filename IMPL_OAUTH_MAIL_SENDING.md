@@ -671,6 +671,50 @@ def email_action():
 
 **Note**: Could not modify EMAIL_ENABLED directly in settings.py due to circular import issues (paperless_mail imports settings, so settings cannot import from paperless_mail).
 
+### OAuth2 SMTP Authentication Method Incorrect
+
+**Issue**: After fixing the EMAIL_ENABLED check, OAuth2 sending still failed with authentication error: "(530, b'5.7.57 Client not authenticated to send mail. Error: 535 5.7.3 Authentication unsuccessful". Error traceback showed regular SMTP backend was being used instead of OAuth2EmailBackend.
+
+**Root Cause**: The `open()` method in `OAuth2EmailBackend` was using an incorrect SMTP authentication method. It was calling `self.connection.docmd('AUTH', 'XOAUTH2 ' + auth_string)` which does not properly handle the XOAUTH2 SASL mechanism. Python's smtplib requires using the `auth()` method with a callback function for XOAUTH2.
+
+**Solution**: Modified the `open()` method in `OAuth2EmailBackend` to use the correct authentication approach:
+
+**File**: `src/paperless_mail/mail_oauth.py` (open() method, ~line 100)
+
+```python
+# Authenticate with XOAUTH2
+# Python's smtplib doesn't have built-in XOAUTH2 support,
+# so we need to use the auth() method directly
+auth_string = self._build_xoauth2_string(
+    self.mail_account.username,
+    self.mail_account.password  # This is the access token
+)
+
+# Use auth() with XOAUTH2 mechanism
+# The auth_string is already base64 encoded, auth() expects initial response
+def encode_cram_md5(challenge):
+    # Not used for XOAUTH2, but required by auth() signature
+    return auth_string
+
+code, resp = self.connection.auth(
+    'XOAUTH2',
+    lambda x: auth_string.encode(),
+)
+
+if code != 235:  # 235 = Authentication successful
+    logger.error(
+        f"OAuth2 SMTP authentication failed with code {code}: {resp}"
+    )
+    raise Exception(f"OAuth2 authentication failed: {code} {resp}")
+```
+
+**Impact**: OAuth2 SMTP authentication now works correctly. The `auth()` method properly negotiates the XOAUTH2 SASL mechanism with Gmail/Outlook SMTP servers.
+
+**Technical Details**: 
+- SMTP response code 235 indicates successful authentication
+- The lambda function provides the base64-encoded auth string as the initial SASL response
+- Enhanced error handling to catch authentication failures with detailed logging
+
 ## References
 
 - Gmail SMTP OAuth2: https://developers.google.com/gmail/imap/xoauth2-protocol

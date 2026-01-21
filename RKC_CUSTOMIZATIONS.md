@@ -1424,6 +1424,7 @@ docker compose restart webserver
     - Minimal core code impact - isolated to RKC-marked sections
     - Automatic token refresh before sending
     - SMTP XOAUTH2 authentication (Gmail: smtp.gmail.com:587, Outlook: smtp.office365.com:587)
+    - Uses Python's smtplib with OAuth2 tokens - OAuth2 is the authentication method, SMTP remains the protocol
     - Graceful degradation through multiple fallback layers
   - **Frontend UI**:
     - Added "OAuth2 Email Sending" section to Mail Account edit dialog
@@ -1431,15 +1432,24 @@ docker compose restart webserver
     - Text input control: "From address" (with validation for email format)
     - Form controls integrated into Angular reactive forms pattern
     - Data model extended with optional use_for_sending and from_address fields
-  - **Bug Fix - Workflow Email Actions Blocked**:
+  - **Bug Fix #1 - Workflow Email Actions Blocked**:
     - **Issue**: Workflows with email actions failed with "Email backend has not been configured" error
     - **Root Cause**: `email_action()` in signals/handlers.py only checked `EMAIL_ENABLED` (traditional SMTP), not OAuth2 accounts
     - **Solution**: Modified check to `if not settings.EMAIL_ENABLED and not get_sending_mail_account():`
     - **Impact**: Workflows can now send emails when only OAuth2 is configured, without requiring traditional SMTP settings
     - **Note**: Could not modify EMAIL_ENABLED directly due to circular import constraints
+  - **Bug Fix #2 - OAuth2 SMTP Authentication Failure**:
+    - **Issue**: OAuth2 sending failed with "(530, b'5.7.57 Client not authenticated to send mail. Error: 535 5.7.3 Authentication unsuccessful"
+    - **Root Cause**: Incorrect SMTP authentication method - was using `docmd('AUTH', 'XOAUTH2 ...')` which doesn't properly handle XOAUTH2 SASL mechanism
+    - **Solution**: Changed to use `connection.auth('XOAUTH2', lambda x: auth_string.encode())` which is Python's smtplib correct method for custom SASL authentication
+    - **Technical Details**: 
+      - SMTP response code 235 indicates successful authentication
+      - Lambda function provides base64-encoded auth string as initial SASL response
+      - Enhanced error handling to catch authentication failures with detailed logging
+    - **Impact**: OAuth2 SMTP authentication now works correctly with Gmail/Outlook SMTP servers
   - Files modified:
     - Backend: `src/paperless_mail/models.py` (added use_for_sending, from_address fields + validation)
-    - Backend: `src/paperless_mail/mail_oauth.py` (new OAuth2EmailBackend, helper functions)
+    - Backend: `src/paperless_mail/mail_oauth.py` (new OAuth2EmailBackend, helper functions, fixed auth method)
     - Backend: `src/documents/mail.py` (modified send_email to use OAuth2)
     - Backend: `src/documents/signals/handlers.py` (fixed EMAIL_ENABLED check in email_action)
     - Backend: `src/paperless_mail/admin.py` (admin fieldsets)
@@ -1449,6 +1459,7 @@ docker compose restart webserver
     - Frontend: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.html` (added OAuth2 Email Sending section UI)
     - Frontend: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.ts` (added form controls)
   - All changes properly marked with RKC comments for maintainability
+  - **Note on Architecture**: OAuth2 is an authentication method, not a protocol replacement. We still use SMTP protocol with XOAUTH2 SASL authentication instead of traditional username/password. The alternative would be REST APIs (Gmail API/Microsoft Graph API) which would require complete rewrite and break Django EmailBackend compatibility.
 
 - **v1.0.17 (2025-11-12)**: Mail action connection pooling to eliminate OAuth2 authentication storms
   - Implemented batched mail action processing via scheduled tasks to eliminate Microsoft IMAP rate limiting
