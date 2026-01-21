@@ -66,6 +66,13 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
         """
         if self.connection:
             return False
+        
+        # RKC: Enhanced logging for troubleshooting
+        logger.info(f"[OAuth2 SMTP] Opening connection for account: {self.mail_account.name}")
+        logger.info(f"[OAuth2 SMTP] Username (auth identity): {self.mail_account.username}")
+        logger.info(f"[OAuth2 SMTP] SMTP Server: {self.host}:{self.port}")
+        logger.info(f"[OAuth2 SMTP] Use TLS: {self.use_tls}")
+        # /end RKC edit
             
         # Refresh token if needed
         oauth_manager = PaperlessMailOAuth2Manager()
@@ -77,6 +84,12 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
         
         # Reload account to get fresh token
         self.mail_account.refresh_from_db()
+        
+        # RKC: Log token info (without exposing the actual token)
+        token_preview = self.mail_account.password[:20] + "..." if self.mail_account.password else "MISSING"
+        logger.info(f"[OAuth2 SMTP] Access token preview: {token_preview}")
+        logger.info(f"[OAuth2 SMTP] Token length: {len(self.mail_account.password) if self.mail_account.password else 0} chars")
+        # /end RKC edit
         
         try:
             if self.use_ssl:
