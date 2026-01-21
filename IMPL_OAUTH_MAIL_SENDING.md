@@ -641,6 +641,36 @@ Test with actual OAuth2 accounts (manual):
 - [ ] Sent mail folder syncing
 - [ ] Send quota monitoring/warnings
 
+## Bug Fixes
+
+### Workflow Email Actions Blocked by EMAIL_ENABLED Check
+
+**Issue**: After implementing OAuth2 sending, workflows with email actions failed with error: "Email backend has not been configured, cannot send email notifications"
+
+**Root Cause**: The `email_action()` function in `src/documents/signals/handlers.py` checks `settings.EMAIL_ENABLED` before attempting to send emails. This setting only validates traditional SMTP configuration (EMAIL_HOST and EMAIL_HOST_USER), not OAuth2 accounts. When only OAuth2 sending is configured without SMTP, EMAIL_ENABLED returns False, blocking the email action.
+
+**Solution**: Modified the EMAIL_ENABLED check in `email_action()` to also check for OAuth2 sending accounts:
+
+**File**: `src/documents/signals/handlers.py` (line ~1345)
+
+```python
+def email_action():
+    # RKC: Check for OAuth2 sending OR traditional SMTP (v1.0.18)
+    from paperless_mail.mail_oauth import get_sending_mail_account
+    
+    if not settings.EMAIL_ENABLED and not get_sending_mail_account():
+        logger.error(
+            "Email backend has not been configured, cannot send email notifications",
+            extra={"group": logging_group},
+        )
+        return
+    # /end RKC edit
+```
+
+**Impact**: Workflows can now send emails when only OAuth2 is configured, without requiring traditional SMTP settings.
+
+**Note**: Could not modify EMAIL_ENABLED directly in settings.py due to circular import issues (paperless_mail imports settings, so settings cannot import from paperless_mail).
+
 ## References
 
 - Gmail SMTP OAuth2: https://developers.google.com/gmail/imap/xoauth2-protocol

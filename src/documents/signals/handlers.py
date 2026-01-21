@@ -1120,12 +1120,16 @@ def run_workflows(
                     overrides.custom_fields.pop(field.pk, None)
 
     def email_action():
-        if not settings.EMAIL_ENABLED:
+        # RKC: Check for OAuth2 sending OR traditional SMTP (v1.0.18)
+        from paperless_mail.mail_oauth import get_sending_mail_account
+        
+        if not settings.EMAIL_ENABLED and not get_sending_mail_account():
             logger.error(
                 "Email backend has not been configured, cannot send email notifications",
                 extra={"group": logging_group},
             )
             return
+        # /end RKC edit
 
         if not use_overrides:
             title = document.title

@@ -1431,10 +1431,17 @@ docker compose restart webserver
     - Text input control: "From address" (with validation for email format)
     - Form controls integrated into Angular reactive forms pattern
     - Data model extended with optional use_for_sending and from_address fields
+  - **Bug Fix - Workflow Email Actions Blocked**:
+    - **Issue**: Workflows with email actions failed with "Email backend has not been configured" error
+    - **Root Cause**: `email_action()` in signals/handlers.py only checked `EMAIL_ENABLED` (traditional SMTP), not OAuth2 accounts
+    - **Solution**: Modified check to `if not settings.EMAIL_ENABLED and not get_sending_mail_account():`
+    - **Impact**: Workflows can now send emails when only OAuth2 is configured, without requiring traditional SMTP settings
+    - **Note**: Could not modify EMAIL_ENABLED directly due to circular import constraints
   - Files modified:
     - Backend: `src/paperless_mail/models.py` (added use_for_sending, from_address fields + validation)
     - Backend: `src/paperless_mail/mail_oauth.py` (new OAuth2EmailBackend, helper functions)
     - Backend: `src/documents/mail.py` (modified send_email to use OAuth2)
+    - Backend: `src/documents/signals/handlers.py` (fixed EMAIL_ENABLED check in email_action)
     - Backend: `src/paperless_mail/admin.py` (admin fieldsets)
     - Backend: `src/paperless_mail/serialisers.py` (API serializers)
     - Migration: `src/paperless_mail/migrations/0030_add_oauth_sending_fields.py`
