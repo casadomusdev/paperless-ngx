@@ -56,16 +56,19 @@ class PaperlessMailOAuth2Manager:
         )
 
     def get_outlook_authorization_url(self) -> str:
+        # RKC: Added SMTP.Send scope for OAuth2 email sending support (v1.0.18)
         return asyncio.run(
             self.outlook_client.get_authorization_url(
                 redirect_uri=self.oauth_callback_url,
                 scope=[
                     "offline_access",
                     "https://outlook.office.com/IMAP.AccessAsUser.All",
+                    "https://outlook.office.com/SMTP.Send",  # RKC: Required for SMTP sending
                 ],
                 state=self.state,
             ),
         )
+        # /end RKC edit
 
     def get_gmail_access_token(self, code: str) -> OAuth2Token:
         return asyncio.run(

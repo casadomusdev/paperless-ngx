@@ -107,13 +107,9 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
             
             # Use auth() with XOAUTH2 mechanism
             # The auth_string is already base64 encoded, auth() expects initial response
-            def encode_cram_md5(challenge):
-                # Not used for XOAUTH2, but required by auth() signature
-                return auth_string
-            
             code, resp = self.connection.auth(
                 'XOAUTH2',
-                lambda x: auth_string.encode(),
+                lambda: auth_string.encode(),
             )
             
             if code != 235:  # 235 = Authentication successful

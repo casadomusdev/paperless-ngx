@@ -1441,12 +1441,21 @@ docker compose restart webserver
   - **Bug Fix #2 - OAuth2 SMTP Authentication Failure**:
     - **Issue**: OAuth2 sending failed with "(530, b'5.7.57 Client not authenticated to send mail. Error: 535 5.7.3 Authentication unsuccessful"
     - **Root Cause**: Incorrect SMTP authentication method - was using `docmd('AUTH', 'XOAUTH2 ...')` which doesn't properly handle XOAUTH2 SASL mechanism
-    - **Solution**: Changed to use `connection.auth('XOAUTH2', lambda x: auth_string.encode())` which is Python's smtplib correct method for custom SASL authentication
+    - **Solution**: Changed to use `connection.auth('XOAUTH2', lambda: auth_string.encode())` which is Python's smtplib correct method for custom SASL authentication
     - **Technical Details**: 
       - SMTP response code 235 indicates successful authentication
       - Lambda function provides base64-encoded auth string as initial SASL response
       - Enhanced error handling to catch authentication failures with detailed logging
     - **Impact**: OAuth2 SMTP authentication now works correctly with Gmail/Outlook SMTP servers
+  - **Bug Fix #3 - Lambda Function Signature Error**:
+    - **Issue**: Email sending failed with "OAuth2EmailBackend.open.<locals>.<lambda>() missing 1 required positional argument: 'x'"
+    - **Root Cause**: Lambda function defined as `lambda x: auth_string.encode()` but Python's smtplib `auth()` method calls authobject with NO arguments for XOAUTH2 mechanism
+    - **Solution**: Fixed lambda signature from `lambda x:` to `lambda:` (removed unused parameter)
+    - **Technical Details**:
+      - XOAUTH2 mechanism supports initial client response
+      - smtplib calls authobject() with zero arguments in this case
+      - Lambda was expecting one parameter but smtplib provided none
+    - **Impact**: OAuth2 email sending now works correctly without signature mismatch errors
   - Files modified:
     - Backend: `src/paperless_mail/models.py` (added use_for_sending, from_address fields + validation)
     - Backend: `src/paperless_mail/mail_oauth.py` (new OAuth2EmailBackend, helper functions, fixed auth method)

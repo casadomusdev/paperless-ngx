@@ -631,7 +631,57 @@ Test with actual OAuth2 accounts (manual):
 1. **Token Security**: Access/refresh tokens stored encrypted in database (existing security)
 2. **Token Refresh**: Automatic refresh prevents expired token errors
 3. **Fallback Safety**: If OAuth2 fails, system falls back to SMTP (no email disruption)
-4. **Scope Minimal**: Uses same OAuth2 scopes as mail retrieval (no new permissions needed)
+4. **Scope Minimal**: Reuses existing OAuth2 infrastructure with minimal additional permissions
+
+## OAuth2 Scopes and Permissions
+
+### Gmail Accounts
+
+**Scope Required**: `https://mail.google.com/`
+
+This scope covers **both** IMAP reading AND SMTP sending. No additional permissions needed!
+
+**No action required** if you already have Gmail OAuth2 accounts configured - they automatically have SMTP sending permission.
+
+### Outlook/Microsoft 365 Accounts
+
+**Scopes Required**:
+- `offline_access` - For token refresh
+- `https://outlook.office.com/IMAP.AccessAsUser.All` - For IMAP mail reading
+- `https://outlook.office.com/SMTP.Send` - **NEW** - For SMTP mail sending
+
+### IMPORTANT: Existing Outlook Accounts Must Re-Authorize
+
+If you have existing Outlook OAuth2 accounts configured for mail retrieval, they **will not have** the `SMTP.Send` permission.
+
+**To enable sending on existing accounts:**
+
+1. Go to Settings > Mail > Mail Accounts
+2. Find your existing Outlook OAuth2 account
+3. Click "Remove OAuth2 Authorization"
+4. Click "Enable OAuth2 Mail"
+5. Complete the OAuth2 flow again
+6. The new authorization will include SMTP.Send scope
+7. Enable "Use for sending" checkbox
+8. Set "From address" if needed
+9. Save
+
+**Why re-authorization is needed**: OAuth2 scopes are granted during the authorization flow. Adding a new scope (SMTP.Send) requires user consent, which means going through the OAuth2 flow again.
+
+### Azure AD App Registration (Microsoft 365)
+
+If you're using Azure AD with delegated permissions, ensure your app registration includes:
+
+**API Permissions**:
+- Microsoft Graph or Office 365 Exchange Online
+  - `IMAP.AccessAsUser.All` (Delegated)
+  - `SMTP.Send` (Delegated)
+
+Admin consent may be required depending on your tenant settings.
+
+### Google Cloud Console (Gmail)
+
+No additional configuration needed - the `https://mail.google.com/` scope is already configured and covers both read and send operations.
 
 ## Future Enhancements (Out of Scope)
 
@@ -714,6 +764,33 @@ if code != 235:  # 235 = Authentication successful
 - SMTP response code 235 indicates successful authentication
 - The lambda function provides the base64-encoded auth string as the initial SASL response
 - Enhanced error handling to catch authentication failures with detailed logging
+
+### Lambda Function Signature Mismatch
+
+**Issue**: After fixing the authentication method, email sending still failed with error: "OAuth2EmailBackend.open.<locals>.<lambda>() missing 1 required positional argument: 'x'"
+
+**Root Cause**: The lambda function in the `open()` method was defined as `lambda x: auth_string.encode()` but Python's smtplib `auth()` method calls the authobject with **no arguments** for mechanisms that support initial client response (like XOAUTH2).
+
+**Solution**: Fixed the lambda signature to accept no parameters:
+
+**File**: `src/paperless_mail/mail_oauth.py` (open() method, ~line 114)
+
+```python
+# Use auth() with XOAUTH2 mechanism
+# The auth_string is already base64 encoded, auth() expects initial response
+code, resp = self.connection.auth(
+    'XOAUTH2',
+    lambda: auth_string.encode(),  # Fixed: removed unused 'x' parameter
+)
+```
+
+**Impact**: OAuth2 email sending now works correctly without signature mismatch errors. The lambda is called with zero arguments as expected by smtplib for XOAUTH2.
+
+**Technical Details**:
+- XOAUTH2 mechanism supports initial client response
+- smtplib calls `authobject()` with zero arguments in this case
+- The previous lambda was expecting one parameter but smtplib provided none
+- Simple fix: change from `lambda x:` to `lambda:`
 
 ## References
 
