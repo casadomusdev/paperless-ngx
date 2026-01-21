@@ -68,6 +68,10 @@ export class MailAccountEditDialogComponent extends EditDialogComponent<MailAcco
       password: new FormControl(null),
       is_token: new FormControl(false),
       character_set: new FormControl('UTF-8'),
+      // RKC: OAuth2 email sending support (v1.0.18)
+      use_for_sending: new FormControl(false),
+      from_address: new FormControl(null),
+      // /end RKC edit
     })
   }
 

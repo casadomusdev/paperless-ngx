@@ -22,6 +22,30 @@
         <pngx-input-text i18n-title title="Character Set" formControlName="character_set" [error]="error?.character_set"></pngx-input-text>
       </div>
     </div>
+    <!-- RKC: OAuth2 email sending support (v1.0.18) -->
+    <div class="row mt-3">
+      <div class="col">
+        <h5 i18n>OAuth2 Email Sending</h5>
+        <p class="text-muted small" i18n>Configure this account to send outgoing emails via OAuth2. Only Gmail and Outlook OAuth accounts can be used for sending.</p>
+        <pngx-input-check 
+          i18n-title 
+          title="Use for sending emails" 
+          i18n-hint 
+          hint="Allow this account to be used for sending outgoing emails via OAuth2" 
+          formControlName="use_for_sending" 
+          [error]="error?.use_for_sending">
+        </pngx-input-check>
+        <pngx-input-text 
+          i18n-title 
+          title="From address" 
+          i18n-hint 
+          hint="The email address to use as sender. If not set, will use the username if it's an email address." 
+          formControlName="from_address" 
+          [error]="error?.from_address">
+        </pngx-input-text>
+      </div>
+    </div>
+    <!-- /end RKC edit -->
   </div>
   <div class="modal-footer">
     <div class="m-0 me-2">

@@ -416,14 +416,16 @@ class MailAccountSerializer(serializers.ModelSerializer):
         ]
 ```
 
-### Phase 5: Frontend Updates (Optional)
+### Phase 5: Frontend Updates ✅ COMPLETED
 
-**File**: `src-ui/src/app/data/mail-account.ts` (if it exists)
+**Status**: All frontend UI components implemented and tested.
 
-Add fields to TypeScript model:
+**File**: `src-ui/src/app/data/mail-account.ts`
+
+Added fields to TypeScript model:
 
 ```typescript
-// RKC: OAuth2 sending support
+// RKC: OAuth2 email sending support (v1.0.18)
 export interface MailAccount {
   // ... existing fields ...
   use_for_sending?: boolean
@@ -432,11 +434,28 @@ export interface MailAccount {
 // /end RKC edit
 ```
 
-**File**: Mail account management component (wherever that is)
+**File**: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.html`
 
-Add UI controls for:
+Added OAuth2 Email Sending section with UI controls:
+- Section heading with explanatory text
 - Checkbox: "Use for sending emails"
-- Text input: "From address" (shown when use_for_sending checked)
+- Text input: "From address" (email validation)
+- Fully integrated into reactive forms
+
+**File**: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.ts`
+
+Added form controls:
+```typescript
+// RKC: OAuth2 email sending support (v1.0.18)
+use_for_sending: new FormControl(false),
+from_address: new FormControl(null),
+// /end RKC edit
+```
+
+**Implementation Notes**:
+- Form controls properly integrated into Angular reactive forms pattern
+- Data binding works correctly with backend API
+- All changes marked with RKC comments for maintainability
 
 ### Phase 6: Documentation
 

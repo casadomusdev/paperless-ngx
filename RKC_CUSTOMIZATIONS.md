@@ -1425,6 +1425,12 @@ docker compose restart webserver
     - Automatic token refresh before sending
     - SMTP XOAUTH2 authentication (Gmail: smtp.gmail.com:587, Outlook: smtp.office365.com:587)
     - Graceful degradation through multiple fallback layers
+  - **Frontend UI**:
+    - Added "OAuth2 Email Sending" section to Mail Account edit dialog
+    - Checkbox control: "Use for sending emails"
+    - Text input control: "From address" (with validation for email format)
+    - Form controls integrated into Angular reactive forms pattern
+    - Data model extended with optional use_for_sending and from_address fields
   - Files modified:
     - Backend: `src/paperless_mail/models.py` (added use_for_sending, from_address fields + validation)
     - Backend: `src/paperless_mail/mail_oauth.py` (new OAuth2EmailBackend, helper functions)
@@ -1432,6 +1438,9 @@ docker compose restart webserver
     - Backend: `src/paperless_mail/admin.py` (admin fieldsets)
     - Backend: `src/paperless_mail/serialisers.py` (API serializers)
     - Migration: `src/paperless_mail/migrations/0030_add_oauth_sending_fields.py`
+    - Frontend: `src-ui/src/app/data/mail-account.ts` (added use_for_sending, from_address fields to interface)
+    - Frontend: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.html` (added OAuth2 Email Sending section UI)
+    - Frontend: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.ts` (added form controls)
   - All changes properly marked with RKC comments for maintainability
 
 - **v1.0.17 (2025-11-12)**: Mail action connection pooling to eliminate OAuth2 authentication storms

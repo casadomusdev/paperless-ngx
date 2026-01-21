@@ -32,4 +32,10 @@ export interface MailAccount extends ObjectWithPermissions {
   account_type: MailAccountType
 
   expiration?: string // Date
+
+  // RKC: OAuth2 email sending support (v1.0.18)
+  use_for_sending?: boolean
+
+  from_address?: string
+  // /end RKC edit
 }
