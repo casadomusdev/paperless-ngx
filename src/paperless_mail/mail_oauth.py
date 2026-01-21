@@ -106,10 +106,11 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
             )
             
             # Use auth() with XOAUTH2 mechanism
-            # The auth_string is already base64 encoded, auth() expects initial response
+            # The auth_string is already base64 encoded, return it directly
+            # smtplib will encode it to bytes internally
             code, resp = self.connection.auth(
                 'XOAUTH2',
-                lambda: auth_string.encode(),
+                lambda: auth_string,
             )
             
             if code != 235:  # 235 = Authentication successful
