@@ -1,6 +1,7 @@
 """
-RKC: OAuth2 SMTP Email Backend (v1.0.18)
-Extends Django's SMTP backend to support OAuth2 authentication via XOAUTH2 SASL.
+RKC: Mail Account SMTP Email Backend (v1.1.0)
+Extends Django's SMTP backend to support both OAuth2 XOAUTH2 and traditional SMTP authentication.
+Replaces the OAuth2-only implementation from v1.0.18.
 """
 import base64
 import logging
@@ -15,98 +16,122 @@ from paperless_mail.oauth import PaperlessMailOAuth2Manager
 logger = logging.getLogger("paperless_mail")
 
 
-class OAuth2EmailBackend(DjangoSMTPBackend):
+class MailAccountEmailBackend(DjangoSMTPBackend):
     """
-    SMTP email backend that uses OAuth2 XOAUTH2 authentication.
+    SMTP email backend that uses MailAccount configuration.
+    Supports both OAuth2 XOAUTH2 and traditional password authentication.
     
-    Automatically refreshes tokens if expired before sending.
-    Falls back to regular auth if OAuth2 fails.
+    Automatically refreshes OAuth2 tokens if expired before sending.
     """
     
     def __init__(self, mail_account: MailAccount, **kwargs):
         """
-        Initialize with a MailAccount that has OAuth2 credentials.
+        Initialize with a MailAccount for SMTP configuration.
         
         Args:
-            mail_account: MailAccount instance with OAuth2 tokens
+            mail_account: MailAccount instance with SMTP settings
             **kwargs: Additional backend parameters
         """
         self.mail_account = mail_account
         
-        # Determine SMTP server based on account type
-        if mail_account.account_type == MailAccount.MailAccountType.GMAIL_OAUTH:
-            host = 'smtp.gmail.com'
-            port = 587
-            use_tls = True
-        elif mail_account.account_type == MailAccount.MailAccountType.OUTLOOK_OAUTH:
-            host = 'smtp.office365.com'
-            port = 587
-            use_tls = True
-        else:
-            # Fallback to account settings
-            host = mail_account.imap_server.replace('imap', 'smtp')
-            port = 587
-            use_tls = True
+        # Use configured SMTP settings or defaults
+        host = mail_account.smtp_server or self._get_default_smtp_server()
+        port = mail_account.smtp_port or self._get_default_smtp_port()
         
-        # Initialize parent with OAuth2 account settings
+        # Determine SSL/TLS settings
+        security = mail_account.smtp_security or self._get_default_smtp_security()
+        use_ssl = (security == 'SSL')
+        use_tls = (security == 'STARTTLS')
+        
+        # For OAuth accounts, we don't use password in the traditional sense
+        # For traditional accounts, use smtp_password or fall back to main password
+        if self._is_oauth_account():
+            password = None  # OAuth2 uses tokens, not passwords
+            username = mail_account.username
+        else:
+            password = mail_account.smtp_password or mail_account.password
+            username = mail_account.smtp_username or mail_account.username
+        
+        # Initialize parent with account settings
         super().__init__(
             host=host,
             port=port,
-            username=mail_account.username,
-            password=None,  # We'll use OAuth2 instead
+            username=username,
+            password=password,
+            use_ssl=use_ssl,
             use_tls=use_tls,
             fail_silently=kwargs.get('fail_silently', False),
             **kwargs
         )
+    
+    def _is_oauth_account(self) -> bool:
+        """Check if this is an OAuth account"""
+        return self.mail_account.account_type in [
+            MailAccount.MailAccountType.GMAIL_OAUTH,
+            MailAccount.MailAccountType.OUTLOOK_OAUTH,
+        ]
+    
+    def _get_default_smtp_server(self) -> str:
+        """Get default SMTP server based on account type"""
+        if self.mail_account.account_type == MailAccount.MailAccountType.GMAIL_OAUTH:
+            return 'smtp.gmail.com'
+        elif self.mail_account.account_type == MailAccount.MailAccountType.OUTLOOK_OAUTH:
+            return 'smtp.office365.com'
+        else:
+            # Try to derive from IMAP server
+            return self.mail_account.imap_server.replace('imap', 'smtp')
+    
+    def _get_default_smtp_port(self) -> int:
+        """Get default SMTP port based on security setting"""
+        security = self.mail_account.smtp_security
+        if security == 'SSL':
+            return 465
+        elif security == 'STARTTLS' or security is None:
+            return 587
+        else:  # NONE
+            return 25
+    
+    def _get_default_smtp_security(self) -> str:
+        """Get default SMTP security protocol"""
+        return 'STARTTLS'  # Most common default
         
     def open(self):
         """
-        Open connection with OAuth2 authentication.
-        Refreshes token if expired before connecting.
+        Open SMTP connection with authentication.
+        For OAuth2 accounts: Refreshes token and uses XOAUTH2.
+        For traditional accounts: Uses standard username/password.
         """
         if self.connection:
             return False
         
-        # RKC: Enhanced logging for troubleshooting
-        logger.info(f"[OAuth2 SMTP] Opening connection for account: {self.mail_account.name}")
-        logger.info(f"[OAuth2 SMTP] Username (auth identity): {self.mail_account.username}")
-        logger.info(f"[OAuth2 SMTP] SMTP Server: {self.host}:{self.port}")
-        logger.info(f"[OAuth2 SMTP] Use TLS: {self.use_tls}")
-        # /end RKC edit
+        # Check if this is an OAuth account
+        if self._is_oauth_account():
+            return self._open_oauth()
+        else:
+            return self._open_traditional()
+    
+    def _open_oauth(self):
+        """Open connection with OAuth2 XOAUTH2 authentication"""
+        logger.info(f"[SMTP] Opening OAuth2 connection for account: {self.mail_account.name}")
+        logger.debug(f"[SMTP] Username: {self.username}")
+        logger.debug(f"[SMTP] Server: {self.host}:{self.port}")
+        logger.debug(f"[SMTP] Security: {'SSL' if self.use_ssl else 'STARTTLS' if self.use_tls else 'NONE'}")
             
         # Refresh token if needed
         oauth_manager = PaperlessMailOAuth2Manager()
         if not oauth_manager.refresh_account_oauth_token(self.mail_account):
-            logger.error(
-                f"Failed to refresh OAuth2 token for {self.mail_account.name}"
-            )
+            logger.error(f"Failed to refresh OAuth2 token for {self.mail_account.name}")
             raise Exception("OAuth2 token refresh failed")
         
         # Reload account to get fresh token
         self.mail_account.refresh_from_db()
         
-        # RKC: Log token info (without exposing the actual token)
-        token_preview = self.mail_account.password if self.mail_account.password else "MISSING"
-        logger.info(f"[OAuth2 SMTP] Access token preview: {token_preview}")
-        logger.info(f"[OAuth2 SMTP] Token length: {len(self.mail_account.password) if self.mail_account.password else 0} chars")
-        # RKC: Verify XOAUTH2 string format
-        test_xoauth = self._build_xoauth2_string(self.mail_account.username, "TEST_TOKEN")
-        logger.info(f"[OAuth2 SMTP] XOAUTH2 format test: {test_xoauth[:100]}...")
-        # /end RKC edit
-        
         try:
+            # Establish connection
             if self.use_ssl:
-                self.connection = SMTP_SSL(
-                    self.host, 
-                    self.port, 
-                    timeout=self.timeout
-                )
+                self.connection = SMTP_SSL(self.host, self.port, timeout=self.timeout)
             else:
-                self.connection = SMTP(
-                    self.host, 
-                    self.port, 
-                    timeout=self.timeout
-                )
+                self.connection = SMTP(self.host, self.port, timeout=self.timeout)
                 
             if self.use_tls:
                 self.connection.ehlo()
@@ -114,40 +139,19 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
                 self.connection.ehlo()
             
             # Authenticate with XOAUTH2
-            # Python's smtplib doesn't have built-in XOAUTH2 support,
-            # so we need to use the auth() method directly
             auth_string = self._build_xoauth2_string(
                 self.mail_account.username,
                 self.mail_account.password  # This is the access token
             )
             
-            # Use auth() with XOAUTH2 mechanism
-            # The auth_string is already base64 encoded, return it directly
-            # smtplib will encode it to bytes internally
-            
-            # RKC: Enable SMTP debug output to see full protocol exchange
-            self.connection.set_debuglevel(2)
-            logger.info(f"[OAuth2 SMTP] Attempting XOAUTH2 authentication")
-            logger.info(f"[OAuth2 SMTP] Auth string length: {len(auth_string)} chars")
-            # /end RKC edit
-            
-            code, resp = self.connection.auth(
-                'XOAUTH2',
-                lambda: auth_string,
-            )
-            
-            # RKC: Disable debug output after auth
-            self.connection.set_debuglevel(0)
-            # /end RKC edit
+            logger.debug(f"[SMTP] Attempting XOAUTH2 authentication")
+            code, resp = self.connection.auth('XOAUTH2', lambda: auth_string)
             
             if code != 235:  # 235 = Authentication successful
-                logger.error(
-                    f"OAuth2 SMTP authentication failed with code {code}: {resp}"
-                )
-                logger.error(f"[OAuth2 SMTP] Response details: {resp}")
+                logger.error(f"OAuth2 SMTP authentication failed with code {code}: {resp}")
                 raise Exception(f"OAuth2 authentication failed: {code} {resp}")
             
-            logger.debug(f"OAuth2 SMTP connection established for {self.mail_account.name}")
+            logger.info(f"OAuth2 SMTP connection established for {self.mail_account.name}")
             return True
             
         except Exception as e:
@@ -158,6 +162,23 @@ class OAuth2EmailBackend(DjangoSMTPBackend):
                 except:
                     pass
                 self.connection = None
+            raise
+    
+    def _open_traditional(self):
+        """Open connection with traditional username/password authentication"""
+        logger.info(f"[SMTP] Opening traditional connection for account: {self.mail_account.name}")
+        logger.debug(f"[SMTP] Username: {self.username}")
+        logger.debug(f"[SMTP] Server: {self.host}:{self.port}")
+        logger.debug(f"[SMTP] Security: {'SSL' if self.use_ssl else 'STARTTLS' if self.use_tls else 'NONE'}")
+        
+        # Use Django's default SMTP backend open() method for traditional auth
+        try:
+            result = super().open()
+            if result:
+                logger.info(f"Traditional SMTP connection established for {self.mail_account.name}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to establish traditional SMTP connection: {e}")
             raise
     
     def _build_xoauth2_string(self, username: str, access_token: str) -> str:
@@ -175,15 +196,10 @@ def get_sending_mail_account() -> MailAccount | None:
     Get the default mail account configured for sending.
     
     Returns:
-        MailAccount with use_for_sending=True, or None if not configured
+        MailAccount with use_for_sending=True (any type), or None if not configured
     """
-    return MailAccount.objects.filter(
-        use_for_sending=True,
-        account_type__in=[
-            MailAccount.MailAccountType.GMAIL_OAUTH,
-            MailAccount.MailAccountType.OUTLOOK_OAUTH,
-        ]
-    ).first()
+    # RKC: v1.1.0 - Now supports ALL account types, not just OAuth
+    return MailAccount.objects.filter(use_for_sending=True).first()
 
 
 def get_from_address(mail_account: MailAccount) -> str:

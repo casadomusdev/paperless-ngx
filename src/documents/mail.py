@@ -8,12 +8,13 @@ from django.conf import settings
 from django.core.mail import EmailMessage
 from filelock import FileLock
 
-# RKC: Import OAuth2 email backend support (v1.0.18)
+# RKC: Import mail account email backend support (v1.1.0)
+# Supports both OAuth2 and traditional SMTP authentication
 import logging
 from paperless_mail.mail_oauth import (
     get_sending_mail_account,
     get_from_address,
-    OAuth2EmailBackend,
+    MailAccountEmailBackend,
 )
 
 logger = logging.getLogger("paperless_mail")
@@ -36,8 +37,9 @@ def send_email(
     """
     Send an email with attachments.
 
-    RKC: Enhanced to support OAuth2 SMTP authentication if configured (v1.0.18).
-    Falls back to regular SMTP if no OAuth2 account is available.
+    RKC: Enhanced to support mail account SMTP authentication (v1.1.0).
+    Supports both OAuth2 XOAUTH2 and traditional password authentication.
+    Falls back to regular SMTP if no mail account is configured.
 
     Args:
         subject: Email subject
@@ -50,13 +52,13 @@ def send_email(
 
     TODO: re-evaluate this pending https://code.djangoproject.com/ticket/35581 / https://github.com/django/django/pull/18966
     """
-    # RKC: Check for OAuth2 sending account (v1.0.18)
-    oauth_account = get_sending_mail_account()
+    # RKC: Check for configured sending account (v1.1.0)
+    mail_account = get_sending_mail_account()
     
-    if oauth_account:
-        # Use OAuth2 backend
-        logger.debug(f"Using OAuth2 account {oauth_account.name} for sending email")
-        from_email = get_from_address(oauth_account)
+    if mail_account:
+        # Use mail account backend (supports both OAuth2 and traditional SMTP)
+        logger.debug(f"Using mail account '{mail_account.name}' for sending email")
+        from_email = get_from_address(mail_account)
         
         email = EmailMessage(
             subject=subject,
@@ -65,11 +67,11 @@ def send_email(
             to=to,
         )
         
-        # Set the OAuth2 backend
-        email.connection = OAuth2EmailBackend(oauth_account)
+        # Set the mail account backend
+        email.connection = MailAccountEmailBackend(mail_account)
     else:
-        # Use regular SMTP (original behavior)
-        logger.debug("Using regular SMTP for sending email")
+        # Use regular SMTP from environment variables (original behavior)
+        logger.debug("Using environment variable SMTP configuration for sending email")
         email = EmailMessage(
             subject=subject,
             body=body,

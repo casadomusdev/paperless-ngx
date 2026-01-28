@@ -80,12 +80,14 @@ class MailAccount(document_models.ModelWithOwner):
         ),
     )
 
-    # RKC: OAuth2 email sending support - allow mail accounts to send emails (v1.0.18)
+    # RKC: SMTP email sending support - allow mail accounts to send emails (v1.1.0)
+    # Supports both OAuth2 XOAUTH2 and traditional SMTP authentication
     use_for_sending = models.BooleanField(
         _("use for sending"),
         default=False,
         help_text=_(
-            "Allow this account to be used for sending outgoing emails via OAuth2."
+            "Allow this account to be used for sending outgoing emails. "
+            "Only one account can be enabled for sending at a time."
         ),
     )
 
@@ -98,27 +100,133 @@ class MailAccount(document_models.ModelWithOwner):
             "If not set, will use the username if it's an email address."
         ),
     )
+
+    # SMTP Server Configuration
+    smtp_server = models.CharField(
+        _("SMTP server"),
+        max_length=256,
+        blank=True,
+        null=True,
+        help_text=_(
+            "SMTP server hostname for sending emails. "
+            "If not set, defaults will be used based on account type."
+        ),
+    )
+
+    smtp_port = models.IntegerField(
+        _("SMTP port"),
+        blank=True,
+        null=True,
+        help_text=_(
+            "SMTP server port. Common values: 587 (STARTTLS), 465 (SSL), 25 (unencrypted)."
+        ),
+    )
+
+    smtp_security = models.CharField(
+        _("SMTP security"),
+        max_length=10,
+        blank=True,
+        null=True,
+        choices=[
+            ('SSL', _('SSL')),
+            ('STARTTLS', _('STARTTLS')),
+            ('NONE', _('None')),
+        ],
+        help_text=_("SMTP security protocol."),
+    )
+
+    # Traditional SMTP Authentication (only for non-OAuth accounts)
+    smtp_username = models.CharField(
+        _("SMTP username"),
+        max_length=256,
+        blank=True,
+        null=True,
+        help_text=_(
+            "SMTP username for traditional authentication. "
+            "Leave blank to use the same username as IMAP."
+        ),
+    )
+
+    smtp_password = models.CharField(
+        _("SMTP password"),
+        max_length=2048,
+        blank=True,
+        null=True,
+        help_text=_(
+            "SMTP password for traditional authentication. "
+            "Only used for non-OAuth accounts."
+        ),
+    )
     # /end RKC edit
 
     def __str__(self):
         return self.name
 
-    # RKC: Validate from_address when use_for_sending is enabled (v1.0.18)
+    # RKC: Validate SMTP configuration when use_for_sending is enabled (v1.1.0)
     def clean(self):
+        from django.core.exceptions import ValidationError
         super().clean()
+        
         if self.use_for_sending:
-            # Check if we have a valid from address
-            from_addr = self.from_address
-            if not from_addr:
-                # Try to use username as from address
-                if '@' not in self.username:
-                    from django.core.exceptions import ValidationError
+            # Validate from_address
+            if not self.from_address and '@' not in self.username:
+                raise ValidationError({
+                    'from_address': _(
+                        'From address is required when "use for sending" is enabled '
+                        'and username is not an email address.'
+                    )
+                })
+            
+            # For non-OAuth accounts, require SMTP credentials
+            if self.account_type == self.MailAccountType.IMAP:
+                if not self.smtp_server:
                     raise ValidationError({
-                        'from_address': _(
-                            'From address is required when "use for sending" is enabled '
-                            'and username is not an email address.'
+                        'smtp_server': _(
+                            'SMTP server is required for traditional IMAP accounts when sending is enabled.'
                         )
                     })
+                if not self.smtp_port:
+                    raise ValidationError({
+                        'smtp_port': _(
+                            'SMTP port is required for traditional IMAP accounts when sending is enabled.'
+                        )
+                    })
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save to enforce 'only one sending account' rule.
+        When use_for_sending is enabled, automatically disable it on all other accounts.
+        """
+        if self.use_for_sending:
+            # Find other accounts with use_for_sending=True
+            other_accounts = MailAccount.objects.filter(
+                use_for_sending=True
+            ).exclude(pk=self.pk)
+            
+            if other_accounts.exists():
+                # Store for API response info
+                previous_account = other_accounts.first()
+                self._sending_account_changed_from = previous_account
+                # Disable sending on all other accounts
+                other_accounts.update(use_for_sending=False)
+        
+        # Set default SMTP configuration if not provided
+        if self.use_for_sending and not self.smtp_server:
+            self._set_default_smtp_config()
+        
+        super().save(*args, **kwargs)
+    
+    def _set_default_smtp_config(self):
+        """Set default SMTP configuration based on account type"""
+        if self.account_type == self.MailAccountType.GMAIL_OAUTH:
+            self.smtp_server = 'smtp.gmail.com'
+            self.smtp_port = 587
+            self.smtp_security = 'STARTTLS'
+        elif self.account_type == self.MailAccountType.OUTLOOK_OAUTH:
+            self.smtp_server = 'smtp.office365.com'
+            self.smtp_port = 587
+            self.smtp_security = 'STARTTLS'
+        # For IMAP accounts, no defaults - user must provide
     # /end RKC edit
 
 

@@ -8,9 +8,18 @@
     </button>
   </div>
   <div class="modal-body">
-    <div class="row">
+    <!-- General Settings -->
+    <div class="row mb-3">
       <div class="col">
         <pngx-input-text i18n-title title="Name" formControlName="name" [error]="error?.name" autocomplete="off"></pngx-input-text>
+      </div>
+    </div>
+
+    <!-- RKC: Receiving Configuration (IMAP) Section (v1.1.0) -->
+    <h5 i18n>Receiving Configuration (IMAP)</h5>
+    <p class="text-muted small" i18n>Configure how this account retrieves emails from the mail server.</p>
+    <div class="row">
+      <div class="col">
         <pngx-input-text i18n-title title="IMAP Server" formControlName="imap_server" [error]="error?.imap_server"></pngx-input-text>
         <pngx-input-text i18n-title title="IMAP Port" formControlName="imap_port" [error]="error?.imap_port"></pngx-input-text>
         <pngx-input-select i18n-title title="IMAP Security" [items]="imapSecurityOptions" formControlName="imap_security"></pngx-input-select>
@@ -22,19 +31,23 @@
         <pngx-input-text i18n-title title="Character Set" formControlName="character_set" [error]="error?.character_set"></pngx-input-text>
       </div>
     </div>
-    <!-- RKC: OAuth2 email sending support (v1.0.18) -->
-    <div class="row mt-3">
-      <div class="col">
-        <h5 i18n>OAuth2 Email Sending</h5>
-        <p class="text-muted small" i18n>Configure this account to send outgoing emails via OAuth2. Only Gmail and Outlook OAuth accounts can be used for sending.</p>
-        <pngx-input-check 
-          i18n-title 
-          title="Use for sending emails" 
-          i18n-hint 
-          hint="Allow this account to be used for sending outgoing emails via OAuth2" 
-          formControlName="use_for_sending" 
-          [error]="error?.use_for_sending">
-        </pngx-input-check>
+
+    <!-- RKC: Sending Configuration (SMTP) Section (v1.1.0) -->
+    <h5 class="mt-4" i18n>Sending Configuration (SMTP)</h5>
+    <p class="text-muted small" i18n>Configure this account to send outgoing emails. Supports both OAuth2 (Gmail, Outlook) and traditional SMTP authentication. Only one account can be used for sending at a time.</p>
+    
+    <pngx-input-check 
+      i18n-title 
+      title="Use for sending emails" 
+      i18n-hint 
+      hint="Enable this account for sending outgoing emails. Only one account can be enabled at a time." 
+      formControlName="use_for_sending"
+      (ngModelChange)="onSendingToggle()"
+      [error]="error?.use_for_sending">
+    </pngx-input-check>
+
+    @if (objectForm.get('use_for_sending')?.value) {
+      <div class="mt-3">
         <pngx-input-text 
           i18n-title 
           title="From address" 
@@ -43,8 +56,73 @@
           formControlName="from_address" 
           [error]="error?.from_address">
         </pngx-input-text>
+
+        <div class="row">
+          <div class="col">
+            <pngx-input-text 
+              i18n-title 
+              title="SMTP Server" 
+              i18n-hint
+              hint="SMTP server hostname. Leave blank to use defaults based on account type."
+              formControlName="smtp_server" 
+              [error]="error?.smtp_server">
+            </pngx-input-text>
+          </div>
+          <div class="col">
+            <pngx-input-text 
+              i18n-title 
+              title="SMTP Port" 
+              i18n-hint
+              hint="SMTP server port. Common: 587 (STARTTLS), 465 (SSL), 25 (unencrypted)."
+              formControlName="smtp_port" 
+              [error]="error?.smtp_port">
+            </pngx-input-text>
+          </div>
+        </div>
+
+        <pngx-input-select 
+          i18n-title 
+          title="SMTP Security" 
+          i18n-hint
+          hint="SMTP security protocol."
+          [items]="smtpSecurityOptions" 
+          formControlName="smtp_security"
+          [error]="error?.smtp_security">
+        </pngx-input-select>
+
+        <!-- Traditional SMTP Authentication (only for non-OAuth accounts) -->
+        @if (isTraditionalAccount) {
+          <div class="mt-3">
+            <h6 i18n>SMTP Authentication</h6>
+            <p class="text-muted small" i18n>For traditional IMAP accounts, provide SMTP credentials. Leave blank to use the same credentials as IMAP.</p>
+            <pngx-input-text 
+              i18n-title 
+              title="SMTP Username" 
+              i18n-hint
+              hint="SMTP username. Leave blank to use the same username as IMAP."
+              formControlName="smtp_username" 
+              [error]="error?.smtp_username">
+            </pngx-input-text>
+            <pngx-input-password 
+              i18n-title 
+              title="SMTP Password" 
+              i18n-hint
+              hint="SMTP password. Leave blank to use the same password as IMAP."
+              formControlName="smtp_password" 
+              [error]="error?.smtp_password">
+            </pngx-input-password>
+          </div>
+        }
+
+        <!-- OAuth2 Info (only for OAuth accounts) -->
+        @if (!isTraditionalAccount) {
+          <div class="alert alert-info mt-3">
+            <i class="fas fa-info-circle me-2"></i>
+            <span i18n>This OAuth account will use XOAUTH2 authentication for SMTP. The SMTP server settings above can be customized if needed, or left blank for automatic configuration.</span>
+          </div>
+        }
       </div>
-    </div>
+    }
     <!-- /end RKC edit -->
   </div>
   <div class="modal-footer">

@@ -23,9 +23,15 @@ class ObfuscatedPasswordField(serializers.CharField):
 
 class MailAccountSerializer(OwnedObjectSerializer):
     password = ObfuscatedPasswordField()
-    # RKC: Add OAuth2 sending fields (v1.0.18)
+    # RKC: SMTP sending fields (v1.1.0) - supports both OAuth2 and traditional SMTP
     use_for_sending = serializers.BooleanField(required=False, default=False)
     from_address = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    smtp_server = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    smtp_port = serializers.IntegerField(required=False, allow_null=True)
+    smtp_security = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    smtp_username = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    smtp_password = ObfuscatedPasswordField(required=False, allow_blank=True, allow_null=True)
+    sending_account_info = serializers.SerializerMethodField()
     # /end RKC edit
 
     class Meta:
@@ -46,18 +52,46 @@ class MailAccountSerializer(OwnedObjectSerializer):
             "set_permissions",
             "account_type",
             "expiration",
-            # RKC: OAuth2 sending fields (v1.0.18)
+            # RKC: SMTP sending fields (v1.1.0)
             "use_for_sending",
             "from_address",
+            "smtp_server",
+            "smtp_port",
+            "smtp_security",
+            "smtp_username",
+            "smtp_password",
+            "sending_account_info",
             # /end RKC edit
         ]
+    
+    # RKC: Return info about sending account changes (v1.1.0)
+    def get_sending_account_info(self, obj):
+        """Return information if this account replaced another as the sending account"""
+        if hasattr(obj, '_sending_account_changed_from'):
+            return {
+                'changed': True,
+                'previous_account': obj._sending_account_changed_from.name,
+                'previous_account_id': obj._sending_account_changed_from.id,
+            }
+        return None
+    # /end RKC edit
 
     def update(self, instance, validated_data):
+        # RKC: Handle obfuscated passwords for both IMAP and SMTP (v1.1.0)
         if (
             "password" in validated_data
             and len(validated_data.get("password").replace("*", "")) == 0
         ):
             validated_data.pop("password")
+        
+        if (
+            "smtp_password" in validated_data
+            and validated_data.get("smtp_password")
+            and len(validated_data.get("smtp_password").replace("*", "")) == 0
+        ):
+            validated_data.pop("smtp_password")
+        # /end RKC edit
+        
         super().update(instance, validated_data)
         return instance
 

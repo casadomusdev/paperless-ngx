@@ -1021,6 +1021,66 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.1.0 (2026-01-28)**: SMTP Email Sending via Mail Accounts
+  - Refactored OAuth2-specific email sending (v1.0.18) into general SMTP sending feature
+  - **Problem**: v1.0.18 only supported OAuth2, had hardcoded SMTP settings, no enforcement of "only one sending account"
+  - **Solution**: 
+    - Extended MailAccount model with comprehensive SMTP configuration fields
+    - Support for both OAuth2 XOAUTH2 and traditional username/password SMTP authentication
+    - Automatic enforcement: only one account can be enabled for sending at a time
+    - Flexible SMTP server configuration for all account types
+    - Clean UI separation between IMAP (receiving) and SMTP (sending)
+    - Environment variables remain as fallback when no mail account configured
+  - **New MailAccount Fields**:
+    - `smtp_server` - SMTP server hostname (optional, uses defaults for Gmail/Outlook OAuth)
+    - `smtp_port` - SMTP port (587 for STARTTLS, 465 for SSL, 25 for unencrypted)
+    - `smtp_security` - Security protocol: SSL, STARTTLS, or NONE
+    - `smtp_username` - SMTP username for traditional auth (optional, falls back to IMAP username)
+    - `smtp_password` - SMTP password for traditional auth (optional, falls back to IMAP password)
+    - `sending_account_info` - Read-only API field showing if account replaced another as sending account
+  - **Backend Changes**:
+    - Refactored `OAuth2EmailBackend` → `MailAccountEmailBackend`
+    - Supports both OAuth2 XOAUTH2 (via `_open_oauth()`) and traditional auth (via `_open_traditional()`)
+    - Updated `MailAccount.save()` to auto-disable other sending accounts
+    - Updated `MailAccount.clean()` to validate SMTP config for traditional accounts
+    - Updated `MailAccount._set_default_smtp_config()` to set Gmail/Outlook defaults
+    - Updated `get_sending_mail_account()` to return ANY account type (not just OAuth)
+    - Updated `send_email()` in documents/mail.py to use new unified backend
+    - Updated serializers with new fields and obfuscated password handling
+  - **Frontend Changes**:
+    - Reorganized mail account edit dialog into "Receiving (IMAP)" and "Sending (SMTP)" sections
+    - Added SMTP configuration fields with conditional display based on account type
+    - OAuth accounts show info box explaining XOAUTH2 usage
+    - Traditional accounts show SMTP username/password fields
+    - Added warning dialog when changing sending account
+    - Added `onSendingToggle()` to populate default SMTP settings
+    - Added `isTraditionalAccount` getter to conditionally show/hide fields
+  - **Migration**: 0031_add_smtp_fields.py
+    - Adds new SMTP fields to MailAccount model
+    - Updates help text for use_for_sending field
+    - Backward compatible: existing v1.0.18 accounts continue working
+  - **Use Cases**:
+    - Organizations using OAuth2 (Gmail/Outlook) for mail retrieval AND sending
+    - Organizations using traditional SMTP with username/password
+    - Mixed environments with both OAuth2 and traditional accounts
+    - Custom SMTP servers with non-standard ports/security
+  - **Benefits**:
+    - Single interface for all SMTP authentication methods
+    - No need for separate environment variables for email sending
+    - Clear UI guidance for configuring different account types
+    - Automatic defaults reduce configuration burden
+    - Environment variables still work as fallback for security-conscious deployments
+  - Files modified:
+    - Backend: `src/paperless_mail/models.py` (fields, validation, enforcement)
+    - Backend: `src/paperless_mail/migrations/0031_add_smtp_fields.py` (NEW)
+    - Backend: `src/paperless_mail/mail_oauth.py` (unified backend)
+    - Backend: `src/paperless_mail/serialisers.py` (API fields)
+    - Backend: `src/documents/mail.py` (uses new backend)
+    - Frontend: `src-ui/src/app/data/mail-account.ts` (TypeScript interface)
+    - Frontend: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/` (UI refactor)
+  - All changes properly marked with RKC comments for maintainability
+  - **Architecture**: Clean separation of concerns - OAuth2 vs traditional handled transparently
+
 - **v1.0.29 (2025-12-16)**: Saved views unsaved changes warning default
   - Added environment variable to control default value of "Show warning when closing saved views with unsaved changes" option
   - **Problem**: Organizations have different policies around accidental data loss - some want warnings enabled by default, others prefer streamlined workflow without warnings
