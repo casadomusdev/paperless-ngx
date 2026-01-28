@@ -2504,6 +2504,7 @@ class UiSettingsView(GenericAPIView):
         # RKC: Check for OAuth2 sending OR traditional SMTP (v1.0.18+)
         from paperless_mail.mail_oauth import get_sending_mail_account
         ui_settings["email_enabled"] = settings.EMAIL_ENABLED or get_sending_mail_account() is not None
+        ui_settings["smtp_env_configured"] = settings.EMAIL_ENABLED
         # /end RKC edit
 
         user_resp = {

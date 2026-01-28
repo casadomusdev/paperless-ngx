@@ -2,7 +2,9 @@ import { AsyncPipe } from '@angular/common'
 import { Component, OnDestroy, OnInit, inject } from '@angular/core'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { ActivatedRoute } from '@angular/router'
-import { NgbDropdownModule, NgbModal } from '@ng-bootstrap/ng-bootstrap'
+// RKC: NgbTooltipModule added for sending account tooltip (v1.1.1)
+import { NgbDropdownModule, NgbModal, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap'
+// /end RKC edit
 import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { Subject, delay, first, takeUntil, tap } from 'rxjs'
 import { MailAccount, MailAccountType } from 'src/app/data/mail-account'
@@ -41,6 +43,9 @@ import { ProcessedMailDialogComponent } from './processed-mail-dialog/processed-
     FormsModule,
     ReactiveFormsModule,
     NgbDropdownModule,
+    // RKC: NgbTooltipModule for sending account tooltip (v1.1.1)
+    NgbTooltipModule,
+    // /end RKC edit
     NgxBootstrapIconsModule,
   ],
 })
@@ -72,10 +77,22 @@ export class MailComponent
     return this.settingsService.get(SETTINGS_KEYS.OUTLOOK_OAUTH_URL)
   }
 
+  // RKC: SMTP environment variable configuration getter (v1.1.1)
+  public get smtpEnvConfigured(): boolean {
+    return this.settingsService.get(SETTINGS_KEYS.SMTP_ENV_CONFIGURED)
+  }
+  // /end RKC edit
+
   public loadingRules: boolean = true
   public showRules: boolean = false
   public loadingAccounts: boolean = true
   public showAccounts: boolean = false
+
+  // RKC: Check if any account has sending enabled (v1.1.1)
+  hasSendingAccount(): boolean {
+    return this.mailAccounts.some(account => account.use_for_sending)
+  }
+  // /end RKC edit
 
   ngOnInit(): void {
     this.mailAccountService

@@ -8,6 +8,13 @@
 </pngx-page-header>
 
 <ng-container *pngxIfPermissions="{ action: PermissionAction.View, type: PermissionType.MailAccount }">
+  <!-- RKC: Info alert for SMTP environment variable configuration (v1.1.1) -->
+  @if (smtpEnvConfigured && !hasSendingAccount()) {
+    <div class="alert alert-info" i18n>
+      ℹ️ Mail sending is configured via environment variables. To override these environment variables, enable "Use for sending" for any of the accounts set up here.
+    </div>
+  }
+  <!-- /end RKC edit -->
   <h4>
     <ng-container i18n>Mail accounts</ng-container>
     <button type="button" class="btn btn-sm btn-outline-primary ms-4" (click)="editMailAccount()" *pngxIfPermissions="{ action: PermissionAction.Add, type: PermissionType.MailAccount }">
@@ -51,6 +58,11 @@
                 @case (MailAccountType.Gmail_OAuth) {<i-bs name="google" class="ms-2"></i-bs>}
                 @case (MailAccountType.Outlook_OAuth) {<i-bs name="microsoft" class="ms-2"></i-bs>}
               }
+              <!-- RKC: Send-fill badge indicator for sending account (v1.1.1) -->
+              @if (account.use_for_sending) {
+                <i-bs name="send-fill" class="ms-2" [ngbTooltip]="'This account is used for sending emails'" i18n-ngbTooltip placement="top"></i-bs>
+              }
+              <!-- /end RKC edit -->
             </button>
           </div>
           <div class="col d-flex align-items-center">{{account.imap_server}}</div>

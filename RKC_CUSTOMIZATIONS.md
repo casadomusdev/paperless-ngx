@@ -1021,6 +1021,56 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.1.1 (2026-01-28)**: Mail Account List View Enhancements
+  - Added visual indicators for which account is configured for email sending
+  - Enhanced mail accounts list with send-fill icon badge and tooltip for sending account
+  - Added info message when SMTP is configured via environment variables
+  - **Problem**: Users couldn't easily identify which mail account was configured for sending emails
+  - **Solution**: 
+    - Added `smtp_env_configured` flag to backend ui_settings (uses existing `EMAIL_ENABLED` setting)
+    - Created conditional info alert that displays when env vars configured but no account-based sending enabled
+    - Added send-fill icon badge with tooltip next to account name when `use_for_sending=true`
+    - Badge shows "This account is used for sending emails" tooltip on hover
+  - **Info Message Display Logic**:
+    - Only shows when `smtpEnvConfigured=true` AND `hasSendingAccount()=false`
+    - Message: "ℹ️ Mail sending is configured via environment variables. To override these environment variables, enable 'Use for sending' for any of the accounts set up here."
+    - Disappears automatically when user enables sending on any account
+  - **Visual Elements**:
+    - Uses `send-fill` icon from ngx-bootstrap-icons (matches v1.1.0 edit dialog)
+    - Icon displays inline after account type badge (IMAP/Gmail/Outlook)
+    - Tooltip integration via NgbTooltipModule with top placement
+    - Consistent styling with existing account list badges
+  - **Backend Changes**:
+    - Added `smtp_env_configured` to ui_settings dict in `UiSettingsView`
+    - Value sourced from `settings.EMAIL_ENABLED` (traditional SMTP configuration)
+    - Allows frontend to differentiate between env var and account-based sending config
+  - **Frontend Changes**:
+    - Added `SMTP_ENV_CONFIGURED` key to SETTINGS_KEYS enum
+    - Added corresponding UiSetting entry with boolean type, default false
+    - Added `smtpEnvConfigured` getter to MailComponent reading from SettingsService
+    - Added `hasSendingAccount()` method checking if any account has `use_for_sending=true`
+    - Imported NgbTooltipModule for tooltip functionality
+    - Added conditional info alert in template above mail accounts section
+    - Added send-fill icon with ngbTooltip directive inline with account names
+  - **Use Cases**:
+    - Admin can quickly see which account handles outgoing email
+    - Users understand relationship between env var config and account-based config
+    - Clear visual feedback when migrating from env vars to account-based sending
+    - Tooltip provides additional context without cluttering the interface
+  - **Benefits**:
+    - Improved discoverability of sending account configuration
+    - Clear indication when environment variable fallback is active
+    - Consistent icon usage across edit dialog and list view
+    - Non-intrusive UI enhancement that complements existing v1.1.0 functionality
+    - Helps users understand the configuration hierarchy (env vars vs accounts)
+  - Files modified:
+    - Backend: `src/documents/views.py` (added smtp_env_configured to ui_settings, properly marked in existing RKC section)
+    - Frontend: `src-ui/src/app/data/ui-settings.ts` (added SMTP_ENV_CONFIGURED key and setting)
+    - Frontend: `src-ui/src/app/components/manage/mail/mail.component.ts` (added smtpEnvConfigured getter, hasSendingAccount method, NgbTooltipModule import)
+    - Frontend: `src-ui/src/app/components/manage/mail/mail.component.html` (added info alert and send-fill icon badge)
+  - All changes properly marked with RKC comments for maintainability
+  - **Architecture**: Minimal core code impact - leverages existing settings infrastructure and tooltip components
+
 - **v1.1.0 (2026-01-28)**: SMTP Email Sending via Mail Accounts
   - Refactored OAuth2-specific email sending (v1.0.18) into general SMTP sending feature
   - **Problem**: v1.0.18 only supported OAuth2, had hardcoded SMTP settings, no enforcement of "only one sending account"

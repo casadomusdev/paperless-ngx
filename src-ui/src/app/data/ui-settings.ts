@@ -88,6 +88,9 @@ export const SETTINGS_KEYS = {
   GMAIL_OAUTH_URL: 'gmail_oauth_url',
   OUTLOOK_OAUTH_URL: 'outlook_oauth_url',
   EMAIL_ENABLED: 'email_enabled',
+  // RKC: SMTP environment variable configuration indicator (v1.1.0+)
+  SMTP_ENV_CONFIGURED: 'smtp_env_configured',
+  // /end RKC edit
 }
 
 export const SETTINGS: UiSetting[] = [
@@ -296,6 +299,13 @@ export const SETTINGS: UiSetting[] = [
     type: 'boolean',
     default: false,
   },
+  // RKC: SMTP environment variable configuration indicator (v1.1.0+)
+  {
+    key: SETTINGS_KEYS.SMTP_ENV_CONFIGURED,
+    type: 'boolean',
+    default: false,
+  },
+  // /end RKC edit
   {
     key: SETTINGS_KEYS.PDF_VIEWER_ZOOM_SETTING,
     type: 'string',
