@@ -1084,7 +1084,7 @@ docker compose restart webserver
   
   **Migration Guide for Existing Outlook OAuth Accounts**:
   1. **Re-authorization Required**: Existing Outlook OAuth accounts need to re-authorize to get new scopes
-  2. **New Scopes**: `Mail.Read`, `Mail.Send`, `Mail.Send.Shared` (replaces legacy `IMAP.AccessAsUser.All` and `SMTP.Send`)
+  2. **New Scopes**: `User.Read`, `Mail.Read`, `Mail.Send`, `Mail.Send.Shared` (replaces legacy `IMAP.AccessAsUser.All` and `SMTP.Send`)
   3. **Process**: Settings > Mail > Mail Accounts > Click OAuth button again
   4. **What Changes**: 
      - Mail receiving switches from IMAP to Graph API

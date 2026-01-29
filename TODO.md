@@ -81,6 +81,7 @@
 - [x] Change `get_outlook_authorization_url()` scopes
   - [x] Remove: `https://outlook.office.com/IMAP.AccessAsUser.All`
   - [x] Remove: `https://outlook.office.com/SMTP.Send`
+  - [x] Add: `https://graph.microsoft.com/User.Read` (required for /me endpoint in test function)
   - [x] Add: `https://graph.microsoft.com/Mail.Read`
   - [x] Add: `https://graph.microsoft.com/Mail.Send`
   - [x] Add: `https://graph.microsoft.com/Mail.Send.Shared` (for shared mailbox support)
@@ -89,7 +90,10 @@
 - [x] **Bug Fix**: Fixed empty from_email string handling in mail_graph.py
   - [x] Check for non-empty string before setting "from" field
   - [x] Prevents "ErrorSendAsDenied" when from field is empty or contains only whitespace
-- [ ] Test OAuth authorization flow with new scopes
+- [x] **Bug Fix**: Fixed test function 403 error
+  - [x] Added User.Read scope for /me endpoint access
+  - [x] Prevents "Insufficient privileges" error when testing connection
+- [ ] Test OAuth authorization flow with new scopes (requires user re-authorization)
 
 ---
 

@@ -64,6 +64,7 @@ class PaperlessMailOAuth2Manager:
                 redirect_uri=self.oauth_callback_url,
                 scope=[
                     "offline_access",
+                    "https://graph.microsoft.com/User.Read",        # Required for /me endpoint (test function)
                     "https://graph.microsoft.com/Mail.Read",        # Mail receiving via Graph API
                     "https://graph.microsoft.com/Mail.Send",        # Mail sending via Graph API
                     "https://graph.microsoft.com/Mail.Send.Shared", # Send from shared mailboxes
