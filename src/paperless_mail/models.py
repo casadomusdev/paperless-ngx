@@ -480,7 +480,23 @@ class ProcessedMail(document_models.ModelWithOwner):
         blank=False,
         max_length=256,
         editable=False,
+        help_text=_(
+            "Message UID: numeric for IMAP, 8-character hash for Graph API"
+        ),
     )
+
+    # RKC: Store full Graph API message ID for post-action processing (v1.1.0)
+    graph_message_id = models.TextField(
+        _("graph message id"),
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=_(
+            "Full Microsoft Graph API message ID. Only populated for Outlook OAuth accounts. "
+            "Required for batch post-action processing (mark read, delete, etc.)."
+        ),
+    )
+    # /end RKC edit
 
     subject = models.CharField(
         _("subject"),

@@ -47,6 +47,16 @@ from paperless_mail.oauth import PaperlessMailOAuth2Manager
 from paperless_mail.preprocessor import MailMessageDecryptor
 from paperless_mail.preprocessor import MailMessagePreprocessor
 
+# RKC: Graph API mail retrieval for Outlook OAuth (v1.1.0)
+from paperless_mail.mail_graph_retrieval import OutlookGraphMailRetriever
+from paperless_mail.mail_graph_retrieval import MarkReadGraphAction
+from paperless_mail.mail_graph_retrieval import DeleteGraphAction
+from paperless_mail.mail_graph_retrieval import FlagGraphAction
+from paperless_mail.mail_graph_retrieval import MoveGraphAction
+from paperless_mail.mail_graph_retrieval import TagGraphAction
+from paperless_mail.mail_graph_retrieval import ProcessAllGraphAction
+# /end RKC edit
+
 # Apple Mail sets multiple IMAP KEYWORD and the general "\Flagged" FLAG
 # imaplib => conn.fetch(b"<message_id>", "FLAGS")
 
@@ -313,19 +323,27 @@ def queue_consumption_tasks(
     
     RKC: Modified in v1.0.17 to create PENDING_POST_ACTION entries instead of
     immediate post-actions, enabling batched processing via scheduled task.
+    RKC: v1.1.0 - Store both hash UID and full Graph message ID for Outlook OAuth
     """
     
     # RKC: Create PENDING status entry - will be processed by scheduled batch task
     # This eliminates OAuth2 authentication storms by pooling connections per account
-    ProcessedMail.objects.create(
-        owner=rule.owner,
-        rule=rule,
-        folder=rule.folder,
-        uid=message.uid,
-        subject=message.subject,
-        received=make_aware(message.date) if is_naive(message.date) else message.date,
-        status="PENDING_POST_ACTION",
-    )
+    # v1.1.0: Store full Graph message ID for batch action processing
+    processed_mail_data = {
+        "owner": rule.owner,
+        "rule": rule,
+        "folder": rule.folder,
+        "uid": message.uid,  # 8-char hash for Graph, numeric for IMAP
+        "subject": message.subject,
+        "received": make_aware(message.date) if is_naive(message.date) else message.date,
+        "status": "PENDING_POST_ACTION",
+    }
+    
+    # Add full Graph message ID if this is a Graph API message
+    if hasattr(message, 'graph_message_id'):
+        processed_mail_data["graph_message_id"] = message.graph_message_id
+    
+    ProcessedMail.objects.create(**processed_mail_data)
     
     # Execute consumption tasks without post-action callback using group instead of chord
     # Group is used since we don't need a callback - actions are batched via scheduled task
@@ -593,11 +611,18 @@ class MailAccountHandler(LoggingMixin):
     def handle_mail_account(self, account: MailAccount):
         """
         Main entry method to handle a specific mail account.
+        
+        RKC: v1.1.0 - Route Outlook OAuth accounts to Graph API instead of IMAP
         """
 
         self.renew_logging_group()
 
         self.log.debug(f"Processing mail account {account}")
+
+        # RKC: Outlook OAuth uses Graph API for mail retrieval (v1.1.0)
+        if account.account_type == MailAccount.MailAccountType.OUTLOOK_OAUTH:
+            return self._handle_mail_account_graph_api(account)
+        # /end RKC edit
 
         total_processed_files = 0
         try:
@@ -652,6 +677,110 @@ class MailAccountHandler(LoggingMixin):
             )
 
         return total_processed_files
+
+    # RKC: Graph API account handler for Outlook OAuth (v1.1.0)
+    def _handle_mail_account_graph_api(self, account: MailAccount):
+        """
+        Handle mail account using Microsoft Graph API (Outlook OAuth only).
+        
+        This method processes Outlook OAuth accounts using the Graph API
+        for mail retrieval instead of IMAP, avoiding scope mixing issues.
+        """
+        self.log.debug(f"[Graph API] Processing mail account {account}")
+        
+        total_processed_files = 0
+        
+        try:
+            # Refresh token if needed
+            if (
+                account.expiration is not None
+                and account.expiration < timezone.now()
+            ):
+                manager = PaperlessMailOAuth2Manager()
+                if manager.refresh_account_oauth_token(account):
+                    account.refresh_from_db()
+                else:
+                    self.log.error(f"[Graph API] Failed to refresh token for {account}")
+                    return total_processed_files
+            
+            # Create Graph API retriever
+            retriever = OutlookGraphMailRetriever(account)
+            
+            self.log.debug(
+                f"[Graph API] Account {account}: Processing {account.rules.count()} rule(s)",
+            )
+            
+            for rule in account.rules.order_by("order"):
+                if not rule.enabled:
+                    self.log.debug(f"[Graph API] Rule {rule}: Skipping disabled rule")
+                    continue
+                
+                try:
+                    total_processed_files += self._handle_mail_rule_graph_api(
+                        retriever,
+                        rule,
+                    )
+                except Exception as e:
+                    self.log.exception(
+                        f"[Graph API] Rule {rule}: Error while processing rule: {e}",
+                    )
+        
+        except Exception as e:
+            self.log.error(
+                f"[Graph API] Error while processing account {account}: {e}",
+                exc_info=False,
+            )
+        
+        return total_processed_files
+    
+    def _handle_mail_rule_graph_api(
+        self,
+        retriever: OutlookGraphMailRetriever,
+        rule: MailRule,
+    ):
+        """
+        Handle a single mail rule using Graph API retrieval.
+        
+        Similar to _handle_mail_rule but uses Graph API instead of IMAP.
+        """
+        self.log.debug(f"[Graph API] Rule {rule}: Fetching messages")
+        
+        try:
+            messages = retriever.fetch_messages(rule)
+        except Exception as err:
+            raise MailError(
+                f"[Graph API] Rule {rule}: Error while fetching messages",
+            ) from err
+        
+        mails_processed = 0
+        total_processed_files = 0
+        
+        for message in messages:
+            # Check if already processed
+            if ProcessedMail.objects.filter(
+                rule=rule,
+                uid=message.uid,  # Graph API message ID (alphanumeric) or IMAP UID (numeric)
+                folder=rule.folder,
+            ).exists():
+                self.log.debug(
+                    f"[Graph API] Skipping mail '{message.uid}' subject '{message.subject}' from '{message.from_}', already processed.",
+                )
+                continue
+            
+            try:
+                processed_files = self._handle_message(message, rule)
+                
+                total_processed_files += processed_files
+                mails_processed += 1
+            except Exception as e:
+                self.log.exception(
+                    f"[Graph API] Rule {rule}: Error while processing mail {message.uid}: {e}",
+                )
+        
+        self.log.debug(f"[Graph API] Rule {rule}: Processed {mails_processed} matching mail(s)")
+        
+        return total_processed_files
+    # /end RKC edit
 
     def _preprocess_message(self, message: MailMessage):
         for preprocessor in self._message_preprocessors:
@@ -1083,8 +1212,9 @@ def apply_pending_mail_actions():
 @shared_task
 def batch_mail_actions_by_account(account_id: int, mail_ids: list[int]):
     """
-    Process all pending actions for ONE account with ONE pooled IMAP connection.
+    Process all pending actions for ONE account with ONE pooled connection.
     
+    RKC: v1.1.0 - Route Outlook OAuth to Graph API, others to IMAP
     Processes multiple mail actions through single authenticated session,
     avoiding per-action OAuth2 authentication that triggers rate limiting.
     """
@@ -1097,6 +1227,102 @@ def batch_mail_actions_by_account(account_id: int, mail_ids: list[int]):
         return
     
     logger.info(f"Processing {len(mail_ids)} actions for account {account}")
+    
+    # RKC: Route Outlook OAuth accounts to Graph API (v1.1.0)
+    if account.account_type == MailAccount.MailAccountType.OUTLOOK_OAUTH:
+        batch_mail_actions_graph_api(account, mail_ids)
+    else:
+        batch_mail_actions_imap(account, mail_ids)
+    # /end RKC edit
+
+
+# RKC: Graph API batch action processing (v1.1.0)
+@shared_task
+def batch_mail_actions_graph_api(account: MailAccount, mail_ids: list[int]):
+    """
+    Process pending actions for Outlook OAuth account using Graph API.
+    
+    Executes mail actions via Graph API instead of IMAP for Outlook OAuth accounts.
+    """
+    logger = logging.getLogger("paperless_mail")
+    
+    try:
+        # Refresh token if needed
+        if account.expiration is not None and account.expiration < timezone.now():
+            manager = PaperlessMailOAuth2Manager()
+            if not manager.refresh_account_oauth_token(account):
+                logger.error(f"[Graph API] Failed to refresh token for {account}")
+                for mail_id in mail_ids:
+                    update_processed_mail_status.delay(
+                        mail_id,
+                        "FAILED",
+                        "OAuth token refresh failed"
+                    )
+                return
+            account.refresh_from_db()
+        
+        # Create Graph API retriever
+        retriever = OutlookGraphMailRetriever(account)
+        
+        for mail_id in mail_ids:
+            try:
+                mail = ProcessedMail.objects.get(pk=mail_id)
+                
+                # Get appropriate Graph action
+                action = None
+                if mail.rule.action == MailRule.MailAction.MARK_READ:
+                    action = MarkReadGraphAction(retriever)
+                elif mail.rule.action == MailRule.MailAction.DELETE:
+                    action = DeleteGraphAction(retriever)
+                elif mail.rule.action == MailRule.MailAction.FLAG:
+                    action = FlagGraphAction(retriever)
+                elif mail.rule.action == MailRule.MailAction.MOVE:
+                    action = MoveGraphAction(retriever)
+                elif mail.rule.action == MailRule.MailAction.TAG:
+                    action = TagGraphAction(retriever)
+                elif mail.rule.action == MailRule.MailAction.PROCESS_ALL:
+                    action = ProcessAllGraphAction(retriever)
+                
+                if action:
+                    # RKC: Use full graph_message_id for API calls, fallback to uid for IMAP compatibility
+                    message_id = mail.graph_message_id if mail.graph_message_id else mail.uid
+                    action.execute(message_id, mail.rule.action_parameter)
+                    update_processed_mail_status.delay(mail_id, "SUCCESS")
+                else:
+                    logger.warning(f"[Graph API] Unknown action for mail {mail_id}")
+                    update_processed_mail_status.delay(
+                        mail_id,
+                        "FAILED",
+                        f"Unknown action: {mail.rule.action}"
+                    )
+                    
+            except ProcessedMail.DoesNotExist:
+                logger.warning(f"[Graph API] ProcessedMail {mail_id} not found")
+            except Exception as e:
+                logger.exception(f"[Graph API] Error processing mail {mail_id}: {e}")
+                update_processed_mail_status.delay(
+                    mail_id,
+                    "FAILED",
+                    traceback.format_exc()
+                )
+                
+    except Exception as e:
+        logger.exception(f"[Graph API] Unexpected error processing account {account}: {e}")
+        for mail_id in mail_ids:
+            update_processed_mail_status.delay(
+                mail_id,
+                "FAILED",
+                f"Unexpected error: {str(e)}"
+            )
+
+
+def batch_mail_actions_imap(account: MailAccount, mail_ids: list[int]):
+    """
+    Process pending actions for IMAP account (Gmail OAuth or traditional).
+    
+    Original IMAP-based batch action processing.
+    """
+    logger = logging.getLogger("paperless_mail")
     
     try:
         with get_mailbox(
