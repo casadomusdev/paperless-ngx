@@ -77,14 +77,18 @@
 ## Phase 3: OAuth Scope Updates
 
 ### Update OAuth Configuration
-- [ ] Modify `src/paperless_mail/oauth.py`
-- [ ] Change `get_outlook_authorization_url()` scopes
-  - [ ] Remove: `https://outlook.office.com/IMAP.AccessAsUser.All`
-  - [ ] Remove: `https://outlook.office.com/SMTP.Send`
-  - [ ] Add: `https://graph.microsoft.com/Mail.Read`
-  - [ ] Add: `https://graph.microsoft.com/Mail.Send`
-  - [ ] Keep: `offline_access`
-- [ ] Update RKC comments to reflect v1.1.0 Graph API integration
+- [x] Modify `src/paperless_mail/oauth.py`
+- [x] Change `get_outlook_authorization_url()` scopes
+  - [x] Remove: `https://outlook.office.com/IMAP.AccessAsUser.All`
+  - [x] Remove: `https://outlook.office.com/SMTP.Send`
+  - [x] Add: `https://graph.microsoft.com/Mail.Read`
+  - [x] Add: `https://graph.microsoft.com/Mail.Send`
+  - [x] Add: `https://graph.microsoft.com/Mail.Send.Shared` (for shared mailbox support)
+  - [x] Keep: `offline_access`
+- [x] Update RKC comments to reflect v1.1.0 Graph API integration
+- [x] **Bug Fix**: Fixed empty from_email string handling in mail_graph.py
+  - [x] Check for non-empty string before setting "from" field
+  - [x] Prevents "ErrorSendAsDenied" when from field is empty or contains only whitespace
 - [ ] Test OAuth authorization flow with new scopes
 
 ---

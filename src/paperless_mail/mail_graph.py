@@ -167,8 +167,8 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
             "saveToSentItems": True,
         }
         
-        # Add from address if specified
-        if message.from_email:
+        # Add from address if specified (only if not empty)
+        if message.from_email and message.from_email.strip():
             graph_message["message"]["from"] = {
                 "emailAddress": {"address": message.from_email}
             }

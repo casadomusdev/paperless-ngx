@@ -1083,11 +1083,24 @@ docker compose restart webserver
     - `MS365_OAUTH_SETUP.md` (updated for Graph API, removed SMTP troubleshooting)
   
   **Migration Guide for Existing Outlook OAuth Accounts**:
-  1. **Re-authorization Required**: Existing Outlook OAuth accounts need to re-authorize to get `Mail.Send` scope (replaces `SMTP.Send`)
-  2. **Process**: Settings > Mail > Mail Accounts > Click OAuth button again
-  3. **What Changes**: Scope changes from SMTP.Send to Mail.Send, nothing else
-  4. **No Data Loss**: IMAP receiving continues working, only sending method changes
-  5. **Testing**: Send a test email after re-authorization to verify Graph API integration
+  1. **Re-authorization Required**: Existing Outlook OAuth accounts need to re-authorize to get new scopes
+  2. **New Scopes**: `Mail.Read`, `Mail.Send`, `Mail.Send.Shared` (replaces legacy `IMAP.AccessAsUser.All` and `SMTP.Send`)
+  3. **Process**: Settings > Mail > Mail Accounts > Click OAuth button again
+  4. **What Changes**: 
+     - Mail receiving switches from IMAP to Graph API
+     - Mail sending uses Graph API instead of SMTP
+     - Adds `Mail.Send.Shared` scope for shared mailbox support
+  5. **No Data Loss**: All existing processed mail entries preserved, only protocols change
+  6. **Testing**: 
+     - Test connection to verify Graph API connectivity
+     - Send a test email to verify sending works
+     - If using shared mailboxes, test sending from shared address
+  
+  **Shared Mailbox Support**:
+  - Set SMTP From field to shared mailbox email address (e.g., `shared@company.com`)
+  - User account must have Send As or Send on Behalf permissions for that mailbox
+  - `Mail.Send.Shared` scope enables sending from mailboxes user has access to
+  - Empty from field will use authenticated user's email address (default behavior)
   
   **Use Cases**:
   - Organizations with Microsoft 365 Security Defaults enabled (common in enterprise)

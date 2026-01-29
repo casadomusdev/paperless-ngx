@@ -39,6 +39,11 @@ from paperless_mail.serialisers import MailRuleSerializer
 from paperless_mail.serialisers import ProcessedMailSerializer
 from paperless_mail.tasks import process_mail_accounts
 
+# RKC: Graph API mail retrieval support (v1.1.0)
+from paperless_mail.mail_graph_retrieval import OutlookGraphMailRetriever
+import httpx
+# /end RKC edit
+
 
 @extend_schema_view(
     test=extend_schema(
@@ -99,6 +104,12 @@ class MailAccountViewSet(ModelViewSet, PassUserMixin):
             serializer.validated_data["expiration"] = existing_account.expiration
 
         account = MailAccount(**serializer.validated_data)
+        
+        # RKC: v1.1.0 - Route Outlook OAuth to Graph API test, others to IMAP
+        if account.account_type == MailAccount.MailAccountType.OUTLOOK_OAUTH:
+            return self._test_graph_api(account, logger, request.data.get("id"))
+        # /end RKC edit
+        
         with get_mailbox(
             account.imap_server,
             account.imap_port,
@@ -125,6 +136,72 @@ class MailAccountViewSet(ModelViewSet, PassUserMixin):
                     f"Mail account {account} test failed: {e}",
                 )
                 return HttpResponseBadRequest("Unable to connect to server")
+    
+    # RKC: Graph API account test (v1.1.0)
+    def _test_graph_api(self, account: MailAccount, logger, account_id):
+        """
+        Test Graph API connectivity for Outlook OAuth accounts.
+        
+        Tests by attempting to fetch the user's profile and messages endpoint.
+        """
+        try:
+            # Refresh token if needed
+            if (
+                account.expiration is not None
+                and account.expiration < timezone.now()
+            ):
+                oauth_manager = PaperlessMailOAuth2Manager()
+                if account_id:
+                    existing_account = MailAccount.objects.get(pk=account_id)
+                    if oauth_manager.refresh_account_oauth_token(existing_account):
+                        existing_account.refresh_from_db()
+                        account.password = existing_account.password
+                    else:
+                        raise MailError("Unable to refresh oauth token")
+                else:
+                    raise MailError("Token expired and cannot refresh without account ID")
+            
+            # Test Graph API connectivity
+            headers = {
+                "Authorization": f"Bearer {account.password}",
+                "Content-Type": "application/json",
+            }
+            
+            # Test 1: Get user profile
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(
+                    "https://graph.microsoft.com/v1.0/me",
+                    headers=headers,
+                )
+                response.raise_for_status()
+                
+                # Test 2: Get messages endpoint (just check if accessible)
+                response = client.get(
+                    "https://graph.microsoft.com/v1.0/me/messages",
+                    headers=headers,
+                    params={"$top": 1},  # Just fetch one message
+                )
+                response.raise_for_status()
+            
+            logger.info(f"[Graph API] Account {account} test successful")
+            return Response({"success": True})
+            
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Graph API HTTP {e.response.status_code}"
+            try:
+                error_data = e.response.json()
+                if "error" in error_data:
+                    error_msg += f": {error_data['error'].get('message', 'Unknown error')}"
+            except:
+                pass
+            
+            logger.error(f"[Graph API] Account {account} test failed: {error_msg}")
+            return HttpResponseBadRequest(f"Graph API test failed: {error_msg}")
+            
+        except Exception as e:
+            logger.error(f"[Graph API] Account {account} test failed: {e}")
+            return HttpResponseBadRequest(f"Unable to connect to Graph API: {str(e)}")
+    # /end RKC edit
 
     @action(methods=["post"], detail=True)
     def process(self, request, pk=None):
