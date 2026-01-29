@@ -9,6 +9,7 @@ from smtplib import SMTP, SMTP_SSL
 
 from django.conf import settings
 from django.core.mail.backends.smtp import EmailBackend as DjangoSMTPBackend
+from django.utils import timezone
 
 from paperless_mail.models import MailAccount
 from paperless_mail.oauth import PaperlessMailOAuth2Manager
@@ -119,12 +120,17 @@ class MailAccountEmailBackend(DjangoSMTPBackend):
             
         # Refresh token if needed
         oauth_manager = PaperlessMailOAuth2Manager()
+        logger.debug(f"[SMTP] Current token expiration: {self.mail_account.expiration}")
+        logger.debug(f"[SMTP] Current time: {timezone.now()}")
+        
         if not oauth_manager.refresh_account_oauth_token(self.mail_account):
             logger.error(f"Failed to refresh OAuth2 token for {self.mail_account.name}")
             raise Exception("OAuth2 token refresh failed")
         
         # Reload account to get fresh token
         self.mail_account.refresh_from_db()
+        logger.debug(f"[SMTP] Token refreshed, new expiration: {self.mail_account.expiration}")
+        logger.debug(f"[SMTP] Access token (first 20 chars): {self.mail_account.password[:20]}...")
         
         try:
             # Establish connection

@@ -1021,6 +1021,30 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.1.2 (2026-01-29)**: Clarified mail receiving task messaging for send-only accounts
+  - Refactored misleading error message in scheduled mail receiving task
+  - **Problem**: Error message "No rules enabled for account {account}. Skipping." appeared when users configured send-only accounts
+  - **Root Cause**: Message came from `process_mail_accounts()` task which processes INCOMING mail, not from email sending functionality
+  - **User Confusion**: Users thought email sending was broken when error was actually benign and expected behavior
+  - **Solution**: 
+    - Enhanced log message to clarify it's about mail **receiving**, not sending
+    - Added helpful note: "(Note: Send-only accounts don't require rules.)"
+    - Full message: "No rules enabled for account {account} - skipping mail receiving. (Note: Send-only accounts don't require rules.)"
+  - **Behavior**:
+    - Send-only accounts (with `use_for_sending=true` but no MailRules) will still log this INFO message
+    - Message now clearly indicates it's about receiving, not sending
+    - Email sending functionality works independently and doesn't require any rules
+    - Users can safely ignore this INFO log for send-only accounts
+  - **Benefits**:
+    - Eliminates confusion between mail receiving and mail sending
+    - Users understand send-only accounts don't need MailRules
+    - Clearer troubleshooting when actual mail receiving issues occur
+    - Minimal code impact - single log message enhancement
+  - Files modified:
+    - Backend: `src/paperless_mail/tasks.py` (enhanced log message in process_mail_accounts task)
+  - All changes properly marked with RKC comments for maintainability
+  - **Architecture**: Clean separation of concerns - mail receiving (requires rules) vs mail sending (no rules needed)
+
 - **v1.1.1 (2026-01-28)**: Mail Account List View Enhancements
   - Added visual indicators for which account is configured for email sending
   - Enhanced mail accounts list with send-fill icon badge and tooltip for sending account
