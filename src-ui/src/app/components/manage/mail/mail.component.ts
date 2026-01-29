@@ -5,8 +5,8 @@ import { ActivatedRoute } from '@angular/router'
 // RKC: NgbTooltipModule added for sending account tooltip (v1.1.1)
 import { NgbDropdownModule, NgbModal, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap'
 // /end RKC edit
-// RKC: Import allIcons to register send-fill icon (v1.1.1)
-import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+// RKC: Import NgxBootstrapIconsModule for send-fill icon (v1.1.1)
+import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 // /end RKC edit
 import { Subject, delay, first, takeUntil, tap } from 'rxjs'
 import { MailAccount, MailAccountType } from 'src/app/data/mail-account'
@@ -47,9 +47,7 @@ import { ProcessedMailDialogComponent } from './processed-mail-dialog/processed-
     NgbDropdownModule,
     // RKC: NgbTooltipModule for sending account tooltip (v1.1.1)
     NgbTooltipModule,
-    // /end RKC edit
-    // RKC: Register all icons including send-fill for sending account indicator (v1.1.1)
-    NgxBootstrapIconsModule.pick(allIcons),
+    NgxBootstrapIconsModule,
     // /end RKC edit
   ],
 })
