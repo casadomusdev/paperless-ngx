@@ -1,7 +1,9 @@
 """
-RKC: Mail Account SMTP Email Backend (v1.1.0)
-Extends Django's SMTP backend to support both OAuth2 XOAUTH2 and traditional SMTP authentication.
-Replaces the OAuth2-only implementation from v1.0.18.
+RKC: Mail Account Email Backend (v1.1.0)
+Provides email sending backends for MailAccount configuration:
+- Microsoft Graph API for Outlook OAuth accounts (bypasses SMTP Security Defaults)
+- SMTP with OAuth2 XOAUTH2 for Gmail OAuth accounts
+- Traditional SMTP for non-OAuth accounts
 """
 import base64
 import logging
@@ -13,15 +15,17 @@ from django.utils import timezone
 
 from paperless_mail.models import MailAccount
 from paperless_mail.oauth import PaperlessMailOAuth2Manager
+from paperless_mail.mail_graph import OutlookGraphEmailBackend
 
 logger = logging.getLogger("paperless_mail")
 
 
-class MailAccountEmailBackend(DjangoSMTPBackend):
+class _MailAccountSMTPBackend(DjangoSMTPBackend):
     """
     SMTP email backend that uses MailAccount configuration.
     Supports both OAuth2 XOAUTH2 and traditional password authentication.
     
+    Used for Gmail OAuth and traditional SMTP accounts.
     Automatically refreshes OAuth2 tokens if expired before sending.
     """
     
@@ -195,6 +199,33 @@ class MailAccountEmailBackend(DjangoSMTPBackend):
         """
         auth_string = f"user={username}\x01auth=Bearer {access_token}\x01\x01"
         return base64.b64encode(auth_string.encode()).decode()
+
+
+def MailAccountEmailBackend(mail_account: MailAccount, **kwargs):
+    """
+    RKC: v1.1.0 - Factory function to return appropriate email backend.
+    
+    Routes to the correct backend implementation based on account type:
+    - Outlook OAuth → Graph API (bypasses Security Defaults restrictions)
+    - Gmail OAuth → SMTP with XOAUTH2
+    - Traditional accounts → SMTP with username/password
+    
+    Args:
+        mail_account: MailAccount instance
+        **kwargs: Additional backend parameters
+        
+    Returns:
+        Appropriate email backend instance
+    """
+    if mail_account.account_type == MailAccount.MailAccountType.OUTLOOK_OAUTH:
+        # Use Graph API for Outlook OAuth (bypasses SMTP Security Defaults)
+        logger.debug(f"Using Graph API backend for Outlook OAuth account: {mail_account.name}")
+        return OutlookGraphEmailBackend(mail_account, **kwargs)
+    else:
+        # Use SMTP for Gmail OAuth and traditional accounts
+        logger.debug(f"Using SMTP backend for account: {mail_account.name}")
+        return _MailAccountSMTPBackend(mail_account, **kwargs)
+    # /end RKC edit
 
 
 def get_sending_mail_account() -> MailAccount | None:

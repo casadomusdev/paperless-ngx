@@ -56,14 +56,15 @@ class PaperlessMailOAuth2Manager:
         )
 
     def get_outlook_authorization_url(self) -> str:
-        # RKC: Added SMTP.Send scope for OAuth2 email sending support (v1.0.18)
+        # RKC: v1.1.0 - Use Graph API Mail.Send instead of SMTP.Send
+        # Bypasses Microsoft 365 Security Defaults restrictions on SMTP AUTH
         return asyncio.run(
             self.outlook_client.get_authorization_url(
                 redirect_uri=self.oauth_callback_url,
                 scope=[
                     "offline_access",
-                    "https://outlook.office.com/IMAP.AccessAsUser.All",
-                    "https://outlook.office.com/SMTP.Send",  # RKC: Required for SMTP sending
+                    "https://outlook.office.com/IMAP.AccessAsUser.All",  # Mail receiving via IMAP
+                    "https://graph.microsoft.com/Mail.Send",  # Mail sending via Graph API
                 ],
                 state=self.state,
             ),

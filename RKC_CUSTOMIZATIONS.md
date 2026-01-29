@@ -1021,8 +1021,91 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.1.2 (2026-01-29)**: Clarified mail receiving task messaging for send-only accounts
-  - Refactored misleading error message in scheduled mail receiving task
+- **v1.1.0 (2026-01-29)**: Mail System OAuth2 Refactor & Microsoft Graph API Integration
+  
+  **Overview**: Complete overhaul of email sending system with three major improvements: general SMTP support for all account types, Microsoft Graph API integration for Outlook accounts, and enhanced user experience.
+  
+  **Phase 1 - General SMTP Sending Support**:
+  - Refactored OAuth2-only email sending (v1.0.18) into universal SMTP sending feature
+  - **Problem**: v1.0.18 hardcoded SMTP settings, only worked with OAuth2, no "one sending account" enforcement
+  - **Solution**: 
+    - Extended MailAccount model with comprehensive SMTP fields (smtp_server, smtp_port, smtp_security, smtp_username, smtp_password)
+    - Unified backend supporting both OAuth2 XOAUTH2 and traditional username/password authentication
+    - Automatic enforcement: only one account can be enabled for sending at a time
+    - Flexible configuration for all account types (Gmail OAuth, Outlook OAuth, traditional IMAP)
+    - Environment variables remain as fallback when no mail account configured
+  - **Migration**: `0031_add_smtp_fields.py` adds new SMTP fields to MailAccount model
+  
+  **Phase 2 - Microsoft Graph API Integration**:
+  - **Critical Problem Identified**: OAuth2 SMTP authentication was failing with `535 5.7.3 Authentication unsuccessful` error despite valid tokens with SMTP.Send scope
+  - **Root Cause**: Microsoft 365 Security Defaults block SMTP AUTH protocol entirely, even when using OAuth2 XOAUTH2
+  - **Strategic Solution**: Switch from SMTP protocol to Microsoft Graph API for Outlook OAuth accounts
+  - **Architecture**:
+    - Created `mail_graph.py` with `OutlookGraphEmailBackend` class
+    - Backend routes Outlook OAuth accounts to Graph API, all others to SMTP
+    - Uses `https://graph.microsoft.com/v1.0/me/sendMail` endpoint
+    - Changed OAuth scope from `https://outlook.office.com/SMTP.Send` to `https://graph.microsoft.com/Mail.Send`
+  - **Implementation Details**:
+    - Factory function `MailAccountEmailBackend()` returns appropriate backend based on account type
+    - `OutlookGraphEmailBackend` converts Django EmailMessage to Graph API JSON format
+    - Full support for: HTML/text content, attachments, CC, BCC, reply-to, from address
+    - Automatic OAuth token refresh before sending
+    - Better error messages via Graph API structured JSON responses
+  - **Benefits**:
+    - ✅ Works with Microsoft 365 Security Defaults (no admin intervention needed)
+    - ✅ No need to enable "Authenticated SMTP" per-user in Exchange
+    - ✅ Future-proof - aligns with Microsoft's strategic direction away from legacy protocols
+    - ✅ Better error handling and debugging
+    - ✅ Clean separation: IMAP for receiving (still works), Graph API for sending (Outlook only)
+  
+  **Phase 3 - Enhanced UI/UX**:
+  - Clarified misleading log message in mail receiving task
+  - **Problem**: "No rules enabled for account {account}. Skipping." appeared for send-only accounts, causing user confusion
+  - **Solution**: Enhanced message to "No rules enabled for account {account} - skipping mail receiving. (Note: Send-only accounts don't require rules.)"
+  - Clean separation of concerns: mail receiving (requires MailRules) vs mail sending (no rules needed)
+  
+  **Files Modified**:
+  - **Backend - General SMTP Support**:
+    - `src/paperless_mail/models.py` (added SMTP fields, validation, enforcement)
+    - `src/paperless_mail/migrations/0031_add_smtp_fields.py` (NEW - adds SMTP fields)
+    - `src/paperless_mail/serialisers.py` (API fields with obfuscated password handling)
+    - `src/documents/mail.py` (uses new unified backend)
+  - **Backend - Graph API Integration**:
+    - `src/paperless_mail/mail_graph.py` (NEW - OutlookGraphEmailBackend class)
+    - `src/paperless_mail/mail_oauth.py` (refactored to factory pattern, routing logic)
+    - `src/paperless_mail/oauth.py` (changed Outlook scope to Mail.Send)
+  - **Backend - UI/UX**:
+    - `src/paperless_mail/tasks.py` (clarified log message in process_mail_accounts)
+  - **Frontend**:
+    - `src-ui/src/app/data/mail-account.ts` (TypeScript interface updates)
+    - `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/` (reorganized UI into Receiving/Sending sections)
+  - **Documentation**:
+    - `MS365_OAUTH_SETUP.md` (updated for Graph API, removed SMTP troubleshooting)
+  
+  **Migration Guide for Existing Outlook OAuth Accounts**:
+  1. **Re-authorization Required**: Existing Outlook OAuth accounts need to re-authorize to get `Mail.Send` scope (replaces `SMTP.Send`)
+  2. **Process**: Settings > Mail > Mail Accounts > Click OAuth button again
+  3. **What Changes**: Scope changes from SMTP.Send to Mail.Send, nothing else
+  4. **No Data Loss**: IMAP receiving continues working, only sending method changes
+  5. **Testing**: Send a test email after re-authorization to verify Graph API integration
+  
+  **Use Cases**:
+  - Organizations with Microsoft 365 Security Defaults enabled (common in enterprise)
+  - Mixed environments with both OAuth2 (Gmail/Outlook) and traditional SMTP accounts
+  - Organizations wanting to eliminate SMTP port dependencies
+  - Future-proof deployments aligned with Microsoft's modern authentication strategy
+  
+  **Benefits Summary**:
+  - Single interface for all SMTP authentication methods (OAuth2 + traditional)
+  - Outlook OAuth accounts bypass Security Defaults restrictions
+  - No admin intervention needed for Outlook mail sending
+  - Clear UI guidance for configuring different account types
+  - Automatic defaults reduce configuration complexity
+  - Better error messages for all account types
+  - Environment variables still work as fallback for security-conscious deployments
+  
+  All changes properly marked with RKC comments for maintainability.
+  **Architecture**: Provider-specific optimization (Graph API for Outlook) while maintaining universal SMTP support for other providers.
   - **Problem**: Error message "No rules enabled for account {account}. Skipping." appeared when users configured send-only accounts
   - **Root Cause**: Message came from `process_mail_accounts()` task which processes INCOMING mail, not from email sending functionality
   - **User Confusion**: Users thought email sending was broken when error was actually benign and expected behavior

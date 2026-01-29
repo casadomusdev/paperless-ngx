@@ -46,9 +46,17 @@ From `src/paperless_mail/oauth.py`:
 scope=[
     "offline_access",                                    # Token refresh capability
     "https://outlook.office.com/IMAP.AccessAsUser.All",  # IMAP mail reading
-    "https://outlook.office.com/SMTP.Send",              # SMTP mail sending
+    "https://graph.microsoft.com/Mail.Send",             # Graph API mail sending
 ]
 ```
+
+**Note:** Paperless-ngx uses **Microsoft Graph API for sending** emails (not SMTP). This provides:
+- ✅ Compatibility with Microsoft 365 Security Defaults
+- ✅ No need to enable "Authenticated SMTP" per-user
+- ✅ Better error messages and reliability
+- ✅ Future-proof (Microsoft's strategic direction)
+
+IMAP is still used for **receiving** emails, which works reliably with OAuth2.
 
 These scopes are requested **dynamically** during the OAuth flow - they do NOT need to be configured in Azure AD.
 
