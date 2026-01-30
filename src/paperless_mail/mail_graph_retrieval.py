@@ -458,14 +458,38 @@ class OutlookGraphMailRetriever:
             
             logger.debug(f"[Graph API] Found {len(attachments_data)} attachments for message {message_id}")
             
-            # Convert to attachment objects
+            # RKC: v1.1.0 - Filter out S/MIME signature and encryption attachments
+            # S/MIME emails include technical attachments (smime.p7s, smime.p7m) that
+            # contain signatures or encrypted content. These should not be processed as
+            # documents - only legitimate file attachments should be ingested.
+            # This makes Graph API behavior identical to IMAP which also excludes these.
             attachments = []
             for att_data in attachments_data:
                 # Only process file attachments (not item attachments)
                 if att_data.get('@odata.type') == '#microsoft.graph.fileAttachment':
+                    content_type = att_data.get('contentType', '').lower()
+                    filename = att_data.get('name', '').lower()
+                    
+                    # Skip S/MIME signature/encryption attachments by content type
+                    if any(ct in content_type for ct in [
+                        'pkcs7-signature',      # S/MIME signature
+                        'pkcs7-mime',           # S/MIME encrypted/signed content
+                        'x-pkcs7-signature',    # Alternative signature MIME type
+                        'x-pkcs7-mime',         # Alternative encrypted MIME type
+                    ]):
+                        logger.debug(f"[Graph API] Skipping S/MIME attachment (type={content_type}): {filename}")
+                        continue
+                    
+                    # Skip S/MIME attachments by filename pattern
+                    if filename.startswith('smime.') or filename in ['smime', 'smime.p7s', 'smime.p7m']:
+                        logger.debug(f"[Graph API] Skipping S/MIME file: {filename}")
+                        continue
+                    
                     attachments.append(GraphMailAttachment(att_data))
             
+            logger.debug(f"[Graph API] Returning {len(attachments)} legitimate attachments (filtered out S/MIME)")
             return attachments
+            # /end RKC edit
             
         except httpx.HTTPStatusError as e:
             logger.error(

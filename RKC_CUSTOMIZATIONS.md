@@ -1165,6 +1165,37 @@ docker compose restart webserver
   - All changes properly marked with RKC comments for maintainability
   - **Architecture**: Consistent chronological ingestion across all retrieval methods
   
+  **Phase 8 - S/MIME Attachment Filtering (v1.1.0)**:
+  - Fixed unwanted S/MIME signature and encryption files being processed as documents
+  - **Problem**: Graph API returns S/MIME technical attachments (smime.p7s, smime.p7m) alongside legitimate file attachments
+  - **User Report**: Extra documents titled "smime" containing text version of email appearing in Paperless
+  - **Impact**: Each S/MIME signed/encrypted email created duplicate content - one "smime" document + the .eml file
+  - **Root Cause**:
+    - S/MIME emails include technical attachments containing signatures or encrypted content
+    - Graph API returns these as fileAttachments (same as legitimate files)
+    - `get_attachments()` was not filtering them out
+    - Paperless processed them as regular documents
+  - **Solution**: 
+    - Added filtering logic in `get_attachments()` to skip S/MIME attachments
+    - Filters by content type: `pkcs7-signature`, `pkcs7-mime`, `x-pkcs7-signature`, `x-pkcs7-mime`
+    - Filters by filename patterns: files starting with `smime.` or named `smime`, `smime.p7s`, `smime.p7m`
+    - Makes Graph API behavior identical to IMAP (which also excludes these)
+  - **Implementation Details**:
+    - Added content type checking before creating GraphMailAttachment objects
+    - Lowercase comparison for case-insensitive matching
+    - Debug logging when S/MIME attachments are skipped
+    - Log shows count of legitimate attachments after filtering
+  - **Benefits**:
+    - Eliminates unwanted "smime" documents from being created
+    - Graph API now behaves identically to IMAP for S/MIME emails
+    - Only legitimate file attachments are processed
+    - Clean document list without technical email infrastructure files
+    - Consistent user experience across all retrieval methods
+  - **Files Modified**:
+    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (added S/MIME filtering in get_attachments)
+  - All changes properly marked with RKC comments for maintainability
+  - **Architecture**: Content-aware filtering maintains protocol parity between Graph API and IMAP
+  
   **Phase 4 - Multi-Mailbox Support (v1.1.0)**:
   - Added ability to access multiple mailboxes on Microsoft 365 tenant using single app registration
   - **Problem**: Graph API mail retrieval hardcoded `/me/messages` endpoint, always accessed authenticated user's mailbox regardless of username field
