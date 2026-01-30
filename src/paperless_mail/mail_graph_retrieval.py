@@ -7,6 +7,9 @@ v1.1.0 Changes:
 - Multi-mailbox support: Uses /users/{username}/ endpoints instead of /me/
 - Supports both personal mailboxes and shared mailboxes via delegated permissions
 - Requires Mail.Read.Shared and Mail.ReadWrite.Shared scopes
+- Full pagination support: Retrieves all messages beyond 100-message limit
+- Automatically follows @odata.nextLink to fetch all pages
+- Enhanced logging to show page count and total messages retrieved
 """
 import base64
 import logging
@@ -301,6 +304,7 @@ class OutlookGraphMailRetriever:
     def fetch_messages(self, rule: MailRule) -> list[GraphMailMessage]:
         """
         Fetch messages matching rule criteria via Graph API.
+        Handles pagination to retrieve all messages.
         
         Args:
             rule: MailRule with filter criteria
@@ -314,7 +318,7 @@ class OutlookGraphMailRetriever:
         params = {
             '$select': 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead',
             '$orderby': 'receivedDateTime desc',
-            '$top': 100,  # Limit per request
+            '$top': 100,  # Limit per request (Graph API max is typically 100-1000)
         }
         
         # Add filter if criteria specified
@@ -328,27 +332,56 @@ class OutlookGraphMailRetriever:
         endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages"
         
         messages = []
+        page_count = 0
+        next_link = None
+        
         try:
             with httpx.Client(timeout=30.0) as client:
+                # Fetch first page
                 response = client.get(
                     endpoint,
                     headers=self._get_headers(),
                     params=params,
                 )
                 response.raise_for_status()
-            
-            data = response.json()
-            message_list = data.get('value', [])
-            
-            logger.info(f"[Graph API] Retrieved {len(message_list)} messages")
-            
-            # Wrap each message in adapter
-            for msg_data in message_list:
-                messages.append(GraphMailMessage(msg_data, self))
-            
-            # TODO: Handle pagination with @odata.nextLink
-            if '@odata.nextLink' in data:
-                logger.debug("[Graph API] More messages available (pagination not implemented)")
+                
+                data = response.json()
+                message_list = data.get('value', [])
+                page_count += 1
+                
+                logger.info(f"[Graph API] Page {page_count}: Retrieved {len(message_list)} messages")
+                
+                # Wrap each message in adapter
+                for msg_data in message_list:
+                    messages.append(GraphMailMessage(msg_data, self))
+                
+                # Handle pagination: fetch all subsequent pages
+                next_link = data.get('@odata.nextLink')
+                
+                while next_link:
+                    logger.debug(f"[Graph API] Fetching next page of results...")
+                    
+                    response = client.get(
+                        next_link,
+                        headers=self._get_headers(),
+                        # No params needed - nextLink is a complete URL with all parameters
+                    )
+                    response.raise_for_status()
+                    
+                    data = response.json()
+                    message_list = data.get('value', [])
+                    page_count += 1
+                    
+                    logger.info(f"[Graph API] Page {page_count}: Retrieved {len(message_list)} more messages")
+                    
+                    # Wrap and add messages from this page
+                    for msg_data in message_list:
+                        messages.append(GraphMailMessage(msg_data, self))
+                    
+                    # Check for next page
+                    next_link = data.get('@odata.nextLink')
+                
+                logger.info(f"[Graph API] Total: Retrieved {len(messages)} messages across {page_count} page(s)")
             
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
