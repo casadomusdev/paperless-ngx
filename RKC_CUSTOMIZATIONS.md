@@ -1111,6 +1111,7 @@ docker compose restart webserver
     - Modified `from_values` property with same fallback logic
     - Added 'full' field to from_values object for complete address string
     - Created empty from_values object if both fields missing (prevents None errors)
+    - Added 'sender' to $select parameter to ensure field is fetched from API
   - **Graph API Data Structure**:
     - Unlike IMAP where 'sender' was plain text, Graph API 'sender' has same structure as 'from'
     - Both provide `{ emailAddress: { name, address } }` format
@@ -1126,9 +1127,43 @@ docker compose restart webserver
     - Graceful degradation - empty string better than parse error
     - User quote: "we need to fix this and make sure these emails are properly ingested - currently these datasets are missing from the system completely"
   - **Files Modified**:
-    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (modified from_ and from_values properties)
+    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (modified from_ and from_values properties, added 'sender' to $select)
   - All changes properly marked with RKC comments for maintainability
   - **Architecture**: Defensive programming - handle Microsoft Graph API data variations gracefully
+  
+  **Phase 7 - Email Ordering Consistency (v1.1.0)**:
+  - Fixed email ingestion order inconsistency between IMAP and Graph API retrieval methods
+  - **Problem**: Graph API processed emails newest-first, causing reverse chronological order in Paperless UI
+  - **User Observation**: "newest mails first is problematic because that literally reverses the order of those mails in paperless, where newest are displayed first by default"
+  - **Root Cause**: 
+    - Graph API used `$orderby: 'receivedDateTime desc'` (newest first)
+    - Paperless displays documents newest-first by default
+    - This created double reversal → emails appeared in reverse chronological order
+    - IMAP typically returns oldest-first by default (chronological)
+  - **Solution**: 
+    - Changed Graph API ordering to `$orderby: 'receivedDateTime asc'` (oldest first)
+    - Ensures chronological ingestion: oldest emails → lowest document IDs
+    - When Paperless displays newest-first, emails appear in correct order
+    - Consistent behavior across both IMAP and Graph API retrieval
+  - **Maximum Age Filter Verification**:
+    - Confirmed `maximum_age` rule setting properly implemented in `_build_filter_query()`
+    - Converts rule's `maximum_age` field to OData filter: `receivedDateTime ge <date>`
+    - Works correctly for both Graph API and IMAP retrieval
+    - No changes needed - already correctly respecting mail rule time limits
+  - **Implementation Details**:
+    - Modified `fetch_messages()` params: `'$orderby': 'receivedDateTime asc'`
+    - Changed inline comment from "Newest first" to "Oldest first for chronological ingestion"
+    - No changes to IMAP code - already using oldest-first ordering
+  - **Benefits**:
+    - Consistent email order across IMAP and Graph API methods
+    - Predictable document IDs (older emails = lower IDs)
+    - Correct display order in Paperless UI (newest on top as expected)
+    - Maximum age filtering works correctly for both retrieval methods
+    - Clean user experience without unexpected ordering issues
+  - **Files Modified**:
+    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (changed $orderby parameter)
+  - All changes properly marked with RKC comments for maintainability
+  - **Architecture**: Consistent chronological ingestion across all retrieval methods
   
   **Phase 4 - Multi-Mailbox Support (v1.1.0)**:
   - Added ability to access multiple mailboxes on Microsoft 365 tenant using single app registration

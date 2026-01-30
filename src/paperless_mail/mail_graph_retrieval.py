@@ -337,8 +337,8 @@ class OutlookGraphMailRetriever:
         
         # Build query parameters
         params = {
-            '$select': 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead',
-            '$orderby': 'receivedDateTime desc',
+            '$select': 'id,subject,from,sender,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead',
+            '$orderby': 'receivedDateTime asc',  # Oldest first for chronological ingestion
             '$top': 100,  # Limit per request (Graph API max is typically 100-1000)
         }
         
