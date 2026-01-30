@@ -182,6 +182,13 @@ export class MailComponent
       ? EditDialogMode.EDIT
       : EditDialogMode.CREATE
     modal.componentInstance.object = account
+    // RKC: Pass current sending account info to edit dialog (v1.1.0)
+    // Find the account currently configured for sending (excluding the one being edited)
+    const currentSendingAccount = this.mailAccounts.find(
+      a => a.use_for_sending && a.id !== account?.id
+    )
+    modal.componentInstance.currentSendingAccount = currentSendingAccount
+    // /end RKC edit
     modal.componentInstance.succeeded
       .pipe(takeUntil(this.unsubscribeNotifier))
       .subscribe((newMailAccount) => {

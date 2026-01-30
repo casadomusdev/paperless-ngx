@@ -799,3 +799,11 @@ canvas.hiddenCanvasElement {
     display: block;
   }
 }
+
+// RKC: Force white text color on tooltips for readability in both light and dark modes (v1.1.0)
+// Problem: Tooltip text was black on black background in dark mode (unreadable)
+// Solution: Override Bootstrap default to always use white text regardless of theme
+::ng-deep .tooltip-inner {
+  color: white !important;
+}
+// /end RKC edit

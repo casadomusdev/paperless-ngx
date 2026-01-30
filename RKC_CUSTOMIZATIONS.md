@@ -1064,6 +1064,34 @@ docker compose restart webserver
   - **Solution**: Enhanced message to "No rules enabled for account {account} - skipping mail receiving. (Note: Send-only accounts don't require rules.)"
   - Clean separation of concerns: mail receiving (requires MailRules) vs mail sending (no rules needed)
   
+  **Phase 5 - Mail UI Bug Fixes (v1.1.0)**:
+  - Fixed two UI bugs in mail account management interface
+  - **Bug 1 - Tooltip Readability in Dark Mode**:
+    - **Problem**: Send-fill badge tooltip text was black on black background in dark mode (unreadable). In light mode it was white on black (OK).
+    - **Root Cause**: Bootstrap's default tooltip adapts text color to page theme, but tooltip background is always dark
+    - **Solution**: Added global CSS rule `::ng-deep .tooltip-inner { color: white !important; }` to force white text on all tooltips
+    - **Impact**: All tooltips now readable in both light and dark modes across entire application
+  - **Bug 2 - Missing Sending Account Indicator**:
+    - **Problem**: When editing a mail account, users couldn't see which account (if any) was currently configured for sending
+    - **Root Cause**: Data passed from backend but not displayed in frontend
+    - **Solution**: 
+      - Parent component (`mail.component.ts`) finds current sending account and passes to edit dialog via `componentInstance.currentSendingAccount`
+      - Edit dialog component (`mail-account-edit-dialog.component.ts`) adds `currentSendingAccount` property
+      - Edit dialog template displays info alert above "Use for sending" checkbox when another account is sending
+      - Alert message: "Mail account '[Name]' is currently used for sending emails. Enabling this account will disable that account."
+      - Displays for both creating new accounts and editing existing accounts
+  - **Files Modified**:
+    - Global styles: `src-ui/src/styles.scss` (added tooltip white text CSS rule)
+    - Parent component: `src-ui/src/app/components/manage/mail/mail.component.ts` (pass currentSendingAccount to dialog)
+    - Edit dialog TS: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.ts` (add property)
+    - Edit dialog HTML: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.html` (info alert)
+  - **Benefits**:
+    - Tooltips readable in both light and dark modes throughout application
+    - Users clearly informed about sending account configuration impact
+    - Prevents confusion when managing multiple mail accounts
+    - Clean UX with contextual information at point of decision
+  - All changes properly marked with RKC comments for maintainability
+  
   **Phase 4 - Multi-Mailbox Support (v1.1.0)**:
   - Added ability to access multiple mailboxes on Microsoft 365 tenant using single app registration
   - **Problem**: Graph API mail retrieval hardcoded `/me/messages` endpoint, always accessed authenticated user's mailbox regardless of username field

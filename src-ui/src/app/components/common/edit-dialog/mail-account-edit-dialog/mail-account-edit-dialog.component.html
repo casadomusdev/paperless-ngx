@@ -36,9 +36,18 @@
     <h5 class="mt-4" i18n>Sending Configuration (SMTP)</h5>
     <p class="text-muted small" i18n>Configure this account to send outgoing emails. Supports both OAuth2 (Gmail, Outlook) and traditional SMTP authentication. Only one account can be used for sending at a time.</p>
     
+    <!-- RKC: Info alert showing current sending account (v1.1.0) -->
+    @if (currentSendingAccount) {
+      <div class="alert alert-info mb-3">
+        <i class="bi bi-info-circle me-2"></i>
+        <span i18n>Mail account "<strong>{{currentSendingAccount.name}}</strong>" is currently used for sending emails. Enabling this account for sending will disable that account.</span>
+      </div>
+    }
+    <!-- /end RKC edit -->
+    
     <pngx-input-check 
       i18n-title 
-      title="Use for sending emails" 
+      title="Use for sending emails"
       i18n-hint 
       hint="Enable this account for sending outgoing emails. Only one account can be enabled at a time." 
       formControlName="use_for_sending"

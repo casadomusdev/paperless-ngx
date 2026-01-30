@@ -48,6 +48,11 @@ export class MailAccountEditDialogComponent extends EditDialogComponent<MailAcco
   testActive: boolean = false
   testResult: string
   alertTimeout
+  
+  // RKC: Current sending account passed from parent component (v1.1.0)
+  // Used to display warning when another account is already configured for sending
+  currentSendingAccount: MailAccount | null = null
+  // /end RKC edit
 
   @ViewChild('testResultAlert', { static: false }) testResultAlert: NgbAlert
 
