@@ -175,9 +175,10 @@ class MailAccountViewSet(ModelViewSet, PassUserMixin):
                 )
                 response.raise_for_status()
                 
+                # RKC: v1.1.0 - Test multi-mailbox support using username-based endpoint
                 # Test 2: Get messages endpoint (just check if accessible)
                 response = client.get(
-                    "https://graph.microsoft.com/v1.0/me/messages",
+                    f"https://graph.microsoft.com/v1.0/users/{account.username}/messages",
                     headers=headers,
                     params={"$top": 1},  # Just fetch one message
                 )

@@ -59,15 +59,18 @@ class PaperlessMailOAuth2Manager:
         # RKC: v1.1.0 - Use pure Graph API scopes for both send and receive
         # Microsoft rejects mixed Exchange legacy (IMAP) and Graph API scopes
         # Bypasses Microsoft 365 Security Defaults restrictions on SMTP/IMAP AUTH
+        # Multi-mailbox support: Added shared mailbox scopes for delegated permissions
         return asyncio.run(
             self.outlook_client.get_authorization_url(
                 redirect_uri=self.oauth_callback_url,
                 scope=[
                     "offline_access",
-                    "https://graph.microsoft.com/User.Read",        # Required for /me endpoint (test function)
-                    "https://graph.microsoft.com/Mail.Read",        # Mail receiving via Graph API
-                    "https://graph.microsoft.com/Mail.Send",        # Mail sending via Graph API
-                    "https://graph.microsoft.com/Mail.Send.Shared", # Send from shared mailboxes
+                    "https://graph.microsoft.com/User.Read",             # Required for /me endpoint (test function)
+                    "https://graph.microsoft.com/Mail.Read",             # Mail receiving via Graph API
+                    "https://graph.microsoft.com/Mail.Read.Shared",      # Read mail from shared mailboxes
+                    "https://graph.microsoft.com/Mail.ReadWrite.Shared", # Modify mail in shared mailboxes (post-processing)
+                    "https://graph.microsoft.com/Mail.Send",             # Mail sending via Graph API
+                    "https://graph.microsoft.com/Mail.Send.Shared",      # Send from shared mailboxes
                 ],
                 state=self.state,
             ),

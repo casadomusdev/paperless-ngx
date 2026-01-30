@@ -1021,9 +1021,9 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.1.0 (2026-01-29)**: Mail System OAuth2 Refactor & Microsoft Graph API Integration
+- **v1.1.0 (2026-01-30)**: Mail System OAuth2 Refactor & Microsoft Graph API Integration
   
-  **Overview**: Complete overhaul of email sending system with three major improvements: general SMTP support for all account types, Microsoft Graph API integration for Outlook accounts, and enhanced user experience.
+  **Overview**: Complete overhaul of email system with four major improvements: general SMTP support for all account types, Microsoft Graph API integration for Outlook accounts, multi-mailbox support via delegated permissions, and enhanced user experience.
   
   **Phase 1 - General SMTP Sending Support**:
   - Refactored OAuth2-only email sending (v1.0.18) into universal SMTP sending feature
@@ -1063,6 +1063,48 @@ docker compose restart webserver
   - **Problem**: "No rules enabled for account {account}. Skipping." appeared for send-only accounts, causing user confusion
   - **Solution**: Enhanced message to "No rules enabled for account {account} - skipping mail receiving. (Note: Send-only accounts don't require rules.)"
   - Clean separation of concerns: mail receiving (requires MailRules) vs mail sending (no rules needed)
+  
+  **Phase 4 - Multi-Mailbox Support (v1.1.0)**:
+  - Added ability to access multiple mailboxes on Microsoft 365 tenant using single app registration
+  - **Problem**: Graph API mail retrieval hardcoded `/me/messages` endpoint, always accessed authenticated user's mailbox regardless of username field
+  - **Root Cause**: Username field was being ignored - all 8 Graph API methods used `/me/` instead of `/users/{username}/`
+  - **Solution**: 
+    - Updated all Graph API endpoint URLs from `/me/` to `/users/{self.mail_account.username}/`
+    - Added `Mail.Read.Shared` and `Mail.ReadWrite.Shared` scopes for shared mailbox access
+    - Updated test function to use username-based endpoint
+  - **Affected Methods in mail_graph_retrieval.py**:
+    - `fetch_messages()` - Changed to `/users/{username}/messages`
+    - `get_attachments()` - Changed to `/users/{username}/messages/{id}/attachments`
+    - `mark_message_read()` - Changed to `/users/{username}/messages/{id}`
+    - `delete_message()` - Changed to `/users/{username}/messages/{id}`
+    - `flag_message()` - Changed to `/users/{username}/messages/{id}`
+    - `move_message()` - Changed to `/users/{username}/messages/{id}/move`
+    - `tag_message()` - Changed to `/users/{username}/messages/{id}`
+    - `_get_folder_id()` - Changed to `/users/{username}/mailFolders`
+  - **OAuth Scopes Enhancement**:
+    - Added `Mail.Read.Shared` - Read mail from shared mailboxes
+    - Added `Mail.ReadWrite.Shared` - Modify mail in shared mailboxes (for post-processing tags, mark as read)
+    - Enables delegated permissions model: user can access their own mailbox OR shared mailboxes they have access to
+  - **Architecture**:
+    - Uses delegated permissions (not application permissions) - user must have proper mailbox delegation
+    - Username field contains UPN/email address (either personal email or shared mailbox email)
+    - Supports both personal mailboxes and shared mailboxes via delegated Full Access permissions
+    - Works for all mail operations: read, mark as read, delete, flag, move, tag
+  - **Exchange Configuration Required**:
+    - For shared mailboxes: Grant user "Full Access" permission in Exchange Admin Center
+    - User must have proper delegation before Graph API will allow access
+    - No additional Exchange settings needed beyond mailbox delegation
+  - **Use Cases**:
+    - User reading from their personal mailbox (`username=user@company.com`)
+    - User reading from shared mailbox they have access to (`username=shared@company.com`)
+    - Processing emails from multiple mailboxes using same OAuth app registration
+    - Post-processing actions (tags, mark as read) work for both personal and shared mailboxes
+  - **Benefits**:
+    - Single app registration can access multiple mailboxes
+    - No need for separate OAuth accounts per mailbox
+    - Username field now properly respected (was previously ignored)
+    - Delegated permissions provide proper security model
+    - All CRUD operations work correctly for both personal and shared mailboxes
   
   **Files Modified**:
   - **Backend - General SMTP Support**:

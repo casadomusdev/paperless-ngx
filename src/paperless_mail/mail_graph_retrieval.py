@@ -2,6 +2,11 @@
 RKC: Microsoft Graph API Mail Retrieval Backend (v1.1.0)
 Implements email receiving for Outlook OAuth accounts using Microsoft Graph API instead of IMAP.
 This complements the Graph API sending functionality and avoids scope mixing issues.
+
+v1.1.0 Changes:
+- Multi-mailbox support: Uses /users/{username}/ endpoints instead of /me/
+- Supports both personal mailboxes and shared mailboxes via delegated permissions
+- Requires Mail.Read.Shared and Mail.ReadWrite.Shared scopes
 """
 import base64
 import logging
@@ -318,12 +323,9 @@ class OutlookGraphMailRetriever:
             params['$filter'] = filter_query
             logger.debug(f"[Graph API] Filter: {filter_query}")
         
-        # Note: Graph API doesn't support folder selection like IMAP
-        # All messages are in the default mailbox unless using mailFolders endpoint
-        # For now, we'll fetch from the default message collection
-        # TODO: Implement folder support using /me/mailFolders/{folderId}/messages
-        
-        endpoint = f"{self.GRAPH_BASE}/me/messages"
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
+        # Supports both personal mailboxes and shared mailboxes via delegated permissions
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages"
         
         messages = []
         try:
@@ -386,7 +388,8 @@ class OutlookGraphMailRetriever:
         if message_id.startswith('graph:'):
             message_id = message_id[6:]
         
-        endpoint = f"{self.GRAPH_BASE}/me/messages/{message_id}/attachments"
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}/attachments"
         
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -432,7 +435,8 @@ class OutlookGraphMailRetriever:
         else:
             message_id = message_uid
         
-        endpoint = f"{self.GRAPH_BASE}/me/messages/{message_id}"
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}"
         payload = {"isRead": True}
         
         try:
@@ -465,7 +469,8 @@ class OutlookGraphMailRetriever:
         else:
             message_id = message_uid
         
-        endpoint = f"{self.GRAPH_BASE}/me/messages/{message_id}"
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}"
         
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -496,7 +501,8 @@ class OutlookGraphMailRetriever:
         else:
             message_id = message_uid
         
-        endpoint = f"{self.GRAPH_BASE}/me/messages/{message_id}"
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}"
         payload = {
             "flag": {
                 "flagStatus": "flagged"
@@ -540,7 +546,8 @@ class OutlookGraphMailRetriever:
             logger.error(f"[Graph API] Folder '{destination_folder}' not found")
             raise ValueError(f"Folder '{destination_folder}' not found")
         
-        endpoint = f"{self.GRAPH_BASE}/me/messages/{message_id}/move"
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}/move"
         payload = {"destinationId": folder_id}
         
         try:
@@ -574,7 +581,8 @@ class OutlookGraphMailRetriever:
         else:
             message_id = message_uid
         
-        endpoint = f"{self.GRAPH_BASE}/me/messages/{message_id}"
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}"
         payload = {
             "categories": [category]
         }
@@ -618,8 +626,9 @@ class OutlookGraphMailRetriever:
         if folder_lower in well_known:
             return well_known[folder_lower]
         
+        # RKC: v1.1.0 - Multi-mailbox support using username-based endpoint
         # Search for folder by name
-        endpoint = f"{self.GRAPH_BASE}/me/mailFolders"
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/mailFolders"
         params = {
             '$filter': f"displayName eq '{folder_name}'",
             '$select': 'id,displayName',
