@@ -1092,6 +1092,44 @@ docker compose restart webserver
     - Clean UX with contextual information at point of decision
   - All changes properly marked with RKC comments for maintainability
   
+  **Phase 6 - Graph API Email Parsing Bug Fix (v1.1.0)**:
+  - Fixed critical data loss bug where emails with missing 'from' field were discarded
+  - **Problem**: Graph API sometimes provides only 'sender' field without 'from' field, causing parse error "Missing 'from'"
+  - **Impact**: HIGH SEVERITY - Emails were being discarded while marking UID as processed (permanent data loss)
+  - **Root Cause**: 
+    - `GraphMailMessage.from_` property only checked `self._data.get('from')` - returned empty dict when 'from' missing
+    - `GraphMailMessage.from_values` property same issue - created from_values with empty email/name
+    - Parser's `parse_file_to_message()` raised ParseError when `from_values` was None or empty
+    - Email marked as processed but never ingested into system
+  - **Solution**: 
+    - Added fallback logic: check 'from' field first, then fallback to 'sender' field if missing
+    - Both fields have identical structure in Graph API: `{ emailAddress: { name, address } }`
+    - Returns empty string only if BOTH fields are missing (prevents parse error)
+    - Maintains RFC format: `"Name <email>"` or just email address
+  - **Implementation Details**:
+    - Modified `from_` property with `sender_data = self._data.get('from') or self._data.get('sender')`
+    - Modified `from_values` property with same fallback logic
+    - Added 'full' field to from_values object for complete address string
+    - Created empty from_values object if both fields missing (prevents None errors)
+  - **Graph API Data Structure**:
+    - Unlike IMAP where 'sender' was plain text, Graph API 'sender' has same structure as 'from'
+    - Both provide `{ emailAddress: { name, address } }` format
+    - No risk of redundant email addresses in correspondent names
+  - **Impact on Correspondent Matching (v1.0.27)**:
+    - Smart correspondent matching unaffected - works same with 'from' or 'sender' data
+    - Both fields provide name and address for RFC format creation
+    - Email extraction from angle brackets works identically
+    - No duplicate correspondents created
+  - **Benefits**:
+    - Zero data loss - all emails properly ingested regardless of field presence
+    - Maintains existing correspondent matching behavior
+    - Graceful degradation - empty string better than parse error
+    - User quote: "we need to fix this and make sure these emails are properly ingested - currently these datasets are missing from the system completely"
+  - **Files Modified**:
+    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (modified from_ and from_values properties)
+  - All changes properly marked with RKC comments for maintainability
+  - **Architecture**: Defensive programming - handle Microsoft Graph API data variations gracefully
+  
   **Phase 4 - Multi-Mailbox Support (v1.1.0)**:
   - Added ability to access multiple mailboxes on Microsoft 365 tenant using single app registration
   - **Problem**: Graph API mail retrieval hardcoded `/me/messages` endpoint, always accessed authenticated user's mailbox regardless of username field

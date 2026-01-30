@@ -72,23 +72,44 @@ class GraphMailMessage:
     @property
     def from_(self) -> str:
         """Sender email address as string"""
-        sender = self._data.get('from', {}).get('emailAddress', {})
+        # RKC: v1.1.0 - Fallback to 'sender' if 'from' is missing
+        # Graph API sometimes provides only 'sender' field, not 'from'
+        # Both fields have identical structure: { emailAddress: { name, address } }
+        sender_data = self._data.get('from') or self._data.get('sender')
+        if not sender_data:
+            return ''  # Return empty string if both are missing
+        
+        sender = sender_data.get('emailAddress', {})
         email = sender.get('address', '')
         name = sender.get('name', '')
         
         if name and name != email:
             return f"{name} <{email}>"
         return email
+        # /end RKC edit
     
     @property
     def from_values(self):
         """Compatible with imap_tools.MailMessage.from_values"""
         if self._from_values is None:
-            sender = self._data.get('from', {}).get('emailAddress', {})
-            self._from_values = type('FromValues', (object,), {
-                'email': sender.get('address', ''),
-                'name': sender.get('name', ''),
-            })()
+            # RKC: v1.1.0 - Fallback to 'sender' if 'from' is missing
+            # Graph API sometimes provides only 'sender' field, not 'from'
+            sender_data = self._data.get('from') or self._data.get('sender')
+            if sender_data:
+                sender = sender_data.get('emailAddress', {})
+                self._from_values = type('FromValues', (object,), {
+                    'email': sender.get('address', ''),
+                    'name': sender.get('name', ''),
+                    'full': self.from_,  # Use from_ property which has same fallback logic
+                })()
+            else:
+                # Both 'from' and 'sender' missing - create empty from_values
+                self._from_values = type('FromValues', (object,), {
+                    'email': '',
+                    'name': '',
+                    'full': '',
+                })()
+            # /end RKC edit
         return self._from_values
     
     @property
