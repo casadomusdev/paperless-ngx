@@ -1021,409 +1021,152 @@ docker compose restart webserver
 
 ## Version History
 
-- **v1.1.0 (2026-01-30)**: Mail System OAuth2 Refactor & Microsoft Graph API Integration
-  
-  **Overview**: Complete overhaul of email system with four major improvements: general SMTP support for all account types, Microsoft Graph API integration for Outlook accounts, multi-mailbox support via delegated permissions, and enhanced user experience.
-  
-  **Phase 1 - General SMTP Sending Support**:
-  - Refactored OAuth2-only email sending (v1.0.18) into universal SMTP sending feature
-  - **Problem**: v1.0.18 hardcoded SMTP settings, only worked with OAuth2, no "one sending account" enforcement
-  - **Solution**: 
-    - Extended MailAccount model with comprehensive SMTP fields (smtp_server, smtp_port, smtp_security, smtp_username, smtp_password)
-    - Unified backend supporting both OAuth2 XOAUTH2 and traditional username/password authentication
-    - Automatic enforcement: only one account can be enabled for sending at a time
-    - Flexible configuration for all account types (Gmail OAuth, Outlook OAuth, traditional IMAP)
-    - Environment variables remain as fallback when no mail account configured
-  - **Migration**: `0031_add_smtp_fields.py` adds new SMTP fields to MailAccount model
-  
-  **Phase 2 - Microsoft Graph API Integration**:
-  - **Critical Problem Identified**: OAuth2 SMTP authentication was failing with `535 5.7.3 Authentication unsuccessful` error despite valid tokens with SMTP.Send scope
-  - **Root Cause**: Microsoft 365 Security Defaults block SMTP AUTH protocol entirely, even when using OAuth2 XOAUTH2
-  - **Strategic Solution**: Switch from SMTP protocol to Microsoft Graph API for Outlook OAuth accounts
-  - **Architecture**:
-    - Created `mail_graph.py` with `OutlookGraphEmailBackend` class
-    - Backend routes Outlook OAuth accounts to Graph API, all others to SMTP
-    - Uses `https://graph.microsoft.com/v1.0/me/sendMail` endpoint
-    - Changed OAuth scope from `https://outlook.office.com/SMTP.Send` to `https://graph.microsoft.com/Mail.Send`
-  - **Implementation Details**:
-    - Factory function `MailAccountEmailBackend()` returns appropriate backend based on account type
-    - `OutlookGraphEmailBackend` converts Django EmailMessage to Graph API JSON format
-    - Full support for: HTML/text content, attachments, CC, BCC, reply-to, from address
-    - Automatic OAuth token refresh before sending
-    - Better error messages via Graph API structured JSON responses
-  - **Benefits**:
-    - ✅ Works with Microsoft 365 Security Defaults (no admin intervention needed)
-    - ✅ No need to enable "Authenticated SMTP" per-user in Exchange
-    - ✅ Future-proof - aligns with Microsoft's strategic direction away from legacy protocols
-    - ✅ Better error handling and debugging
-    - ✅ Clean separation: IMAP for receiving (still works), Graph API for sending (Outlook only)
-  
-  **Phase 3 - Enhanced UI/UX**:
-  - Clarified misleading log message in mail receiving task
-  - **Problem**: "No rules enabled for account {account}. Skipping." appeared for send-only accounts, causing user confusion
-  - **Solution**: Enhanced message to "No rules enabled for account {account} - skipping mail receiving. (Note: Send-only accounts don't require rules.)"
-  - Clean separation of concerns: mail receiving (requires MailRules) vs mail sending (no rules needed)
-  
-  **Phase 5 - Mail UI Bug Fixes (v1.1.0)**:
-  - Fixed two UI bugs in mail account management interface
-  - **Bug 1 - Tooltip Readability in Dark Mode**:
-    - **Problem**: Send-fill badge tooltip text was black on black background in dark mode (unreadable). In light mode it was white on black (OK).
-    - **Root Cause**: Bootstrap's default tooltip adapts text color to page theme, but tooltip background is always dark
-    - **Solution**: Added global CSS rule `::ng-deep .tooltip-inner { color: white !important; }` to force white text on all tooltips
-    - **Impact**: All tooltips now readable in both light and dark modes across entire application
-  - **Bug 2 - Missing Sending Account Indicator**:
-    - **Problem**: When editing a mail account, users couldn't see which account (if any) was currently configured for sending
-    - **Root Cause**: Data passed from backend but not displayed in frontend
-    - **Solution**: 
-      - Parent component (`mail.component.ts`) finds current sending account and passes to edit dialog via `componentInstance.currentSendingAccount`
-      - Edit dialog component (`mail-account-edit-dialog.component.ts`) adds `currentSendingAccount` property
-      - Edit dialog template displays info alert above "Use for sending" checkbox when another account is sending
+- **v1.1.0 (2026-01-30)**: Mail System - Universal SMTP & Microsoft Graph API Integration
+  - **Overview**: Complete mail system enhancement providing universal SMTP sending support for all account types, Microsoft Graph API integration for Outlook accounts, multi-mailbox access capabilities, and comprehensive UI/UX improvements
+  - **Strategic Architecture**:
+    - Universal SMTP backend supporting both OAuth2 XOAUTH2 and traditional authentication
+    - Provider-specific optimization: Microsoft Graph API for Outlook, SMTP for all others
+    - Single-account enforcement for email sending with automatic management
+    - Enhanced UI with clear separation between receiving (IMAP) and sending (SMTP) configuration
+    - Multi-mailbox support via delegated permissions
+  - **Functional Component 1: Universal SMTP Sending Backend**
+    - **Purpose**: Unified email sending system supporting all authentication methods
+    - **MailAccount Model Extensions**:
+      - Add comprehensive SMTP configuration fields: `smtp_server`, `smtp_port`, `smtp_security`, `smtp_username`, `smtp_password`
+      - Add `use_for_sending` boolean flag with automatic single-account enforcement
+      - Add `sending_account_info` read-only API field for conflict notifications
+      - Implement validation in `clean()`: traditional accounts MUST have smtp_server configured
+      - Implement `_set_default_smtp_config()` for Gmail/Outlook OAuth defaults
+    - **Single-Account Enforcement**:
+      - In `MailAccount.save()`: when `use_for_sending=True`, automatically disable ALL other accounts
+      - CRITICAL: Use `.update()` method to prevent recursive save() calls
+      - Query: `MailAccount.objects.exclude(pk=self.pk).filter(use_for_sending=True).update(use_for_sending=False)`
+    - **Unified Email Backend** (`mail_oauth.py`):
+      - Rename `OAuth2EmailBackend` → `MailAccountEmailBackend` (supports both OAuth2 and traditional)
+      - Factory function `MailAccountEmailBackend()` returns appropriate backend based on account type
+      - Implement dual authentication: `_open_oauth()` for XOAUTH2, `_open_traditional()` for username/password
+      - SMTP connection logic: try OAuth2 first (if tokens exist), fallback to traditional, fallback to env vars
+      - Server defaults: Gmail (`smtp.gmail.com:587`), Outlook (`smtp.office365.com:587`)
+    - **API Serialization** (`serialisers.py`):
+      - Add new SMTP fields to MailAccountSerializer
+      - CRITICAL: Obfuscate smtp_password in responses (show `***` if set, allow clearing with empty string)
+      - Add `sending_account_info` read-only field showing which account was disabled when enabling current one
+      - Proper handling of None vs empty string for password field
+    - **Integration Point** (`documents/mail.py`):
+      - Modify `send_email()` to use new unified backend
+      - Priority: MailAccount-based sending > Environment variable SMTP fallback
+      - Function `get_sending_mail_account()` must return ANY account type, not just OAuth
+    - **Migration**: `0031_add_smtp_fields.py` adds 6 new fields to MailAccount model, updates help_text for use_for_sending, backward compatible
+  - **Functional Component 2: Microsoft Graph API Integration**
+    - **Strategic Decision**: Microsoft 365 Security Defaults block SMTP AUTH protocol entirely (even with OAuth2). Solution: Switch Outlook OAuth accounts to Microsoft Graph API
+    - **Graph API Sending Backend** (`mail_graph.py` - NEW FILE):
+      - Create `OutlookGraphEmailBackend` class inheriting Django's `BaseEmailBackend`
+      - Override `send_messages()` to use Graph API endpoint: `POST /v1.0/users/{username}/sendMail`
+      - Implement `_django_to_graph_format()` converter: Django EmailMessage → Graph API JSON
+      - Full support for: HTML/text content, attachments (base64 encoding), CC, BCC, reply-to, custom from address
+      - CRITICAL: Automatic OAuth token refresh before sending (reuse existing mail_oauth.py logic)
+      - Error handling: Graph API returns structured JSON errors (better than SMTP status codes)
+    - **Graph API Retrieval Backend** (`mail_graph_retrieval.py`):
+      - Uses `/v1.0/users/{username}/messages` endpoint for mail retrieval
+      - CRITICAL ORDERING: `$orderby: 'receivedDateTime asc'` (oldest first)
+      - **Rationale**: Ensures chronological ingestion, oldest emails get lowest document IDs. When Paperless displays newest-first (default), emails appear in correct order. Prevents double-reversal problem that creates confusing document order
+    - **Email Field Fallback Logic**:
+      - CRITICAL: Graph API sometimes provides only 'sender' field without 'from' field
+      - **Implementation in `from_` property**: `sender_data = self._data.get('from') or self._data.get('sender')`
+      - **Implementation in `from_values` property**: Same fallback logic
+      - Both fields have identical structure: `{ emailAddress: { name, address } }`
+      - Returns empty string only if BOTH fields missing (prevents parse errors)
+      - HIGH SEVERITY: Without this, emails are marked processed but never ingested (data loss)
+      - Add 'sender' to $select parameter to ensure field is fetched
+    - **S/MIME Attachment Filtering**:
+      - CRITICAL: Graph API returns S/MIME technical attachments (smime.p7s, smime.p7m) alongside legitimate files
+      - **Implementation in `get_attachments()`**: Filter by content type: `pkcs7-signature`, `pkcs7-mime`, `x-pkcs7-signature`, `x-pkcs7-mime`; Filter by filename: starts with `smime.` or exactly `smime`, `smime.p7s`, `smime.p7m`; Case-insensitive comparison
+      - Without filtering: creates unwanted "smime" documents for every signed/encrypted email
+      - Makes Graph API behavior identical to IMAP
+    - **Backend Routing Logic** (`mail_oauth.py`):
+      - Factory function determines backend based on account type
+      - Outlook OAuth accounts → `OutlookGraphEmailBackend`
+      - All other accounts → `MailAccountEmailBackend` (SMTP)
+      - Clean separation: Graph API sending, IMAP receiving still works
+    - **OAuth Scope Changes** (`oauth.py`):
+      - Change from `https://outlook.office.com/SMTP.Send` to `https://graph.microsoft.com/Mail.Send`
+      - Required for Graph API email sending permissions
+      - Existing accounts require re-authorization to get new scope
+    - **Benefits of Graph API Approach**: Works with Microsoft 365 Security Defaults (no admin intervention); No need to enable "Authenticated SMTP" per-user in Exchange; Future-proof alignment with Microsoft's strategy; Better error messages via structured JSON responses
+  - **Functional Component 3: Multi-Mailbox Support**
+    - **Purpose**: Access multiple mailboxes on Microsoft 365 tenant using single app registration
+    - **Endpoint Migration** (`mail_graph_retrieval.py`):
+      - Change ALL Graph API methods from `/me/` to `/users/{self.mail_account.username}/`
+      - **Affected Methods** (8 total): `fetch_messages()`, `get_attachments()`, `mark_message_read()`, `delete_message()`, `flag_message()`, `move_message()`, `tag_message()`, `_get_folder_id()`
+    - **OAuth Scopes Enhancement**:
+      - Add `Mail.Read.Shared` - Read mail from shared mailboxes
+      - Add `Mail.ReadWrite.Shared` - Modify mail in shared mailboxes (tags, mark as read)
+      - Uses delegated permissions model (NOT application permissions)
+      - User must have proper Exchange mailbox delegation configured
+    - **Username Field Now Respected**:
+      - Personal mailbox: `username=user@company.com`
+      - Shared mailbox: `username=shared@company.com`
+      - CRITICAL: Previously username was ignored, all methods used `/me/`
+      - Now properly routes to specified mailbox
+    - **Exchange Configuration Required**: For shared mailboxes: Grant user "Full Access" permission in Exchange Admin Center; User authentication still uses their own credentials; Graph API enforces permissions server-side
+    - **Use Cases**: Processing emails from multiple mailboxes with same OAuth app; Shared mailbox delegation for departmental accounts; All CRUD operations work for both personal and shared mailboxes
+  - **Functional Component 4: UI/UX Enhancements**
+    - **Mail Account Edit Dialog Reorganization**:
+      - Split into two sections: "Receiving (IMAP)" and "Sending (SMTP)"
+      - IMAP section: server, port, security, username, password, folder
+      - SMTP section: use_for_sending toggle, smtp_server, smtp_port, smtp_security, smtp_username, smtp_password, from_address
+      - Conditional field display: OAuth accounts show info box explaining XOAUTH2 (hide username/password)
+      - Traditional accounts show full SMTP credential fields
+      - Implement `onSendingToggle()` to auto-populate default SMTP settings when enabled
+    - **Current Sending Account Indicator**:
+      - Parent component (`mail.component.ts`) finds current sending account
+      - Passes to edit dialog via `componentInstance.currentSendingAccount`
+      - Edit dialog displays info alert above "Use for sending" checkbox when another account is active
       - Alert message: "Mail account '[Name]' is currently used for sending emails. Enabling this account will disable that account."
-      - Displays for both creating new accounts and editing existing accounts
-  - **Files Modified**:
-    - Global styles: `src-ui/src/styles.scss` (added tooltip white text CSS rule)
-    - Parent component: `src-ui/src/app/components/manage/mail/mail.component.ts` (pass currentSendingAccount to dialog)
-    - Edit dialog TS: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.ts` (add property)
-    - Edit dialog HTML: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.html` (info alert)
-  - **Benefits**:
-    - Tooltips readable in both light and dark modes throughout application
-    - Users clearly informed about sending account configuration impact
-    - Prevents confusion when managing multiple mail accounts
-    - Clean UX with contextual information at point of decision
+      - Shows for both creating and editing accounts
+    - **Mail Account List Visual Indicators**:
+      - Add send-fill icon badge next to account names where `use_for_sending=true`
+      - Badge tooltip: "This account is used for sending emails"
+      - Add info message when SMTP configured via environment variables
+      - Display logic: Show only when `smtpEnvConfigured=true` AND `hasSendingAccount()=false`
+      - Message: "ℹ️ Mail sending is configured via environment variables. To override these environment variables, enable 'Use for sending' for any of the accounts set up here."
+      - Import `NgbTooltipModule` for tooltip functionality
+    - **Bootstrap Tooltip Styling Fix**:
+      - **Problem**: Tooltip text was black-on-black in dark mode (unreadable)
+      - **Root Cause**: Bootstrap adapts text color to page theme, but tooltip background always dark
+      - **Solution**: Add global CSS rule in `src-ui/src/styles.scss`: `::ng-deep .tooltip-inner { color: white !important; }`
+      - **Impact**: All tooltips readable in both light and dark modes across entire application
+    - **Enhanced Log Messaging** (`tasks.py`):
+      - Change "No rules enabled for account {account}. Skipping." to: "No rules enabled for account {account} - skipping mail receiving. (Note: Send-only accounts don't require rules.)"
+      - CRITICAL: Message comes from mail RECEIVING task, not sending functionality
+      - Prevents user confusion about send-only accounts
+    - **Frontend Data Model** (`mail-account.ts`):
+      - Add fields: `smtp_server`, `smtp_port`, `smtp_security`, `smtp_username`, `smtp_password`, `use_for_sending`, `from_address`, `sending_account_info`
+      - Make all SMTP fields optional (OAuth accounts use defaults)
+    - **Backend UI Settings Exposure**: Add `smtp_env_configured` to ui_settings dict in `UiSettingsView`; Value from `settings.EMAIL_ENABLED` (traditional SMTP check); Allows frontend to differentiate env var vs account-based config; Add `SMTP_ENV_CONFIGURED` key to frontend SETTINGS_KEYS enum
+  - **Complete File Modifications List**:
+    - **Backend - Core Mail System**: `src/paperless_mail/models.py`, `src/paperless_mail/migrations/0031_add_smtp_fields.py` (NEW), `src/paperless_mail/mail_oauth.py`, `src/paperless_mail/serialisers.py`, `src/documents/mail.py`
+    - **Backend - Graph API Integration**: `src/paperless_mail/mail_graph.py` (NEW), `src/paperless_mail/mail_graph_retrieval.py`, `src/paperless_mail/oauth.py`, `src/paperless_mail/tasks.py`
+    - **Backend - UI Support**: `src/documents/views.py`
+    - **Frontend - TypeScript**: `src-ui/src/app/data/mail-account.ts`, `src-ui/src/app/data/ui-settings.ts`, `src-ui/src/app/components/manage/mail/mail.component.ts`, `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.ts`
+    - **Frontend - Templates**: `src-ui/src/app/components/manage/mail/mail.component.html`, `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component.html`
+    - **Frontend - Global Styles**: `src-ui/src/styles.scss`
+    - **Documentation**: `MS365_OAUTH_SETUP.md`
+  - **Migration Guide for Existing Deployments**:
+    - **For Existing Outlook OAuth Accounts**: Re-authorization required to get new scopes: `User.Read`, `Mail.Read`, `Mail.Send`, `Mail.Send.Shared`; Process: Settings > Mail > Mail Accounts > Click OAuth button again; What changes: Mail receiving switches from IMAP to Graph API, Mail sending uses Graph API; No data loss: All existing ProcessedMail entries preserved; Testing: Test connection + send test email
+    - **For Shared Mailbox Support**: Set SMTP From field to shared mailbox email (e.g., `shared@company.com`); User account must have Send As or Send on Behalf permissions; `Mail.Send.Shared` scope enables sending from mailboxes user has access to
+    - **For Organizations Using Environment Variables**: Environment variables (PAPERLESS_EMAIL_*) continue working as fallback; Account-based sending takes priority over env vars; Info message in UI explains relationship between config methods
+  - **Critical Implementation Details - Things to Watch Out For**:
+    - **Graph API Email Field**: ALWAYS check both 'from' and 'sender' fields with fallback logic; Failure mode: Emails marked processed but never ingested (permanent data loss); Add 'sender' to all $select parameters
+    - **Email Ordering**: MUST use `receivedDateTime asc` (oldest first) for chronological ingestion; Prevents document display order confusion in Paperless UI; Applies to both Graph API and IMAP methods
+    - **S/MIME Filtering**: MUST filter S/MIME attachments by both content type AND filename; Failure mode: Every signed email creates unwanted "smime" document; Case-insensitive comparison required
+    - **Single-Account Enforcement**: MUST use `.update()` when disabling other accounts (prevents recursive save()); MUST exclude current account from query: `.exclude(pk=self.pk)`; Critical for preventing save() loop issues
+    - **Multi-Mailbox Endpoints**: ALL Graph API methods must use `/users/{username}/` not `/me/`; Failure mode: Username field ignored, always accesses authenticated user's mailbox; Affects ALL 8 CRUD methods
+    - **SMTP Password Handling**: Serializer MUST obfuscate existing passwords in API responses; Empty string = intentional clearing, None = no change; Critical for security and proper form handling
+    - **Tooltip Styling**: Global CSS fix required: `::ng-deep .tooltip-inner { color: white !important; }`; Affects ALL tooltips across entire application; Without fix: tooltips unreadable in dark mode
+  - **Use Cases Enabled**: Mixed environments with OAuth2 (Gmail/Outlook) and traditional SMTP accounts; Microsoft 365 deployments with Security Defaults enabled (enterprise standard); Organizations eliminating SMTP port dependencies via Graph API; Multi-mailbox processing from single OAuth app registration; Send-only accounts without mail retrieval rules; Shared mailbox delegation for departmental email processing; Future-proof alignment with Microsoft's modern authentication strategy
+  - **Architecture Summary**: Provider-specific optimization: Outlook OAuth uses Graph API (bypasses Security Defaults) while maintaining universal SMTP support for all other providers; Clean separation of concerns: Mail receiving (IMAP/Graph API) operates independently from mail sending (SMTP/Graph API); Defense in depth: Single-account enforcement at model level, UI guidance prevents conflicts, automatic token refresh, comprehensive error handling; Minimal core impact: All changes marked with RKC comments, backward compatible with existing deployments, environment variables remain functional as fallback
   - All changes properly marked with RKC comments for maintainability
-  
-  **Phase 6 - Graph API Email Parsing Bug Fix (v1.1.0)**:
-  - Fixed critical data loss bug where emails with missing 'from' field were discarded
-  - **Problem**: Graph API sometimes provides only 'sender' field without 'from' field, causing parse error "Missing 'from'"
-  - **Impact**: HIGH SEVERITY - Emails were being discarded while marking UID as processed (permanent data loss)
-  - **Root Cause**: 
-    - `GraphMailMessage.from_` property only checked `self._data.get('from')` - returned empty dict when 'from' missing
-    - `GraphMailMessage.from_values` property same issue - created from_values with empty email/name
-    - Parser's `parse_file_to_message()` raised ParseError when `from_values` was None or empty
-    - Email marked as processed but never ingested into system
-  - **Solution**: 
-    - Added fallback logic: check 'from' field first, then fallback to 'sender' field if missing
-    - Both fields have identical structure in Graph API: `{ emailAddress: { name, address } }`
-    - Returns empty string only if BOTH fields are missing (prevents parse error)
-    - Maintains RFC format: `"Name <email>"` or just email address
-  - **Implementation Details**:
-    - Modified `from_` property with `sender_data = self._data.get('from') or self._data.get('sender')`
-    - Modified `from_values` property with same fallback logic
-    - Added 'full' field to from_values object for complete address string
-    - Created empty from_values object if both fields missing (prevents None errors)
-    - Added 'sender' to $select parameter to ensure field is fetched from API
-  - **Graph API Data Structure**:
-    - Unlike IMAP where 'sender' was plain text, Graph API 'sender' has same structure as 'from'
-    - Both provide `{ emailAddress: { name, address } }` format
-    - No risk of redundant email addresses in correspondent names
-  - **Impact on Correspondent Matching (v1.0.27)**:
-    - Smart correspondent matching unaffected - works same with 'from' or 'sender' data
-    - Both fields provide name and address for RFC format creation
-    - Email extraction from angle brackets works identically
-    - No duplicate correspondents created
-  - **Benefits**:
-    - Zero data loss - all emails properly ingested regardless of field presence
-    - Maintains existing correspondent matching behavior
-    - Graceful degradation - empty string better than parse error
-    - User quote: "we need to fix this and make sure these emails are properly ingested - currently these datasets are missing from the system completely"
-  - **Files Modified**:
-    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (modified from_ and from_values properties, added 'sender' to $select)
-  - All changes properly marked with RKC comments for maintainability
-  - **Architecture**: Defensive programming - handle Microsoft Graph API data variations gracefully
-  
-  **Phase 7 - Email Ordering Consistency (v1.1.0)**:
-  - Fixed email ingestion order inconsistency between IMAP and Graph API retrieval methods
-  - **Problem**: Graph API processed emails newest-first, causing reverse chronological order in Paperless UI
-  - **User Observation**: "newest mails first is problematic because that literally reverses the order of those mails in paperless, where newest are displayed first by default"
-  - **Root Cause**: 
-    - Graph API used `$orderby: 'receivedDateTime desc'` (newest first)
-    - Paperless displays documents newest-first by default
-    - This created double reversal → emails appeared in reverse chronological order
-    - IMAP typically returns oldest-first by default (chronological)
-  - **Solution**: 
-    - Changed Graph API ordering to `$orderby: 'receivedDateTime asc'` (oldest first)
-    - Ensures chronological ingestion: oldest emails → lowest document IDs
-    - When Paperless displays newest-first, emails appear in correct order
-    - Consistent behavior across both IMAP and Graph API retrieval
-  - **Maximum Age Filter Verification**:
-    - Confirmed `maximum_age` rule setting properly implemented in `_build_filter_query()`
-    - Converts rule's `maximum_age` field to OData filter: `receivedDateTime ge <date>`
-    - Works correctly for both Graph API and IMAP retrieval
-    - No changes needed - already correctly respecting mail rule time limits
-  - **Implementation Details**:
-    - Modified `fetch_messages()` params: `'$orderby': 'receivedDateTime asc'`
-    - Changed inline comment from "Newest first" to "Oldest first for chronological ingestion"
-    - No changes to IMAP code - already using oldest-first ordering
-  - **Benefits**:
-    - Consistent email order across IMAP and Graph API methods
-    - Predictable document IDs (older emails = lower IDs)
-    - Correct display order in Paperless UI (newest on top as expected)
-    - Maximum age filtering works correctly for both retrieval methods
-    - Clean user experience without unexpected ordering issues
-  - **Files Modified**:
-    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (changed $orderby parameter)
-  - All changes properly marked with RKC comments for maintainability
-  - **Architecture**: Consistent chronological ingestion across all retrieval methods
-  
-  **Phase 8 - S/MIME Attachment Filtering (v1.1.0)**:
-  - Fixed unwanted S/MIME signature and encryption files being processed as documents
-  - **Problem**: Graph API returns S/MIME technical attachments (smime.p7s, smime.p7m) alongside legitimate file attachments
-  - **User Report**: Extra documents titled "smime" containing text version of email appearing in Paperless
-  - **Impact**: Each S/MIME signed/encrypted email created duplicate content - one "smime" document + the .eml file
-  - **Root Cause**:
-    - S/MIME emails include technical attachments containing signatures or encrypted content
-    - Graph API returns these as fileAttachments (same as legitimate files)
-    - `get_attachments()` was not filtering them out
-    - Paperless processed them as regular documents
-  - **Solution**: 
-    - Added filtering logic in `get_attachments()` to skip S/MIME attachments
-    - Filters by content type: `pkcs7-signature`, `pkcs7-mime`, `x-pkcs7-signature`, `x-pkcs7-mime`
-    - Filters by filename patterns: files starting with `smime.` or named `smime`, `smime.p7s`, `smime.p7m`
-    - Makes Graph API behavior identical to IMAP (which also excludes these)
-  - **Implementation Details**:
-    - Added content type checking before creating GraphMailAttachment objects
-    - Lowercase comparison for case-insensitive matching
-    - Debug logging when S/MIME attachments are skipped
-    - Log shows count of legitimate attachments after filtering
-  - **Benefits**:
-    - Eliminates unwanted "smime" documents from being created
-    - Graph API now behaves identically to IMAP for S/MIME emails
-    - Only legitimate file attachments are processed
-    - Clean document list without technical email infrastructure files
-    - Consistent user experience across all retrieval methods
-  - **Files Modified**:
-    - Backend: `src/paperless_mail/mail_graph_retrieval.py` (added S/MIME filtering in get_attachments)
-  - All changes properly marked with RKC comments for maintainability
-  - **Architecture**: Content-aware filtering maintains protocol parity between Graph API and IMAP
-  
-  **Phase 4 - Multi-Mailbox Support (v1.1.0)**:
-  - Added ability to access multiple mailboxes on Microsoft 365 tenant using single app registration
-  - **Problem**: Graph API mail retrieval hardcoded `/me/messages` endpoint, always accessed authenticated user's mailbox regardless of username field
-  - **Root Cause**: Username field was being ignored - all 8 Graph API methods used `/me/` instead of `/users/{username}/`
-  - **Solution**: 
-    - Updated all Graph API endpoint URLs from `/me/` to `/users/{self.mail_account.username}/`
-    - Added `Mail.Read.Shared` and `Mail.ReadWrite.Shared` scopes for shared mailbox access
-    - Updated test function to use username-based endpoint
-  - **Affected Methods in mail_graph_retrieval.py**:
-    - `fetch_messages()` - Changed to `/users/{username}/messages`
-    - `get_attachments()` - Changed to `/users/{username}/messages/{id}/attachments`
-    - `mark_message_read()` - Changed to `/users/{username}/messages/{id}`
-    - `delete_message()` - Changed to `/users/{username}/messages/{id}`
-    - `flag_message()` - Changed to `/users/{username}/messages/{id}`
-    - `move_message()` - Changed to `/users/{username}/messages/{id}/move`
-    - `tag_message()` - Changed to `/users/{username}/messages/{id}`
-    - `_get_folder_id()` - Changed to `/users/{username}/mailFolders`
-  - **OAuth Scopes Enhancement**:
-    - Added `Mail.Read.Shared` - Read mail from shared mailboxes
-    - Added `Mail.ReadWrite.Shared` - Modify mail in shared mailboxes (for post-processing tags, mark as read)
-    - Enables delegated permissions model: user can access their own mailbox OR shared mailboxes they have access to
-  - **Architecture**:
-    - Uses delegated permissions (not application permissions) - user must have proper mailbox delegation
-    - Username field contains UPN/email address (either personal email or shared mailbox email)
-    - Supports both personal mailboxes and shared mailboxes via delegated Full Access permissions
-    - Works for all mail operations: read, mark as read, delete, flag, move, tag
-  - **Exchange Configuration Required**:
-    - For shared mailboxes: Grant user "Full Access" permission in Exchange Admin Center
-    - User must have proper delegation before Graph API will allow access
-    - No additional Exchange settings needed beyond mailbox delegation
-  - **Use Cases**:
-    - User reading from their personal mailbox (`username=user@company.com`)
-    - User reading from shared mailbox they have access to (`username=shared@company.com`)
-    - Processing emails from multiple mailboxes using same OAuth app registration
-    - Post-processing actions (tags, mark as read) work for both personal and shared mailboxes
-  - **Benefits**:
-    - Single app registration can access multiple mailboxes
-    - No need for separate OAuth accounts per mailbox
-    - Username field now properly respected (was previously ignored)
-    - Delegated permissions provide proper security model
-    - All CRUD operations work correctly for both personal and shared mailboxes
-  
-  **Files Modified**:
-  - **Backend - General SMTP Support**:
-    - `src/paperless_mail/models.py` (added SMTP fields, validation, enforcement)
-    - `src/paperless_mail/migrations/0031_add_smtp_fields.py` (NEW - adds SMTP fields)
-    - `src/paperless_mail/serialisers.py` (API fields with obfuscated password handling)
-    - `src/documents/mail.py` (uses new unified backend)
-  - **Backend - Graph API Integration**:
-    - `src/paperless_mail/mail_graph.py` (NEW - OutlookGraphEmailBackend class)
-    - `src/paperless_mail/mail_oauth.py` (refactored to factory pattern, routing logic)
-    - `src/paperless_mail/oauth.py` (changed Outlook scope to Mail.Send)
-  - **Backend - UI/UX**:
-    - `src/paperless_mail/tasks.py` (clarified log message in process_mail_accounts)
-  - **Frontend**:
-    - `src-ui/src/app/data/mail-account.ts` (TypeScript interface updates)
-    - `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/` (reorganized UI into Receiving/Sending sections)
-  - **Documentation**:
-    - `MS365_OAUTH_SETUP.md` (updated for Graph API, removed SMTP troubleshooting)
-  
-  **Migration Guide for Existing Outlook OAuth Accounts**:
-  1. **Re-authorization Required**: Existing Outlook OAuth accounts need to re-authorize to get new scopes
-  2. **New Scopes**: `User.Read`, `Mail.Read`, `Mail.Send`, `Mail.Send.Shared` (replaces legacy `IMAP.AccessAsUser.All` and `SMTP.Send`)
-  3. **Process**: Settings > Mail > Mail Accounts > Click OAuth button again
-  4. **What Changes**: 
-     - Mail receiving switches from IMAP to Graph API
-     - Mail sending uses Graph API instead of SMTP
-     - Adds `Mail.Send.Shared` scope for shared mailbox support
-  5. **No Data Loss**: All existing processed mail entries preserved, only protocols change
-  6. **Testing**: 
-     - Test connection to verify Graph API connectivity
-     - Send a test email to verify sending works
-     - If using shared mailboxes, test sending from shared address
-  
-  **Shared Mailbox Support**:
-  - Set SMTP From field to shared mailbox email address (e.g., `shared@company.com`)
-  - User account must have Send As or Send on Behalf permissions for that mailbox
-  - `Mail.Send.Shared` scope enables sending from mailboxes user has access to
-  - Empty from field will use authenticated user's email address (default behavior)
-  
-  **Use Cases**:
-  - Organizations with Microsoft 365 Security Defaults enabled (common in enterprise)
-  - Mixed environments with both OAuth2 (Gmail/Outlook) and traditional SMTP accounts
-  - Organizations wanting to eliminate SMTP port dependencies
-  - Future-proof deployments aligned with Microsoft's modern authentication strategy
-  
-  **Benefits Summary**:
-  - Single interface for all SMTP authentication methods (OAuth2 + traditional)
-  - Outlook OAuth accounts bypass Security Defaults restrictions
-  - No admin intervention needed for Outlook mail sending
-  - Clear UI guidance for configuring different account types
-  - Automatic defaults reduce configuration complexity
-  - Better error messages for all account types
-  - Environment variables still work as fallback for security-conscious deployments
-  
-  All changes properly marked with RKC comments for maintainability.
-  **Architecture**: Provider-specific optimization (Graph API for Outlook) while maintaining universal SMTP support for other providers.
-  - **Problem**: Error message "No rules enabled for account {account}. Skipping." appeared when users configured send-only accounts
-  - **Root Cause**: Message came from `process_mail_accounts()` task which processes INCOMING mail, not from email sending functionality
-  - **User Confusion**: Users thought email sending was broken when error was actually benign and expected behavior
-  - **Solution**: 
-    - Enhanced log message to clarify it's about mail **receiving**, not sending
-    - Added helpful note: "(Note: Send-only accounts don't require rules.)"
-    - Full message: "No rules enabled for account {account} - skipping mail receiving. (Note: Send-only accounts don't require rules.)"
-  - **Behavior**:
-    - Send-only accounts (with `use_for_sending=true` but no MailRules) will still log this INFO message
-    - Message now clearly indicates it's about receiving, not sending
-    - Email sending functionality works independently and doesn't require any rules
-    - Users can safely ignore this INFO log for send-only accounts
-  - **Benefits**:
-    - Eliminates confusion between mail receiving and mail sending
-    - Users understand send-only accounts don't need MailRules
-    - Clearer troubleshooting when actual mail receiving issues occur
-    - Minimal code impact - single log message enhancement
-  - Files modified:
-    - Backend: `src/paperless_mail/tasks.py` (enhanced log message in process_mail_accounts task)
-  - All changes properly marked with RKC comments for maintainability
-  - **Architecture**: Clean separation of concerns - mail receiving (requires rules) vs mail sending (no rules needed)
-
-- **v1.1.1 (2026-01-28)**: Mail Account List View Enhancements
-  - Added visual indicators for which account is configured for email sending
-  - Enhanced mail accounts list with send-fill icon badge and tooltip for sending account
-  - Added info message when SMTP is configured via environment variables
-  - **Problem**: Users couldn't easily identify which mail account was configured for sending emails
-  - **Solution**: 
-    - Added `smtp_env_configured` flag to backend ui_settings (uses existing `EMAIL_ENABLED` setting)
-    - Created conditional info alert that displays when env vars configured but no account-based sending enabled
-    - Added send-fill icon badge with tooltip next to account name when `use_for_sending=true`
-    - Badge shows "This account is used for sending emails" tooltip on hover
-  - **Info Message Display Logic**:
-    - Only shows when `smtpEnvConfigured=true` AND `hasSendingAccount()=false`
-    - Message: "ℹ️ Mail sending is configured via environment variables. To override these environment variables, enable 'Use for sending' for any of the accounts set up here."
-    - Disappears automatically when user enables sending on any account
-  - **Visual Elements**:
-    - Uses `send-fill` icon from ngx-bootstrap-icons (matches v1.1.0 edit dialog)
-    - Icon displays inline after account type badge (IMAP/Gmail/Outlook)
-    - Tooltip integration via NgbTooltipModule with top placement
-    - Consistent styling with existing account list badges
-  - **Backend Changes**:
-    - Added `smtp_env_configured` to ui_settings dict in `UiSettingsView`
-    - Value sourced from `settings.EMAIL_ENABLED` (traditional SMTP configuration)
-    - Allows frontend to differentiate between env var and account-based sending config
-  - **Frontend Changes**:
-    - Added `SMTP_ENV_CONFIGURED` key to SETTINGS_KEYS enum
-    - Added corresponding UiSetting entry with boolean type, default false
-    - Added `smtpEnvConfigured` getter to MailComponent reading from SettingsService
-    - Added `hasSendingAccount()` method checking if any account has `use_for_sending=true`
-    - Imported NgbTooltipModule for tooltip functionality
-    - Added conditional info alert in template above mail accounts section
-    - Added send-fill icon with ngbTooltip directive inline with account names
-  - **Use Cases**:
-    - Admin can quickly see which account handles outgoing email
-    - Users understand relationship between env var config and account-based config
-    - Clear visual feedback when migrating from env vars to account-based sending
-    - Tooltip provides additional context without cluttering the interface
-  - **Benefits**:
-    - Improved discoverability of sending account configuration
-    - Clear indication when environment variable fallback is active
-    - Consistent icon usage across edit dialog and list view
-    - Non-intrusive UI enhancement that complements existing v1.1.0 functionality
-    - Helps users understand the configuration hierarchy (env vars vs accounts)
-  - Files modified:
-    - Backend: `src/documents/views.py` (added smtp_env_configured to ui_settings, properly marked in existing RKC section)
-    - Frontend: `src-ui/src/app/data/ui-settings.ts` (added SMTP_ENV_CONFIGURED key and setting)
-    - Frontend: `src-ui/src/app/components/manage/mail/mail.component.ts` (added smtpEnvConfigured getter, hasSendingAccount method, NgbTooltipModule import)
-    - Frontend: `src-ui/src/app/components/manage/mail/mail.component.html` (added info alert and send-fill icon badge)
-  - All changes properly marked with RKC comments for maintainability
-  - **Architecture**: Minimal core code impact - leverages existing settings infrastructure and tooltip components
-
-- **v1.1.0 (2026-01-28)**: SMTP Email Sending via Mail Accounts
-  - Refactored OAuth2-specific email sending (v1.0.18) into general SMTP sending feature
-  - **Problem**: v1.0.18 only supported OAuth2, had hardcoded SMTP settings, no enforcement of "only one sending account"
-  - **Solution**: 
-    - Extended MailAccount model with comprehensive SMTP configuration fields
-    - Support for both OAuth2 XOAUTH2 and traditional username/password SMTP authentication
-    - Automatic enforcement: only one account can be enabled for sending at a time
-    - Flexible SMTP server configuration for all account types
-    - Clean UI separation between IMAP (receiving) and SMTP (sending)
-    - Environment variables remain as fallback when no mail account configured
-  - **New MailAccount Fields**:
-    - `smtp_server` - SMTP server hostname (optional, uses defaults for Gmail/Outlook OAuth)
-    - `smtp_port` - SMTP port (587 for STARTTLS, 465 for SSL, 25 for unencrypted)
-    - `smtp_security` - Security protocol: SSL, STARTTLS, or NONE
-    - `smtp_username` - SMTP username for traditional auth (optional, falls back to IMAP username)
-    - `smtp_password` - SMTP password for traditional auth (optional, falls back to IMAP password)
-    - `sending_account_info` - Read-only API field showing if account replaced another as sending account
-  - **Backend Changes**:
-    - Refactored `OAuth2EmailBackend` → `MailAccountEmailBackend`
-    - Supports both OAuth2 XOAUTH2 (via `_open_oauth()`) and traditional auth (via `_open_traditional()`)
-    - Updated `MailAccount.save()` to auto-disable other sending accounts
-    - Updated `MailAccount.clean()` to validate SMTP config for traditional accounts
-    - Updated `MailAccount._set_default_smtp_config()` to set Gmail/Outlook defaults
-    - Updated `get_sending_mail_account()` to return ANY account type (not just OAuth)
-    - Updated `send_email()` in documents/mail.py to use new unified backend
-    - Updated serializers with new fields and obfuscated password handling
-  - **Frontend Changes**:
-    - Reorganized mail account edit dialog into "Receiving (IMAP)" and "Sending (SMTP)" sections
-    - Added SMTP configuration fields with conditional display based on account type
-    - OAuth accounts show info box explaining XOAUTH2 usage
-    - Traditional accounts show SMTP username/password fields
-    - Added warning dialog when changing sending account
-    - Added `onSendingToggle()` to populate default SMTP settings
-    - Added `isTraditionalAccount` getter to conditionally show/hide fields
-  - **Migration**: 0031_add_smtp_fields.py
-    - Adds new SMTP fields to MailAccount model
-    - Updates help text for use_for_sending field
-    - Backward compatible: existing v1.0.18 accounts continue working
-  - **Use Cases**:
-    - Organizations using OAuth2 (Gmail/Outlook) for mail retrieval AND sending
-    - Organizations using traditional SMTP with username/password
-    - Mixed environments with both OAuth2 and traditional accounts
-    - Custom SMTP servers with non-standard ports/security
-  - **Benefits**:
-    - Single interface for all SMTP authentication methods
-    - No need for separate environment variables for email sending
-    - Clear UI guidance for configuring different account types
-    - Automatic defaults reduce configuration burden
-    - Environment variables still work as fallback for security-conscious deployments
-  - Files modified:
-    - Backend: `src/paperless_mail/models.py` (fields, validation, enforcement)
-    - Backend: `src/paperless_mail/migrations/0031_add_smtp_fields.py` (NEW)
-    - Backend: `src/paperless_mail/mail_oauth.py` (unified backend)
-    - Backend: `src/paperless_mail/serialisers.py` (API fields)
-    - Backend: `src/documents/mail.py` (uses new backend)
-    - Frontend: `src-ui/src/app/data/mail-account.ts` (TypeScript interface)
-    - Frontend: `src-ui/src/app/components/common/edit-dialog/mail-account-edit-dialog/` (UI refactor)
-  - All changes properly marked with RKC comments for maintainability
-  - **Architecture**: Clean separation of concerns - OAuth2 vs traditional handled transparently
 
 - **v1.0.29 (2025-12-16)**: Saved views unsaved changes warning default
   - Added environment variable to control default value of "Show warning when closing saved views with unsaved changes" option
