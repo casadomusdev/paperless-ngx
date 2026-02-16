@@ -64,7 +64,7 @@ The RKC customizations enhance Paperless-ngx with security controls, collaborati
   - Translations: `src-ui/src/locale/messages.en_US.xlf`, `messages.de_DE.xlf`
 
 ### Bug Fixes & Enhancements
-- **SSO UiSettings Auto-Creation** - Automatically creates UiSettings for new SSO users to prevent login errors.
+- **SSO UiSettings Auto-Creation** - Automatically creates UiSettings for new SSO users to prevent login errors. Includes migration-safe table existence check to prevent transaction failures on fresh database installations.
   - Backend: `src/documents/signals/handlers.py`
 
 ## Quick Start & Deployment
@@ -1872,6 +1872,7 @@ docker compose restart webserver
   - Fixed in `IndexView.get_frontend_language()` and `UiSettingsView.get()` with proper exception handling
   - Added try/except blocks to catch `RelatedObjectDoesNotExist` exception
   - Added post_save signal to auto-create UiSettings for new users (in `documents/signals/handlers.py`)
+  - **Migration-safe Implementation**: Signal handler checks if `documents_uisettings` table exists before attempting queries to prevent PostgreSQL transaction failures during fresh database migrations. Uses `connection.introspection.table_names()` to safely detect table existence without poisoning the transaction. Critical for systems where user creation happens before migration 1019_uisettings runs.
   - Enhanced Django logging in settings.py with django.request logger for better debugging
   - Added root logger level to capture all debug messages properly
 

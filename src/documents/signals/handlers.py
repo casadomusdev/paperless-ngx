@@ -605,6 +605,17 @@ def cleanup_custom_field_deletion(sender, instance: CustomField, **kwargs):
 def create_ui_settings_for_new_user(sender, instance: User, created: bool, **kwargs):
     if created:
         try:
+            # RKC: Check if UiSettings table exists before attempting to query it.
+            # During initial migrations, users (like "consumer") may be created before
+            # migration 1019_uisettings runs. In PostgreSQL, a failed query inside a
+            # transaction aborts the entire transaction, even if caught in Python.
+            # We MUST check table existence BEFORE querying to avoid poisoning the transaction.
+            from django.db import connection
+            if 'documents_uisettings' not in connection.introspection.table_names():
+                if settings.DEBUG_SSO:
+                    logger.debug(f"UiSettings table not yet created during migrations, skipping for user: {instance.username}")
+                return
+            
             # Only log creation details when SSO debug mode is enabled
             if settings.DEBUG_SSO:
                 logger.debug(f"Creating UiSettings for new user: {instance.username}")
