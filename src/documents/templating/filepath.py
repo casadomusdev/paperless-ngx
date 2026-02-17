@@ -211,21 +211,32 @@ def get_tags_context(tags: Iterable[Tag]) -> dict[str, str | list[str]]:
 
 def get_custom_fields_context(
     custom_fields: Iterable[CustomFieldInstance],
+    *,
+    sanitize: bool = True,
 ) -> dict[str, dict[str, dict[str, str]]]:
     """
     Given an Iterable of CustomFieldInstance, builds a dictionary mapping the field name
-    to its type and value
+    to its type and value.
+
+    RKC: Added sanitize parameter (v1.2.0). When sanitize=False, field names and string
+    values are returned raw (unsanitized), which is required for email templating where
+    values like email addresses contain characters (e.g. @) that pathvalidate would strip.
+    When sanitize=True (default), behavior is unchanged from upstream.
     """
     field_data = {"custom_fields": {}}
     for field_instance in custom_fields:
-        type_ = pathvalidate.sanitize_filename(
-            field_instance.field.data_type,
-            replacement_text="-",
-        )
+        if sanitize:
+            type_ = pathvalidate.sanitize_filename(
+                field_instance.field.data_type,
+                replacement_text="-",
+            )
+        else:
+            type_ = field_instance.field.data_type
+
         if field_instance.value is None:
             value = None
-        # String types need to be sanitized
-        elif field_instance.field.data_type in {
+        # String types need to be sanitized (only when sanitize=True)
+        elif sanitize and field_instance.field.data_type in {
             CustomField.FieldDataType.MONETARY,
             CustomField.FieldDataType.STRING,
             CustomField.FieldDataType.URL,
@@ -240,22 +251,30 @@ def get_custom_fields_context(
             and field_instance.field.extra_data["select_options"] is not None
         ):
             options = field_instance.field.extra_data["select_options"]
-            value = pathvalidate.sanitize_filename(
-                next(
-                    option["label"]
-                    for option in options
-                    if option["id"] == field_instance.value
-                ),
-                replacement_text="-",
+            label = next(
+                option["label"]
+                for option in options
+                if option["id"] == field_instance.value
             )
+            if sanitize:
+                value = pathvalidate.sanitize_filename(
+                    label,
+                    replacement_text="-",
+                )
+            else:
+                value = label
         else:
             value = field_instance.value
-        field_data["custom_fields"][
-            pathvalidate.sanitize_filename(
+
+        if sanitize:
+            field_name = pathvalidate.sanitize_filename(
                 field_instance.field.name,
                 replacement_text="-",
             )
-        ] = {
+        else:
+            field_name = field_instance.field.name
+
+        field_data["custom_fields"][field_name] = {
             "type": type_,
             "value": value,
         }

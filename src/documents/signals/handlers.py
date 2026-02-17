@@ -23,6 +23,8 @@ from django.db import DatabaseError
 from django.db import close_old_connections
 from django.db import connections
 from django.db import models
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.db.models import Q
 from django.dispatch import receiver
 from django.utils import timezone
@@ -1188,9 +1190,17 @@ def run_workflows(
             added = timezone.localtime(timezone.now())
             created = overrides.created
 
-        subject = (
-            parse_w_workflow_placeholders(
-                action.email.subject,
+        # RKC: Render ALL email fields through Jinja2 templating (v1.2.0)
+        # Fixes upstream bug where 'to' field was not templated.
+        # Passes document instance for custom_fields context when available.
+        doc_for_template = document if not use_overrides else None
+
+        def _render_field(field_value):
+            """Render a single template field, returns empty string if field is empty/None."""
+            if not field_value:
+                return ""
+            return parse_w_workflow_placeholders(
+                field_value,
                 correspondent,
                 document_type,
                 owner_username,
@@ -1200,26 +1210,62 @@ def run_workflows(
                 created,
                 title,
                 doc_url,
+                document=doc_for_template,
             )
-            if action.email.subject
-            else ""
-        )
-        body = (
-            parse_w_workflow_placeholders(
-                action.email.body,
-                correspondent,
-                document_type,
-                owner_username,
-                added,
-                filename,
-                current_filename,
-                created,
-                title,
-                doc_url,
+
+        subject = _render_field(action.email.subject)
+        body = _render_field(action.email.body)
+        to_rendered = _render_field(action.email.to)
+        from_rendered = _render_field(action.email.from_address)
+        cc_rendered = _render_field(action.email.cc)
+        bcc_rendered = _render_field(action.email.bcc)
+
+        # Parse comma-separated address lists
+        to_list = [addr.strip() for addr in to_rendered.split(",") if addr.strip()] if to_rendered else []
+        cc_list = [addr.strip() for addr in cc_rendered.split(",") if addr.strip()] if cc_rendered else []
+        bcc_list = [addr.strip() for addr in bcc_rendered.split(",") if addr.strip()] if bcc_rendered else []
+
+        # Validate all rendered email addresses
+        all_addresses = list(to_list) + list(cc_list) + list(bcc_list)
+        if from_rendered:
+            all_addresses.append(from_rendered)
+
+        invalid_addresses = []
+        for addr in all_addresses:
+            try:
+                validate_email(addr)
+            except DjangoValidationError:
+                invalid_addresses.append(addr)
+
+        if invalid_addresses:
+            logger.error(
+                f"Email validation failed for addresses: {', '.join(invalid_addresses)}. "
+                f"Email not sent for document '{title}'.",
+                extra={"group": logging_group},
             )
-            if action.email.body
-            else ""
-        )
+            # Apply error_tag if configured
+            if action.email.error_tag and not use_overrides:
+                document.tags.add(action.email.error_tag)
+                logger.info(
+                    f"Applied error tag '{action.email.error_tag.name}' to document '{title}'",
+                    extra={"group": logging_group},
+                )
+            return
+
+        if not to_list:
+            logger.error(
+                f"No recipients specified for email action on document '{title}'.",
+                extra={"group": logging_group},
+            )
+            return
+
+        # HTML auto-detection: check for common HTML tags in rendered body
+        is_html = any(
+            tag in body.lower()
+            for tag in ("<html", "<body", "<br", "<div", "<p>", "<table")
+        ) if body else False
+        # /end RKC edit
+
         try:
             attachments: list[EmailAttachment] = []
             if action.email.include_document:
@@ -1254,11 +1300,15 @@ def run_workflows(
             n_messages = send_email(
                 subject=subject,
                 body=body,
-                to=action.email.to.split(","),
+                to=to_list,
                 attachments=attachments,
+                from_email=from_rendered or None,
+                cc=cc_list or None,
+                bcc=bcc_list or None,
+                is_html=is_html,
             )
             logger.debug(
-                f"Sent {n_messages} notification email(s) to {action.email.to}",
+                f"Sent {n_messages} notification email(s) to {to_rendered}",
                 extra={"group": logging_group},
             )
         except Exception as e:

@@ -15,6 +15,9 @@ from documents.templating.environment import _template_environment
 from documents.templating.filters import format_datetime
 from documents.templating.filters import localize_date
 
+# RKC: Import for custom fields context in workflow templates (v1.2.0)
+from documents.templating.filepath import get_custom_fields_context
+
 logger = logging.getLogger("paperless.templating")
 
 _LogStrictUndefined = make_logging_undefined(logger, StrictUndefined)
@@ -40,11 +43,16 @@ def parse_w_workflow_placeholders(
     created: date | None = None,
     doc_title: str | None = None,
     doc_url: str | None = None,
+    document=None,
 ) -> str:
     """
     Available title placeholders for Workflows depend on what has already been assigned,
     e.g. for pre-consumption triggers created will not have been parsed yet, but it will
-    for added / updated triggers
+    for added / updated triggers.
+
+    RKC: Added document parameter (v1.2.0). When a Document instance is provided,
+    custom_fields context is included with raw (unsanitized) values, enabling templates
+    like {{ custom_fields["Mail To"].value }} in workflow email fields.
     """
 
     formatting = {
@@ -79,6 +87,17 @@ def parse_w_workflow_placeholders(
         formatting.update({"doc_title": doc_title})
     if doc_url is not None:
         formatting.update({"doc_url": doc_url})
+
+    # RKC: Include custom fields context when a Document instance is provided (v1.2.0)
+    if document is not None:
+        try:
+            from documents.models import CustomFieldInstance
+            custom_field_instances = CustomFieldInstance.objects.filter(document=document)
+            cf_context = get_custom_fields_context(custom_field_instances, sanitize=False)
+            formatting.update(cf_context)
+        except Exception as e:
+            logger.warning(f"Failed to load custom fields context for document {document}: {e}")
+    # /end RKC edit
 
     logger.debug(f"Parsing Workflow Jinja template: {text}")
     try:

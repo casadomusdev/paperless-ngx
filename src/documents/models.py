@@ -1206,9 +1206,56 @@ class WorkflowActionEmail(models.Model):
         _("emails to"),
         null=False,
         help_text=_(
-            "The destination email addresses, comma separated.",
+            "The destination email addresses, comma separated. "
+            "Supports Jinja2 templates with custom field placeholders.",
         ),
     )
+
+    # RKC: Dynamic email fields with Jinja2 template support (v1.2.0)
+    from_address = models.CharField(
+        _("from email address"),
+        max_length=256,
+        null=True,
+        blank=True,
+        help_text=_(
+            "Override the sender address. Supports Jinja2 templates. "
+            "Falls back to mail account from_address or username if empty.",
+        ),
+    )
+
+    cc = models.TextField(
+        _("emails cc"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "CC email addresses, comma separated. "
+            "Supports Jinja2 templates with custom field placeholders.",
+        ),
+    )
+
+    bcc = models.TextField(
+        _("emails bcc"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "BCC email addresses, comma separated. "
+            "Supports Jinja2 templates with custom field placeholders.",
+        ),
+    )
+
+    error_tag = models.ForeignKey(
+        Tag,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name=_("error tag"),
+        help_text=_(
+            "Tag to apply to the document if email sending fails "
+            "due to validation errors (e.g. invalid rendered email address).",
+        ),
+    )
+    # /end RKC edit
 
     include_document = models.BooleanField(
         default=False,

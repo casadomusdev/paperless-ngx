@@ -33,6 +33,11 @@ def send_email(
     body: str,
     to: list[str],
     attachments: list[EmailAttachment],
+    *,
+    from_email: str | None = None,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
+    is_html: bool = False,
 ) -> int:
     """
     Send an email with attachments.
@@ -41,11 +46,20 @@ def send_email(
     Supports both OAuth2 XOAUTH2 and traditional password authentication.
     Falls back to regular SMTP if no mail account is configured.
 
+    RKC: Added from_email, cc, bcc, is_html parameters (v1.2.0).
+    - from_email: Override sender address (priority over mail account default)
+    - cc/bcc: Carbon copy / blind carbon copy recipients
+    - is_html: Set content_subtype to 'html' for HTML email bodies
+
     Args:
         subject: Email subject
         body: Email body text
         to: List of recipient email addresses
         attachments: List of attachments
+        from_email: Optional override for sender address
+        cc: Optional list of CC email addresses
+        bcc: Optional list of BCC email addresses
+        is_html: Whether the body contains HTML content
 
     Returns:
         Number of emails sent
@@ -58,13 +72,16 @@ def send_email(
     if mail_account:
         # Use mail account backend (supports both OAuth2 and traditional SMTP)
         logger.debug(f"Using mail account '{mail_account.name}' for sending email")
-        from_email = get_from_address(mail_account)
+        # RKC: from_email priority chain (v1.2.0): explicit param → mail account default
+        sender = from_email if from_email else get_from_address(mail_account)
         
         email = EmailMessage(
             subject=subject,
             body=body,
-            from_email=from_email,
+            from_email=sender,
             to=to,
+            cc=cc or [],
+            bcc=bcc or [],
         )
         
         # Set the mail account backend
@@ -75,8 +92,16 @@ def send_email(
         email = EmailMessage(
             subject=subject,
             body=body,
+            from_email=from_email,
             to=to,
+            cc=cc or [],
+            bcc=bcc or [],
         )
+    # /end RKC edit
+
+    # RKC: HTML auto-detection support (v1.2.0)
+    if is_html:
+        email.content_subtype = "html"
     # /end RKC edit
 
     used_filenames: set[str] = set()

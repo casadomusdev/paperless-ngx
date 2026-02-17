@@ -26,6 +26,7 @@ import {
   MATCH_NONE,
 } from 'src/app/data/matching-model'
 import { StoragePath } from 'src/app/data/storage-path'
+import { Tag } from 'src/app/data/tag'
 import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
 import { Workflow } from 'src/app/data/workflow'
 import {
@@ -43,6 +44,7 @@ import { CustomFieldsService } from 'src/app/services/rest/custom-fields.service
 import { DocumentTypeService } from 'src/app/services/rest/document-type.service'
 import { MailRuleService } from 'src/app/services/rest/mail-rule.service'
 import { StoragePathService } from 'src/app/services/rest/storage-path.service'
+import { TagService } from 'src/app/services/rest/tag.service'
 import { UserService } from 'src/app/services/rest/user.service'
 import { WorkflowService } from 'src/app/services/rest/workflow.service'
 import { SettingsService } from 'src/app/services/settings.service'
@@ -410,6 +412,7 @@ export class WorkflowEditDialogComponent
   private storagePathService: StoragePathService
   private mailRuleService: MailRuleService
   private customFieldsService: CustomFieldsService
+  private tagService: TagService
 
   templates: Workflow[]
   correspondents: Correspondent[]
@@ -418,6 +421,7 @@ export class WorkflowEditDialogComponent
   mailRules: MailRule[]
   customFields: CustomField[]
   dateCustomFields: CustomField[]
+  tags: Tag[]
 
   expandedItem: number = null
 
@@ -438,6 +442,7 @@ export class WorkflowEditDialogComponent
     this.userService = inject(UserService)
     this.settingsService = inject(SettingsService)
     this.customFieldsService = inject(CustomFieldsService)
+    this.tagService = inject(TagService)
 
     this.correspondentService
       .listAll()
@@ -468,6 +473,11 @@ export class WorkflowEditDialogComponent
           (f) => f.data_type === CustomFieldDataType.Date
         )
       })
+
+    this.tagService
+      .listAll()
+      .pipe(first())
+      .subscribe((result) => (this.tags = result.results))
   }
 
   getCreateTitle() {
@@ -1121,6 +1131,10 @@ export class WorkflowEditDialogComponent
           subject: new FormControl(action.email?.subject),
           body: new FormControl(action.email?.body),
           to: new FormControl(action.email?.to),
+          from_address: new FormControl(action.email?.from_address),
+          cc: new FormControl(action.email?.cc),
+          bcc: new FormControl(action.email?.bcc),
+          error_tag: new FormControl(action.email?.error_tag),
           include_document: new FormControl(!!action.email?.include_document),
         }),
         webhook: new FormGroup({
@@ -1247,6 +1261,10 @@ export class WorkflowEditDialogComponent
         subject: null,
         body: null,
         to: null,
+        from_address: null,
+        cc: null,
+        bcc: null,
+        error_tag: null,
         include_document: false,
       },
       webhook: {

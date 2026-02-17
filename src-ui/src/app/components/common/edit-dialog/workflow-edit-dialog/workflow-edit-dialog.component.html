@@ -404,9 +404,13 @@
         <div class="row" [formGroup]="formGroup.get('email')">
           <input type="hidden" formControlName="id" />
           <div class="col">
-            <pngx-input-text i18n-title title="Email subject" formControlName="subject" [error]="error?.actions?.[i]?.email?.subject"></pngx-input-text>
-            <pngx-input-textarea i18n-title title="Email body" formControlName="body" [error]="error?.actions?.[i]?.email?.body"></pngx-input-textarea>
-            <pngx-input-text i18n-title title="Email recipients" formControlName="to" [error]="error?.actions?.[i]?.email?.to"></pngx-input-text>
+            <pngx-input-text i18n-title title="From address" formControlName="from_address" i18n-hint hint="Optional. Overrides the mail account sender. Supports placeholders e.g. {{ '{{' }} custom_fields[&quot;Mail From&quot;].value {{ '}}' }}." [error]="error?.actions?.[i]?.email?.from_address"></pngx-input-text>
+            <pngx-input-text i18n-title title="Email recipients (To)" formControlName="to" i18n-hint hint="Comma-separated. Supports placeholders." [error]="error?.actions?.[i]?.email?.to"></pngx-input-text>
+            <pngx-input-text i18n-title title="CC" formControlName="cc" i18n-hint hint="Comma-separated. Supports placeholders." [error]="error?.actions?.[i]?.email?.cc"></pngx-input-text>
+            <pngx-input-text i18n-title title="BCC" formControlName="bcc" i18n-hint hint="Comma-separated. Supports placeholders." [error]="error?.actions?.[i]?.email?.bcc"></pngx-input-text>
+            <pngx-input-text i18n-title title="Email subject" formControlName="subject" i18n-hint hint="Supports placeholders e.g. {{ '{{' }} title {{ '}}' }}." [error]="error?.actions?.[i]?.email?.subject"></pngx-input-text>
+            <pngx-input-textarea i18n-title title="Email body" formControlName="body" i18n-hint hint="Supports placeholders. HTML content is auto-detected." [error]="error?.actions?.[i]?.email?.body"></pngx-input-textarea>
+            <pngx-input-select i18n-title title="Error tag" [items]="tags" [allowNull]="true" formControlName="error_tag" i18n-hint hint="Tag applied to document if email sending fails validation."></pngx-input-select>
             <pngx-input-switch i18n-title title="Attach document" formControlName="include_document"></pngx-input-switch>
           </div>
         </div>

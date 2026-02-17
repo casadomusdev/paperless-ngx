@@ -14,6 +14,14 @@ export interface WorkflowActionEmail extends ObjectWithId {
 
   to?: string
 
+  from_address?: string
+
+  cc?: string
+
+  bcc?: string
+
+  error_tag?: number
+
   include_document?: boolean
 }
 

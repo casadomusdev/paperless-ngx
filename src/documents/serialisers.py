@@ -2338,6 +2338,10 @@ class WorkflowActionEmailSerializer(serializers.ModelSerializer):
             "subject",
             "body",
             "to",
+            "from_address",
+            "cc",
+            "bcc",
+            "error_tag",
             "include_document",
         ]
 
