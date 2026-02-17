@@ -758,12 +758,19 @@ def send_webhook(
         logger.warning("Webhook blocked: port not permitted")
         raise ValueError("Destination port not permitted.")
 
+    # RKC: Fix upstream bug where unresolvable Docker hostnames are unconditionally blocked
+    # Original logic: `not ip or (not _is_public_ip(ip) and not ALLOW_INTERNAL)`
+    # Bug: when _resolve_first_ip() returns None (e.g. Docker internal hostname),
+    # `not ip` short-circuits to True, blocking the webhook even when
+    # WEBHOOKS_ALLOW_INTERNAL_REQUESTS is True (the default).
+    # Fix: only enforce IP validation when internal requests are NOT allowed. (v1.1.1)
     ip = _resolve_first_ip(p.hostname)
-    if not ip or (
-        not _is_public_ip(ip) and not settings.WEBHOOKS_ALLOW_INTERNAL_REQUESTS
+    if not settings.WEBHOOKS_ALLOW_INTERNAL_REQUESTS and (
+        not ip or not _is_public_ip(ip)
     ):
         logger.warning("Webhook blocked: destination not allowed")
         raise ValueError("Destination host is not allowed.")
+    # /end RKC edit
 
     try:
         post_args = {

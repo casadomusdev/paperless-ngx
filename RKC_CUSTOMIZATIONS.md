@@ -67,6 +67,9 @@ The RKC customizations enhance Paperless-ngx with security controls, collaborati
 - **SSO UiSettings Auto-Creation** - Automatically creates UiSettings for new SSO users to prevent login errors. Includes migration-safe table existence check to prevent transaction failures on fresh database installations.
   - Backend: `src/documents/signals/handlers.py`
 
+- **Webhook Docker Hostname Fix** - Fixes upstream bug where workflow webhooks targeting Docker internal hostnames (e.g. `http://service-name:3000/endpoint`) are unconditionally blocked even when `PAPERLESS_WEBHOOKS_ALLOW_INTERNAL_REQUESTS` is `true`.
+  - Backend: `src/documents/signals/handlers.py`
+
 ## Quick Start & Deployment
 
 ### Setting Environment Variables
@@ -1021,6 +1024,15 @@ docker compose restart webserver
 
 ## Version History
 
+- **v1.1.1 (2026-02-17)**: Webhook Docker hostname validation fix
+  - Fixed upstream bug in `send_webhook()` where Docker internal hostnames are unconditionally blocked
+  - **Problem**: Upstream PR #10555 ("Enhancement: support webhook restrictions") introduced IP validation for outgoing webhooks. The logic `not ip or (not _is_public_ip(ip) and not WEBHOOKS_ALLOW_INTERNAL_REQUESTS)` short-circuits on `not ip` when `_resolve_first_ip()` returns `None` (DNS fails for Docker hostnames like `paperless-invoice-processor`), blocking the webhook even when `WEBHOOKS_ALLOW_INTERNAL_REQUESTS` is `True` (the default).
+  - **Solution**: Restructured the boolean logic so the entire IP validation block is skipped when `WEBHOOKS_ALLOW_INTERNAL_REQUESTS` is `True`. Only when internal requests are explicitly disallowed does the IP check enforce public-only destinations.
+  - **Impact**: Workflow webhooks targeting Docker-internal service hostnames now work correctly in Docker Compose network environments
+  - Files modified:
+    - Backend: `src/documents/signals/handlers.py` (fixed IP validation logic in `send_webhook()`)
+  - All changes properly marked with RKC comments for maintainability
+
 - **v1.1.0 (2026-01-30)**: Mail System - Universal SMTP & Microsoft Graph API Integration
   - **Overview**: Complete mail system enhancement providing universal SMTP sending support for all account types, Microsoft Graph API integration for Outlook accounts, multi-mailbox access capabilities, and comprehensive UI/UX improvements
   - **Strategic Architecture**:
@@ -1867,12 +1879,11 @@ docker compose restart webserver
   - Prevents confusion and accidental attempts to edit global views
 
 - **v1.0.5 (2025-12-02)**: SSO UiSettings comprehensive fix
-  - Fixed critical bug where new SSO users would get error on first login
+  
   - Problem: When UiSettings is created, `settings` field defaults to NULL
   - Fixed in `IndexView.get_frontend_language()` and `UiSettingsView.get()` with proper exception handling
   - Added try/except blocks to catch `RelatedObjectDoesNotExist` exception
   - Added post_save signal to auto-create UiSettings for new users (in `documents/signals/handlers.py`)
-  - **Migration-safe Implementation**: Signal handler checks if `documents_uisettings` table exists before attempting queries to prevent PostgreSQL transaction failures during fresh database migrations. Uses `connection.introspection.table_names()` to safely detect table existence without poisoning the transaction. Critical for systems where user creation happens before migration 1019_uisettings runs.
   - Enhanced Django logging in settings.py with django.request logger for better debugging
   - Added root logger level to capture all debug messages properly
 
