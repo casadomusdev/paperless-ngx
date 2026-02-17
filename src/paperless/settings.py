@@ -1379,6 +1379,7 @@ CONSUMER_READD_TAG_ID = (
     else None
 )
 CONSUMER_READD_ADD_NOTE = __get_boolean("PAPERLESS_CONSUMER_READD_ADD_NOTE", "yes")
+CONSUMER_READD_RETRASH = __get_boolean("PAPERLESS_CONSUMER_READD_RETRASH")
 # /end RKC edit
 
 # RKC: Custom UI defaults (theme color, dark mode thumb inversion, default language)

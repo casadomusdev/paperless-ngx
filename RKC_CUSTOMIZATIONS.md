@@ -64,8 +64,8 @@ The RKC customizations enhance Paperless-ngx with security controls, collaborati
   - Translations: `src-ui/src/locale/messages.en_US.xlf`, `messages.de_DE.xlf`
 
 ### Document Processing
-- **[Duplicate Document Re-Add](#7-duplicate-document-re-add)** - When a duplicate document is detected during consumption, instead of silently failing, the existing document's `added` date is reset so it surfaces at the top of the inbox again. Optionally tags the document and adds an informational note with source details. Disabled by default.
-  - Environment Variables: `PAPERLESS_CONSUMER_READD_DOCUMENTS` (default: false), `PAPERLESS_CONSUMER_READD_TAG_ID` (optional), `PAPERLESS_CONSUMER_READD_ADD_NOTE` (default: true)
+- **[Duplicate Document Re-Add](#7-duplicate-document-re-add)** - When a duplicate document is detected during consumption, instead of silently failing, the existing document's `added` date is reset so it surfaces at the top of the inbox again. Optionally tags the document and adds an informational note with source details. Handles trashed (soft-deleted) duplicates via restore-readd-optionally-retrash flow. Disabled by default.
+  - Environment Variables: `PAPERLESS_CONSUMER_READD_DOCUMENTS` (default: false), `PAPERLESS_CONSUMER_READD_TAG_ID` (optional), `PAPERLESS_CONSUMER_READD_ADD_NOTE` (default: true), `PAPERLESS_CONSUMER_READD_RETRASH` (default: false)
   - Backend: `src/documents/consumer.py`, `src/paperless/settings.py`
 
 ### Bug Fixes & Enhancements
@@ -546,9 +546,10 @@ Text-based translation ID to avoid numeric ID collisions:
 - `PAPERLESS_CONSUMER_READD_DOCUMENTS` (Boolean, default: `false`) — Master switch
 - `PAPERLESS_CONSUMER_READD_TAG_ID` (Integer, optional) — Tag ID to apply on re-add
 - `PAPERLESS_CONSUMER_READD_ADD_NOTE` (Boolean, default: `true`) — Add informational note
+- `PAPERLESS_CONSUMER_READD_RETRASH` (Boolean, default: `false`) — Re-trash after restoring trashed duplicates
 
 **Files Modified**:
-- `src/paperless/settings.py` — 3 new environment variable settings
+- `src/paperless/settings.py` — 4 environment variable settings
 - `src/documents/consumer.py` — Modified `pre_check_duplicate()`, added `_handle_readd()` and `_build_readd_source_info()` methods
 
 **Key Features**:
@@ -582,18 +583,24 @@ Text-based translation ID to avoid numeric ID collisions:
    - Provides full audit trail of why the document was re-surfaced
 
 5. **Trashed Document Handling**:
-   - Documents in trash (`deleted_at is not None`) are NOT re-added
-   - Falls through to normal duplicate rejection behavior for trashed docs
+   - Trashed documents (soft-deleted, `deleted_at is not None`) are fully supported by re-add
+   - `Document.checksum` has a UNIQUE constraint at the DB level — a second document with the same checksum cannot be created
+   - When a duplicate is trashed: restore from trash (`deleted_at=None`) → apply re-add logic → optionally re-trash
+   - If `PAPERLESS_CONSUMER_READD_RETRASH=true`: document is re-trashed after re-add (stays in trash but with updated `added` date, tag, and note)
+   - If `PAPERLESS_CONSUMER_READD_RETRASH=false` (default): document remains restored (out of trash)
+   - Note text includes "Restored from trash" indicator, and "(will be re-trashed)" if retrash is enabled
 
 **Behavior Flow**:
 1. Consumer detects duplicate via MD5 checksum match
-2. If `CONSUMER_READD_DOCUMENTS=true` AND existing doc is NOT trashed:
+2. If `CONSUMER_READD_DOCUMENTS=true`:
+   - If existing doc is trashed: restore from trash first (`deleted_at=None`)
    - Reset `added` date to now
    - Apply tag (if configured)
-   - Add note (if enabled)
+   - Add note (if enabled, includes "Restored from trash" for trashed docs)
+   - If doc was trashed AND `CONSUMER_READD_RETRASH=true`: re-trash document
    - Clean up duplicate file (if `CONSUMER_DELETE_DUPLICATES` is set)
    - Return from preflight (no error raised)
-3. If feature disabled or doc is trashed: normal duplicate rejection
+3. If feature disabled: normal duplicate rejection
 
 **Use Cases**:
 - Invoice reminders: Same PDF re-sent when payment overdue → document resurfaces
@@ -1172,6 +1179,29 @@ From: accounts@company.com
 - Backend: `src/paperless/settings.py` - Reads env var as boolean, defaults to true
 - Backend: `src/documents/consumer.py` - Note creation in `_handle_readd()`, context built by `_build_readd_source_info()`
 
+### 11. Duplicate Re-Add Retrash (`PAPERLESS_CONSUMER_READD_RETRASH`)
+**Purpose**: When a trashed duplicate is restored for re-add, optionally re-trash it after applying re-add logic (date reset, tag, note)
+
+**Type**: Boolean
+**Default**: `false` (restored documents stay out of trash)
+**Example**: `PAPERLESS_CONSUMER_READD_RETRASH=true`
+
+**Behavior**:
+- When `false` (default): Trashed duplicates are restored from trash and remain active after re-add
+- When `true`: Trashed duplicates are restored, re-add logic is applied (date, tag, note), then the document is re-trashed
+- Only relevant when the duplicate document was in trash — has no effect on non-trashed documents
+- The re-add note includes "(will be re-trashed)" when this is enabled
+- Useful for workflows where trashed documents should stay trashed but still receive re-add metadata
+
+**Use Cases**:
+- Organizations that trash processed invoices but want reminder metadata attached without restoring
+- Audit trail: even trashed documents get notes about duplicate re-submissions
+- Keeping trash clean while still tracking re-add events via tags and notes
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var as boolean, defaults to false
+- Backend: `src/documents/consumer.py` - Checked in `_handle_readd()` after all re-add logic; re-trashes via `Document.objects.filter(pk=pk).update(deleted_at=timezone.now())`
+
 ## Version History
 
 - **v1.2.1 (2026-02-17)**: Duplicate Document Re-Add
@@ -1181,11 +1211,13 @@ From: accounts@company.com
     - Optional tag application via `PAPERLESS_CONSUMER_READD_TAG_ID` for filtered views of re-added documents
     - Informational note with original `added` date, re-add timestamp, and source context (mail metadata or source type)
     - Source-aware context: Mail sources include UID, Subject, From; other sources include type and filename
-    - Trashed documents (soft-deleted) are NOT re-added — falls through to normal duplicate rejection
+    - Trashed document handling: duplicates in trash are restored → re-added → optionally re-trashed (configurable)
+    - `Document.checksum` UNIQUE constraint prevents creating duplicate rows — restore-readd-retrash flow works around this
   - **Environment Variables**:
     - `PAPERLESS_CONSUMER_READD_DOCUMENTS` (Boolean, default: false) — Master switch to enable the feature
     - `PAPERLESS_CONSUMER_READD_TAG_ID` (Integer, optional) — Tag ID to apply when a document is re-added
     - `PAPERLESS_CONSUMER_READD_ADD_NOTE` (Boolean, default: true) — Whether to add an informational note on re-add
+    - `PAPERLESS_CONSUMER_READD_RETRASH` (Boolean, default: false) — Re-trash trashed documents after re-add
   - **Use Cases**:
     - Invoice reminders: Same PDF re-sent when payment overdue → document resurfaces in inbox
     - Contract renewals: Same contract PDF attached to reminder emails

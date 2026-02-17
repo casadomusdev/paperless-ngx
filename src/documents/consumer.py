@@ -910,11 +910,10 @@ class ConsumerPreflightPlugin(
         if existing_doc.exists():
             # RKC: Re-add duplicate documents instead of just failing
             # When enabled, resets the "added" date so the document surfaces again,
-            # optionally tags it and adds an informational note
-            if (
-                settings.CONSUMER_READD_DOCUMENTS
-                and existing_doc.first().deleted_at is None
-            ):
+            # optionally tags it and adds an informational note.
+            # Also handles trashed duplicates: restores them, applies re-add logic,
+            # and optionally re-trashes them (CONSUMER_READD_RETRASH).
+            if settings.CONSUMER_READD_DOCUMENTS:
                 self._handle_readd(existing_doc.get())
                 if settings.CONSUMER_DELETE_DUPLICATES:
                     Path(self.input_doc.original_file).unlink()
@@ -942,10 +941,28 @@ class ConsumerPreflightPlugin(
         tagging it and adding an informational note. This is useful when reminder
         emails arrive with the same invoice attachment — instead of silently
         failing, the document surfaces at the top of the inbox again.
+
+        If the document is in the trash (soft-deleted), it is restored first
+        because the checksum field has a DB-level UNIQUE constraint, making it
+        impossible to create a second document with the same checksum. After
+        re-add logic is applied, the document is optionally re-trashed if
+        CONSUMER_READD_RETRASH is enabled.
         """
         now = timezone.now()
         old_added = timezone.localtime(existing_doc.added)
         new_added = timezone.localtime(now)
+        was_trashed = existing_doc.deleted_at is not None
+
+        # Restore from trash if needed (checksum UNIQUE constraint prevents
+        # creating a new document, so we must work with the existing one)
+        if was_trashed:
+            Document.global_objects.filter(pk=existing_doc.pk).update(
+                deleted_at=None,
+            )
+            self.log.info(
+                f"Restored document #{existing_doc.pk} "
+                f"'{existing_doc.title}' from trash for re-add"
+            )
 
         # Reset the 'added' timestamp via .update() to bypass auto_now_add
         Document.objects.filter(pk=existing_doc.pk).update(added=now)
@@ -983,6 +1000,10 @@ class ConsumerPreflightPlugin(
                 f"Re-added:  {new_added.strftime('%Y-%m-%d %H:%M:%S')}\n"
                 f"In:  {storage_path_name}"
             )
+            if was_trashed:
+                note_text += "\nRestored from trash"
+                if settings.CONSUMER_READD_RETRASH:
+                    note_text += " (will be re-trashed)"
             if source_info:
                 note_text += f"\n{source_info}"
 
@@ -992,6 +1013,16 @@ class ConsumerPreflightPlugin(
             )
             self.log.debug(
                 f"Added re-add note to document #{existing_doc.pk}"
+            )
+
+        # Re-trash the document if it was trashed and retrash is enabled
+        if was_trashed and settings.CONSUMER_READD_RETRASH:
+            Document.objects.filter(pk=existing_doc.pk).update(
+                deleted_at=timezone.now(),
+            )
+            self.log.info(
+                f"Re-trashed document #{existing_doc.pk} after re-add "
+                f"(CONSUMER_READD_RETRASH enabled)"
             )
 
     def _build_readd_source_info(self) -> str:
