@@ -1,61 +1,39 @@
-# Dynamic Workflow Email with Custom Field Templates
+# Duplicate Document Re-Add (v1.2.1)
 
 ## GOAL
 
-Implement v1.2.0 customization: Dynamic email sending via workflow actions using Jinja2 templates with custom field placeholders. All email fields (subject, body, to, from, cc, bcc) support template expressions like `{{ custom_fields["Mail From"].value }}`.
+When a duplicate document is detected during consumption, instead of silently rejecting it, reset the existing document's `added` date so it surfaces at the top of the inbox again. Essential for invoice reminder workflows where the same invoice PDF is re-sent via email when payment is overdue. Optionally tag the document and add an informational note with source context.
 
 ## ANALYSIS
 
 ### Existing Infrastructure
-- `get_custom_fields_context()` in `filepath.py` builds a `custom_fields` dict for Jinja templates, but sanitizes values with `pathvalidate` (breaks `@` in emails)
-- `parse_w_workflow_placeholders()` in `workflows.py` handles Jinja templating for workflow text fields, but doesn't accept a document instance and doesn't include `custom_fields` context
-- Both use the shared `_template_environment` singleton from `environment.py` with `get_cf_value` filter already registered
-- Upstream bug: `to` field is NOT passed through Jinja templating in `email_action()` handler
+- `ConsumerPreflightPlugin.pre_check_duplicate()` in `consumer.py` computes MD5 of incoming file and checks against `checksum` and `archive_checksum` of all existing documents
+- If duplicate found, raises `ConsumerError` — document is rejected
+- `Document.added` field uses `auto_now_add=True`, requiring `Document.objects.filter(pk=pk).update(added=now)` to bypass
+- `Note` model (`SoftDeleteModel`) with `note` text field and `document` FK available for adding notes
+- `ConsumableDocument` dataclass has `source`, `mail_uid`, `mail_from`, `mail_sender`, `mail_subject`, `mail_date` fields
+- `DocumentSource` enum: ConsumeFolder=1, ApiUpload=2, MailFetch=3, WebUI=4
+- Settings pattern uses `__get_boolean()`, `__get_int()`, `os.getenv()` helpers
 
 ### Key Design Decisions
-- Add `sanitize` parameter to `get_custom_fields_context()` (default=True for backward compat)
-- Add `document` parameter to `parse_w_workflow_placeholders()` to include raw custom fields context
-- New model fields: `from_address`, `cc`, `bcc` (text), `error_tag` (FK to Tag)
-- HTML auto-detection: check for `<html` or `<body` or `<br` tags in rendered body
-- Email validation after rendering: on failure apply `error_tag` to document, abort remaining workflow actions
-- From address priority: templated `from_address` → mail account `from_address` → mail account username
-- Custom exception `WorkflowEmailValidationError` for clean workflow abort
+- 3 new env vars: `PAPERLESS_CONSUMER_READD_DOCUMENTS` (bool, default false), `PAPERLESS_CONSUMER_READD_TAG_ID` (int, optional), `PAPERLESS_CONSUMER_READD_ADD_NOTE` (bool, default true)
+- Trashed documents (`deleted_at is not None`) should NOT be re-added — falls through to normal duplicate rejection
+- Works with ALL document sources (not just mail), with source-specific context in notes
+- No database migrations required — uses existing models
+- Feature disabled by default for backward compatibility
 
 ## IMPLEMENTATION
 
-### Phase 1: Backend Templating
-1. Add `sanitize=True` parameter to `get_custom_fields_context()` in `filepath.py`
-2. When `sanitize=False`, skip `pathvalidate.sanitize_filename()` calls on names and values
-3. Extend `parse_w_workflow_placeholders()` in `workflows.py` to accept optional `document=None`
-4. When document is provided, fetch its custom fields and merge raw context into formatting dict
+### Phase 1: Settings
+1. Add `CONSUMER_READD_DOCUMENTS` boolean setting (default false)
+2. Add `CONSUMER_READD_TAG_ID` integer setting (None if not set)
+3. Add `CONSUMER_READD_ADD_NOTE` boolean setting (default true)
 
-### Phase 2: Model Changes
-1. Add `from_address`, `cc`, `bcc` (CharField, blank/null) to `WorkflowActionEmail`
-2. Add `error_tag` (ForeignKey to Tag, null/blank) to `WorkflowActionEmail`
-3. Create migration `1075_workflowactionemail_dynamic_fields.py`
+### Phase 2: Consumer Logic
+1. Modify `pre_check_duplicate()`: at the top of the `if existing_doc.exists():` block, check `settings.CONSUMER_READD_DOCUMENTS` and `existing_doc.first().deleted_at is None`
+2. If conditions met, call `self._handle_readd(existing_doc.get())`, handle file deletion, and return early
+3. Add `_handle_readd(self, existing_doc: Document)` method: reset `added` via `.update()`, apply tag if configured, create Note if enabled
+4. Add `_build_readd_source_info(self)` method: return mail metadata for MailFetch source, or source type + filename for other sources
 
-### Phase 3: send_email Enhancement
-1. Add `from_email=None`, `cc=None`, `bcc=None`, `is_html=False` parameters
-2. Apply `from_email` override when provided
-3. Set `email.content_subtype = 'html'` when `is_html=True`
-4. Pass `cc` and `bcc` to EmailMessage constructor
-
-### Phase 4: Signal Handler Updates
-1. Template ALL 6 text fields through `parse_w_workflow_placeholders()` (including `to`)
-2. Implement HTML auto-detection for rendered body
-3. Create `WorkflowEmailValidationError` exception class
-4. Add email validation after rendering: validate all addresses in to/cc/bcc
-5. On validation failure: apply error_tag to document, log error, return (abort email)
-6. Implement from_address priority chain
-
-### Phase 5: Serializer Updates
-1. Add new fields to `WorkflowActionEmailSerializer`
-
-### Phase 6: Frontend UI Updates
-1. Add `from_address`, `cc`, `bcc`, `error_tag` to TypeScript interface
-2. Add FormControls in `createActionField()`
-3. Add HTML form fields in template
-
-### Phase 7: Documentation
-1. Update `RKC_CUSTOMIZATIONS.md` with v1.2.0 entry
-2. Update `STRUCTURE.md`
+### Phase 3: Documentation
+1. Update `RKC_CUSTOMIZATIONS.md` — At A Glance, Core Features section, Environment Variables, Version History

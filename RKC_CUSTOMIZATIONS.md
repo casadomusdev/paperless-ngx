@@ -63,6 +63,11 @@ The RKC customizations enhance Paperless-ngx with security controls, collaborati
   - Frontend: `src-ui/src/app/components/document-detail/` (TypeScript & HTML)
   - Translations: `src-ui/src/locale/messages.en_US.xlf`, `messages.de_DE.xlf`
 
+### Document Processing
+- **[Duplicate Document Re-Add](#7-duplicate-document-re-add)** - When a duplicate document is detected during consumption, instead of silently failing, the existing document's `added` date is reset so it surfaces at the top of the inbox again. Optionally tags the document and adds an informational note with source details. Disabled by default.
+  - Environment Variables: `PAPERLESS_CONSUMER_READD_DOCUMENTS` (default: false), `PAPERLESS_CONSUMER_READD_TAG_ID` (optional), `PAPERLESS_CONSUMER_READD_ADD_NOTE` (default: true)
+  - Backend: `src/documents/consumer.py`, `src/paperless/settings.py`
+
 ### Bug Fixes & Enhancements
 - **SSO UiSettings Auto-Creation** - Automatically creates UiSettings for new SSO users to prevent login errors. Includes migration-safe table existence check to prevent transaction failures on fresh database installations.
   - Backend: `src/documents/signals/handlers.py`
@@ -533,6 +538,75 @@ Text-based translation ID to avoid numeric ID collisions:
 - Supports all custom field data types including null/empty values
 - Integrates seamlessly with existing filter infrastructure
 - All changes properly marked with RKC comments for easy maintenance
+
+### 7. Duplicate Document Re-Add
+**Purpose**: When a duplicate document is detected during consumption, instead of silently rejecting it, reset the existing document's `added` date so it surfaces at the top of the inbox again. This is essential for invoice reminder workflows where the same invoice PDF is re-sent via email when payment is overdue.
+
+**Environment Variables**:
+- `PAPERLESS_CONSUMER_READD_DOCUMENTS` (Boolean, default: `false`) — Master switch
+- `PAPERLESS_CONSUMER_READD_TAG_ID` (Integer, optional) — Tag ID to apply on re-add
+- `PAPERLESS_CONSUMER_READD_ADD_NOTE` (Boolean, default: `true`) — Add informational note
+
+**Files Modified**:
+- `src/paperless/settings.py` — 3 new environment variable settings
+- `src/documents/consumer.py` — Modified `pre_check_duplicate()`, added `_handle_readd()` and `_build_readd_source_info()` methods
+
+**Key Features**:
+
+1. **Added Date Reset**:
+   - Uses `Document.objects.filter(pk=pk).update(added=now)` to bypass `auto_now_add=True`
+   - Document appears at top of inbox when sorted by "Added" (default)
+   - Original `added` date preserved in the note
+
+2. **Optional Tagging**:
+   - If `PAPERLESS_CONSUMER_READD_TAG_ID` is set, applies the specified tag to the document
+   - Useful for creating filtered views of re-added/reminded documents
+   - Graceful handling: logs warning if tag ID doesn't exist, doesn't abort
+
+3. **Informational Note**:
+   - Creates a `Note` on the document with re-add details
+   - Format:
+     ```
+     Originally added:  2026-01-15 10:30:00
+     Re-added:  2026-02-17 14:22:00
+     In:  Default
+     Mail UID: 12345
+     Subject: Payment Reminder - Invoice #2024-001
+     From: accounts@company.com
+     ```
+   - For non-mail sources: includes source type (Consume Folder, API Upload, Web UI) and filename
+
+4. **Source-Aware Context**:
+   - Mail sources (`DocumentSource.MailFetch`): includes Mail UID, Subject, From
+   - Consume Folder/API/WebUI sources: includes source type and filename
+   - Provides full audit trail of why the document was re-surfaced
+
+5. **Trashed Document Handling**:
+   - Documents in trash (`deleted_at is not None`) are NOT re-added
+   - Falls through to normal duplicate rejection behavior for trashed docs
+
+**Behavior Flow**:
+1. Consumer detects duplicate via MD5 checksum match
+2. If `CONSUMER_READD_DOCUMENTS=true` AND existing doc is NOT trashed:
+   - Reset `added` date to now
+   - Apply tag (if configured)
+   - Add note (if enabled)
+   - Clean up duplicate file (if `CONSUMER_DELETE_DUPLICATES` is set)
+   - Return from preflight (no error raised)
+3. If feature disabled or doc is trashed: normal duplicate rejection
+
+**Use Cases**:
+- Invoice reminders: Same PDF re-sent when payment overdue → document resurfaces
+- Contract renewals: Same contract PDF attached to reminder emails
+- Any workflow where duplicate documents indicate "needs attention again"
+
+**Benefits**:
+- Zero configuration for basic use (just enable the feature)
+- Works with ALL document sources (mail, consume folder, API, web UI)
+- Full audit trail via notes
+- Tag-based filtering for re-added documents
+- No database migrations required
+- Backward compatible: disabled by default
 
 ## Permission System
 
@@ -1022,7 +1096,104 @@ docker compose restart webserver
 - Backend: `src/paperless_mail/mail.py` - `_correspondent_from_name()` includes `matching_algorithm` in defaults dict
 - Uses `settings.MAIL_CORRESPONDENT_MATCHING_ALG` when creating new correspondents
 
+### 8. Duplicate Re-Add Master Switch (`PAPERLESS_CONSUMER_READD_DOCUMENTS`)
+**Purpose**: Enable the duplicate document re-add feature — when a duplicate is detected, reset its `added` date instead of rejecting it
+
+**Type**: Boolean
+**Default**: `false` (disabled — normal duplicate rejection behavior)
+**Example**: `PAPERLESS_CONSUMER_READD_DOCUMENTS=true`
+
+**Behavior**:
+- When `false` (default): Duplicate documents are rejected as usual (original Paperless-ngx behavior)
+- When `true`: Duplicate documents trigger a re-add — the existing document's `added` date is reset to now, optionally tagged and noted
+- Only applies to non-trashed documents — trashed duplicates still get normal rejection
+- Changes take effect immediately after restart
+- No database changes required
+
+**Use Cases**:
+- Invoice reminder workflows where the same PDF is re-sent when payment is overdue
+- Contract renewals with identical attachments
+- Any workflow where receiving a duplicate means "needs attention again"
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var as boolean
+- Backend: `src/documents/consumer.py` - Checked in `pre_check_duplicate()` before re-add logic
+
+### 9. Duplicate Re-Add Tag (`PAPERLESS_CONSUMER_READD_TAG_ID`)
+**Purpose**: Optionally apply a tag to documents when they are re-added via the duplicate re-add feature
+
+**Type**: Integer (Tag ID)
+**Default**: None (no tag applied)
+**Example**: `PAPERLESS_CONSUMER_READD_TAG_ID=42`
+
+**Behavior**:
+- When not set: No tag is applied on re-add
+- When set: The specified tag is added to the document each time it is re-added
+- If the tag ID doesn't exist, a warning is logged but the re-add still succeeds
+- Useful for creating saved views or workflows that filter on re-added documents
+- Tag must be created manually in Paperless first, then its ID used here
+
+**Setup Process**:
+1. Create a tag in Paperless (e.g., "Payment Reminder")
+2. Find the tag's ID via the API or database
+3. Set `PAPERLESS_CONSUMER_READD_TAG_ID` to that ID
+4. Re-added documents will automatically receive this tag
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var as integer, None if not set
+- Backend: `src/documents/consumer.py` - Applied in `_handle_readd()` method
+
+### 10. Duplicate Re-Add Note (`PAPERLESS_CONSUMER_READD_ADD_NOTE`)
+**Purpose**: Control whether an informational note is added to documents when they are re-added
+
+**Type**: Boolean
+**Default**: `true` (notes enabled)
+**Example**: `PAPERLESS_CONSUMER_READD_ADD_NOTE=false`
+
+**Behavior**:
+- When `true` (default): A note is created on the document with re-add context including original added date, re-add timestamp, and source information
+- When `false`: No note is created — only the `added` date reset and optional tagging occur
+- Note content varies by source:
+  - **Mail sources**: Includes mail rule name, Mail UID, Subject, and From address
+  - **Other sources**: Includes source type (Consume Folder, API Upload, Web UI) and filename
+- Notes provide a full audit trail of re-add events
+
+**Note Format Example** (mail source):
+```
+Originally added:  2026-01-15 10:30:00
+Re-added:  2026-02-17 14:22:00
+In:  Default
+Mail UID: 12345
+Subject: Payment Reminder - Invoice #2024-001
+From: accounts@company.com
+```
+
+**Implementation**:
+- Backend: `src/paperless/settings.py` - Reads env var as boolean, defaults to true
+- Backend: `src/documents/consumer.py` - Note creation in `_handle_readd()`, context built by `_build_readd_source_info()`
+
 ## Version History
+
+- **v1.2.1 (2026-02-17)**: Duplicate Document Re-Add
+  - **Overview**: When a duplicate document is detected during consumption, instead of silently rejecting it, the existing document's `added` date is reset so it surfaces at the top of the inbox again. Essential for invoice reminder workflows where the same PDF is re-sent when payment is overdue.
+  - **Features**:
+    - Reset `added` timestamp via `Document.objects.filter(pk=pk).update(added=now)` to bypass `auto_now_add=True`
+    - Optional tag application via `PAPERLESS_CONSUMER_READD_TAG_ID` for filtered views of re-added documents
+    - Informational note with original `added` date, re-add timestamp, and source context (mail metadata or source type)
+    - Source-aware context: Mail sources include UID, Subject, From; other sources include type and filename
+    - Trashed documents (soft-deleted) are NOT re-added — falls through to normal duplicate rejection
+  - **Environment Variables**:
+    - `PAPERLESS_CONSUMER_READD_DOCUMENTS` (Boolean, default: false) — Master switch to enable the feature
+    - `PAPERLESS_CONSUMER_READD_TAG_ID` (Integer, optional) — Tag ID to apply when a document is re-added
+    - `PAPERLESS_CONSUMER_READD_ADD_NOTE` (Boolean, default: true) — Whether to add an informational note on re-add
+  - **Use Cases**:
+    - Invoice reminders: Same PDF re-sent when payment overdue → document resurfaces in inbox
+    - Contract renewals: Same contract PDF attached to reminder emails
+    - Any workflow where duplicate documents indicate "needs attention again"
+  - Files modified:
+    - Backend: `src/paperless/settings.py` (3 new environment variable settings)
+    - Backend: `src/documents/consumer.py` (modified `pre_check_duplicate()`, added `_handle_readd()` and `_build_readd_source_info()`)
+  - All changes properly marked with RKC comments for maintainability
 
 - **v1.2.0 (2026-02-17)**: Dynamic Workflow Email with Custom Field Templates
   - **Overview**: Enhanced workflow email actions with Jinja2 templating support for all 6 email text fields, enabling dynamic emails driven by document custom field values

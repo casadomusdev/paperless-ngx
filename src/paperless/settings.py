@@ -1369,6 +1369,18 @@ if ENABLE_UPDATE_CHECK != "default":
 APP_TITLE = os.getenv("PAPERLESS_APP_TITLE", None)
 APP_LOGO = os.getenv("PAPERLESS_APP_LOGO", None)
 
+# RKC: Duplicate document re-add feature (v1.2.1)
+# When a duplicate is detected, instead of just failing, reset the existing document's
+# "added" date so it surfaces at the top of the inbox again (e.g. for invoice reminders)
+CONSUMER_READD_DOCUMENTS = __get_boolean("PAPERLESS_CONSUMER_READD_DOCUMENTS")
+CONSUMER_READD_TAG_ID = (
+    __get_int("PAPERLESS_CONSUMER_READD_TAG_ID", -1)
+    if os.getenv("PAPERLESS_CONSUMER_READD_TAG_ID")
+    else None
+)
+CONSUMER_READD_ADD_NOTE = __get_boolean("PAPERLESS_CONSUMER_READD_ADD_NOTE", "yes")
+# /end RKC edit
+
 # RKC: Custom UI defaults (theme color, dark mode thumb inversion, default language)
 THEME_COLOR = os.getenv("PAPERLESS_UI_THEME_COLOR", "#17541f")
 DARK_MODE_THUMB_INVERTED = __get_boolean("PAPERLESS_UI_DARK_MODE_THUMB_INVERTED", "true")

@@ -19,6 +19,7 @@ from rest_framework.reverse import reverse
 from documents.classifier import load_classifier
 from documents.data_models import ConsumableDocument
 from documents.data_models import DocumentMetadataOverrides
+from documents.data_models import DocumentSource
 from documents.file_handling import create_source_path_directory
 from documents.file_handling import generate_unique_filename
 from documents.loggers import LoggingMixin
@@ -27,6 +28,7 @@ from documents.models import CustomField
 from documents.models import CustomFieldInstance
 from documents.models import Document
 from documents.models import DocumentType
+from documents.models import Note
 from documents.models import StoragePath
 from documents.models import Tag
 from documents.models import WorkflowTrigger
@@ -906,6 +908,19 @@ class ConsumerPreflightPlugin(
             Q(checksum=checksum) | Q(archive_checksum=checksum),
         )
         if existing_doc.exists():
+            # RKC: Re-add duplicate documents instead of just failing
+            # When enabled, resets the "added" date so the document surfaces again,
+            # optionally tags it and adds an informational note
+            if (
+                settings.CONSUMER_READD_DOCUMENTS
+                and existing_doc.first().deleted_at is None
+            ):
+                self._handle_readd(existing_doc.get())
+                if settings.CONSUMER_DELETE_DUPLICATES:
+                    Path(self.input_doc.original_file).unlink()
+                return
+            # /end RKC edit
+
             msg = ConsumerStatusShortMessage.DOCUMENT_ALREADY_EXISTS
             log_msg = f"Not consuming {self.filename}: It is a duplicate of {existing_doc.get().title} (#{existing_doc.get().pk})."
 
@@ -919,6 +934,93 @@ class ConsumerPreflightPlugin(
                 msg,
                 log_msg,
             )
+
+    # RKC: Re-add handler for duplicate documents
+    def _handle_readd(self, existing_doc: Document):
+        """
+        Re-adds an existing document by resetting its 'added' date, optionally
+        tagging it and adding an informational note. This is useful when reminder
+        emails arrive with the same invoice attachment — instead of silently
+        failing, the document surfaces at the top of the inbox again.
+        """
+        now = timezone.now()
+        old_added = timezone.localtime(existing_doc.added)
+        new_added = timezone.localtime(now)
+
+        # Reset the 'added' timestamp via .update() to bypass auto_now_add
+        Document.objects.filter(pk=existing_doc.pk).update(added=now)
+
+        self.log.info(
+            f"Re-added document #{existing_doc.pk} "
+            f"'{existing_doc.title}' (added date reset to {new_added})"
+        )
+
+        # Apply the re-add tag if configured
+        if settings.CONSUMER_READD_TAG_ID is not None:
+            try:
+                tag = Tag.objects.get(pk=settings.CONSUMER_READD_TAG_ID)
+                existing_doc.tags.add(tag)
+                self.log.info(
+                    f"Tagged document #{existing_doc.pk} with '{tag.name}'"
+                )
+            except Tag.DoesNotExist:
+                self.log.warning(
+                    f"CONSUMER_READD_TAG_ID={settings.CONSUMER_READD_TAG_ID} "
+                    f"not found, skipping tag"
+                )
+
+        # Add an informational note if enabled
+        if settings.CONSUMER_READD_ADD_NOTE:
+            source_info = self._build_readd_source_info()
+            storage_path_name = (
+                existing_doc.storage_path.name
+                if existing_doc.storage_path
+                else "Default"
+            )
+
+            note_text = (
+                f"Originally added:  {old_added.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"Re-added:  {new_added.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"In:  {storage_path_name}"
+            )
+            if source_info:
+                note_text += f"\n{source_info}"
+
+            Note.objects.create(
+                note=note_text,
+                document=existing_doc,
+            )
+            self.log.debug(
+                f"Added re-add note to document #{existing_doc.pk}"
+            )
+
+    def _build_readd_source_info(self) -> str:
+        """
+        Builds a human-readable string describing the source of the duplicate
+        document that triggered the re-add. For mail sources, includes the
+        Mail UID and subject; for other sources, includes the source type
+        and filename.
+        """
+        source = self.input_doc.source
+
+        if source == DocumentSource.MailFetch:
+            parts = []
+            if self.input_doc.mail_uid:
+                parts.append(f"Mail UID: {self.input_doc.mail_uid}")
+            if self.input_doc.mail_subject:
+                parts.append(f"Subject: {self.input_doc.mail_subject}")
+            if self.input_doc.mail_from:
+                parts.append(f"From: {self.input_doc.mail_from}")
+            return "\n".join(parts) if parts else "Source: Mail"
+
+        source_names = {
+            DocumentSource.ConsumeFolder: "Consume Folder",
+            DocumentSource.ApiUpload: "API Upload",
+            DocumentSource.WebUI: "Web UI",
+        }
+        source_name = source_names.get(source, f"Unknown ({source})")
+        return f"Source: {source_name}\nFile: {self.filename}"
+    # /end RKC edit
 
     def pre_check_directories(self):
         """
