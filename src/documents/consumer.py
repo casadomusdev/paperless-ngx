@@ -917,28 +917,44 @@ class ConsumerPreflightPlugin(
         # attachments (PDFs etc.) share the same mail_uid but have stable
         # checksums, so they are handled by Tier 1 above.
         is_eml_file = Path(self.filename).suffix.lower() == '.eml'
+        self.log.info(
+            f"Dedup Tier 2 check: filename='{self.filename}', "
+            f"is_eml={is_eml_file}, "
+            f"mail_uid='{self.input_doc.mail_uid}', "
+            f"checksum_match={existing_doc.exists()}"
+        )
         if not existing_doc.exists() and self.input_doc.mail_uid and is_eml_file:
             try:
                 mail_uid_field_name = settings.PAPERLESS_MAIL_CORRELATION_FIELD
                 uid_field = CustomField.objects.filter(
                     name=mail_uid_field_name,
                 ).first()
+                self.log.info(
+                    f"Dedup Tier 2: looking up field "
+                    f"'{mail_uid_field_name}' → "
+                    f"{'found (pk=' + str(uid_field.pk) + ')' if uid_field else 'NOT FOUND'}"
+                )
                 if uid_field:
                     uid_match = CustomFieldInstance.objects.filter(
                         field=uid_field,
                         value_text=self.input_doc.mail_uid,
                     ).select_related('document').first()
+                    self.log.info(
+                        f"Dedup Tier 2: queried value_text="
+                        f"'{self.input_doc.mail_uid}' → "
+                        f"{'match doc #' + str(uid_match.document.pk) if uid_match else 'NO MATCH'}"
+                    )
                     if uid_match:
                         existing_doc = Document.global_objects.filter(
                             pk=uid_match.document.pk,
                         )
-                        self.log.debug(
+                        self.log.info(
                             f"EML duplicate detected via Mail UID "
                             f"'{self.input_doc.mail_uid}' "
                             f"matching document #{uid_match.document.pk}"
                         )
             except Exception as e:
-                self.log.debug(f"Mail UID dedup lookup failed: {e}")
+                self.log.warning(f"Mail UID dedup lookup failed: {e}", exc_info=True)
         # /end RKC edit
 
         if existing_doc.exists():
