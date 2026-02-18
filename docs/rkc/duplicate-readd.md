@@ -22,7 +22,7 @@ When a duplicate document is detected during consumption, instead of silently re
    - Add note (if `CONSUMER_READD_ADD_NOTE` enabled) with source context
    - If doc was trashed AND `CONSUMER_READD_RETRASH=true` → re-trash document
    - Clean up duplicate file (if `CONSUMER_DELETE_DUPLICATES` is set)
-   - Return from preflight (no error raised)
+   - Raise `StopConsumeTaskError` to halt the plugin pipeline — prevents `ConsumerPlugin` from running and creating a duplicate document. The exception is caught cleanly in `tasks.py` and its message is returned as the task result.
 4. If feature disabled → normal duplicate rejection
 
 ## Duplicate Detection

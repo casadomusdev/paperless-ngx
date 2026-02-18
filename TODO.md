@@ -4,9 +4,10 @@
 
 - [x] Analyze why EML deduplication fails (MD5 checksum varies for same email across fetches)
 - [x] Add Mail UID-based secondary dedup in `pre_check_duplicate()` in `consumer.py`
+- [x] Halt pipeline after re-add via `StopConsumeTaskError` to prevent ConsumerPlugin from creating duplicates
 - [x] Update `docs/rkc/duplicate-readd.md` with two-tier dedup documentation
 - [x] Update `RKC_CUSTOMIZATIONS.md` feature description and version history
-- [ ] Git commit
+- [x] Git commit
 
 ## Future Improvements
 

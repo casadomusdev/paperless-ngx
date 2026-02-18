@@ -41,6 +41,7 @@ from documents.plugins.base import AlwaysRunPluginMixin
 from documents.plugins.base import ConsumeTaskPlugin
 from documents.plugins.base import NoCleanupPluginMixin
 from documents.plugins.base import NoSetupPluginMixin
+from documents.plugins.base import StopConsumeTaskError
 from documents.plugins.helpers import ProgressManager
 from documents.plugins.helpers import ProgressStatusOptions
 from documents.signals import document_consumption_finished
@@ -947,7 +948,10 @@ class ConsumerPreflightPlugin(
                 self._handle_readd(existing_doc.get())
                 if settings.CONSUMER_DELETE_DUPLICATES:
                     Path(self.input_doc.original_file).unlink()
-                return
+                raise StopConsumeTaskError(
+                    f"Re-added duplicate document #{existing_doc.get().pk} "
+                    f"'{existing_doc.get().title}'"
+                )
             # /end RKC edit
 
             msg = ConsumerStatusShortMessage.DOCUMENT_ALREADY_EXISTS
