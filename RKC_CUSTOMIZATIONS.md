@@ -91,7 +91,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 
 ### Document Processing
 
-**Duplicate Document Re-Add** — When a duplicate is detected during consumption, the existing document's `added` date is reset so it surfaces in the inbox again. Supports optional tagging, informational notes with source context (mail metadata or source type), and trashed document handling (restore-readd-optionally-retrash). Disabled by default.
+**Duplicate Document Re-Add** — When a duplicate is detected during consumption, the existing document's `added` date is reset so it surfaces in the inbox again. Uses two-tier deduplication: MD5 checksum for binary-identical files (PDFs, images) and Mail UID custom field lookup for EML documents whose byte representation varies across fetches. Supports optional tagging, informational notes with source context (mail metadata or source type), and trashed document handling (restore-readd-optionally-retrash). Disabled by default.
 → [Details](docs/rkc/duplicate-readd.md)
 
 ### Workflow Enhancements
@@ -194,7 +194,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
-- **v1.2.1** — Duplicate Document Re-Add with tagging, notes, and trashed document handling
+- **v1.2.1** — Duplicate Document Re-Add with two-tier dedup (MD5 + Mail UID for EML), tagging, notes, and trashed document handling
 - **v1.2.0** — Dynamic Workflow Email with Jinja2 templating for all 6 fields, HTML auto-detection, error tagging
 - **v1.1.1** — Webhook Docker hostname validation fix
 - **v1.1.0** — Mail System overhaul: Universal SMTP, Graph API, multi-mailbox, connection pooling, UI/UX

@@ -907,6 +907,36 @@ class ConsumerPreflightPlugin(
         existing_doc = Document.global_objects.filter(
             Q(checksum=checksum) | Q(archive_checksum=checksum),
         )
+
+        # RKC: Secondary dedup for EML documents using Mail UID custom field
+        # Checksum-based dedup doesn't work for EML files because the same email
+        # can produce different byte representations across fetches (header
+        # reordering, MIME boundary regeneration, line ending normalization).
+        # Fall back to Mail UID matching for mail-sourced documents.
+        if not existing_doc.exists() and self.input_doc.mail_uid:
+            try:
+                mail_uid_field_name = settings.PAPERLESS_MAIL_CORRELATION_FIELD
+                uid_field = CustomField.objects.filter(
+                    name=mail_uid_field_name,
+                ).first()
+                if uid_field:
+                    uid_match = CustomFieldInstance.objects.filter(
+                        field=uid_field,
+                        value_text=self.input_doc.mail_uid,
+                    ).select_related('document').first()
+                    if uid_match:
+                        existing_doc = Document.global_objects.filter(
+                            pk=uid_match.document.pk,
+                        )
+                        self.log.debug(
+                            f"EML duplicate detected via Mail UID "
+                            f"'{self.input_doc.mail_uid}' "
+                            f"matching document #{uid_match.document.pk}"
+                        )
+            except Exception as e:
+                self.log.debug(f"Mail UID dedup lookup failed: {e}")
+        # /end RKC edit
+
         if existing_doc.exists():
             # RKC: Re-add duplicate documents instead of just failing
             # When enabled, resets the "added" date so the document surfaces again,
