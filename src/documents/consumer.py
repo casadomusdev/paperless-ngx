@@ -935,7 +935,10 @@ class ConsumerPreflightPlugin(
                     f"{'found (pk=' + str(uid_field.pk) + ')' if uid_field else 'NOT FOUND'}"
                 )
                 if uid_field:
-                    uid_match = CustomFieldInstance.objects.filter(
+                    # Use global_objects to include soft-deleted instances
+                    # (trashed documents cascade soft-delete to their custom
+                    # field instances, hiding them from the default manager)
+                    uid_match = CustomFieldInstance.global_objects.filter(
                         field=uid_field,
                         value_text=self.input_doc.mail_uid,
                     ).select_related('document').first()
@@ -1007,14 +1010,26 @@ class ConsumerPreflightPlugin(
         was_trashed = existing_doc.deleted_at is not None
 
         # Restore from trash if needed (checksum UNIQUE constraint prevents
-        # creating a new document, so we must work with the existing one)
+        # creating a new document, so we must work with the existing one).
+        # Must also restore related soft-deleted records: CustomFieldInstance
+        # and Note both inherit SoftDeleteModel, so trashing the document
+        # cascades soft-delete to them as well.
         if was_trashed:
             Document.global_objects.filter(pk=existing_doc.pk).update(
                 deleted_at=None,
             )
+            # Restore soft-deleted custom field instances
+            cf_restored = CustomFieldInstance.deleted_objects.filter(
+                document_id=existing_doc.pk,
+            ).update(deleted_at=None)
+            # Restore soft-deleted notes
+            notes_restored = Note.deleted_objects.filter(
+                document_id=existing_doc.pk,
+            ).update(deleted_at=None)
             self.log.info(
                 f"Restored document #{existing_doc.pk} "
-                f"'{existing_doc.title}' from trash for re-add"
+                f"'{existing_doc.title}' from trash for re-add "
+                f"(+{cf_restored} custom fields, +{notes_restored} notes)"
             )
 
         # Reset the 'added' timestamp via .update() to bypass auto_now_add

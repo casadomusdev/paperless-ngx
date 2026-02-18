@@ -33,9 +33,9 @@ When a duplicate document is detected during consumption, instead of silently re
 Computes MD5 of the incoming file and checks against `Document.checksum` and `Document.archive_checksum`. Works reliably for binary-identical files like PDFs and images.
 
 **Tier 2 — Mail UID Custom Field** (`.eml` files only):
-When no checksum match is found and the incoming file has a `.eml` extension and carries a `mail_uid` (set by the mail fetcher), queries `CustomFieldInstance` for an existing document with the same Mail UID value in the configured correlation field (`PAPERLESS_MAIL_UID_FIELD`, default: "Mail UID"). This catches EML duplicates where checksum-based dedup fails because `message.obj.as_bytes()` can produce different byte representations for the same email across fetches due to header reordering, MIME boundary regeneration, and line ending normalization. The `.eml` extension check is critical because attachments (PDFs, images) from the same email share the same `mail_uid` but have stable checksums — without this guard, Tier 2 would falsely match attachment consume tasks against the already-consumed EML document.
+When no checksum match is found and the incoming file has a `.eml` extension and carries a `mail_uid` (set by the mail fetcher), queries `CustomFieldInstance.global_objects` for an existing document with the same Mail UID value in the configured correlation field (`PAPERLESS_MAIL_UID_FIELD`, default: "Mail UID"). This catches EML duplicates where checksum-based dedup fails because `message.obj.as_bytes()` can produce different byte representations for the same email across fetches due to header reordering, MIME boundary regeneration, and line ending normalization. The `.eml` extension check is critical because attachments (PDFs, images) from the same email share the same `mail_uid` but have stable checksums — without this guard, Tier 2 would falsely match attachment consume tasks against the already-consumed EML document.
 
-Both tiers search `Document.global_objects` (including trashed documents) to ensure soft-deleted duplicates are caught.
+Both tiers search `global_objects` (including trashed/soft-deleted records) to ensure soft-deleted duplicates are caught. This is critical for Tier 2 because `CustomFieldInstance` inherits `SoftDeleteModel` — when a document is trashed, Django's soft-delete CASCADE also soft-deletes all related custom field instances, making them invisible to the default `objects` manager.
 
 ## Features
 
@@ -68,7 +68,8 @@ Filename: invoice_2024-001.pdf
 
 ### Trashed Document Handling
 - `Document.checksum` has a UNIQUE constraint — a second document with the same checksum cannot be created
-- When a duplicate is trashed: restore → apply re-add logic → optionally re-trash
+- When a duplicate is trashed: restore document + related records → apply re-add logic → optionally re-trash
+- **Soft-delete cascade**: Trashing a `Document` cascades to soft-delete all related `CustomFieldInstance` and `Note` records (both inherit `SoftDeleteModel`). The re-add handler restores these via `deleted_objects.filter(document_id=pk).update(deleted_at=None)` — without this, custom fields would be invisible in the UI and Tier 2 dedup lookups would fail on subsequent fetches
 - If `CONSUMER_READD_RETRASH=true`: document stays in trash but with updated `added` date, tag, and note
 - If `CONSUMER_READD_RETRASH=false` (default): document remains restored (out of trash)
 - Note text includes "Restored from trash" and "(will be re-trashed)" indicators as appropriate
