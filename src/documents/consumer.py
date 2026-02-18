@@ -913,8 +913,11 @@ class ConsumerPreflightPlugin(
         # Checksum-based dedup doesn't work for EML files because the same email
         # can produce different byte representations across fetches (header
         # reordering, MIME boundary regeneration, line ending normalization).
-        # Fall back to Mail UID matching for mail-sourced documents.
-        if not existing_doc.exists() and self.input_doc.mail_uid:
+        # Fall back to Mail UID matching for mail-sourced EML files only —
+        # attachments (PDFs etc.) share the same mail_uid but have stable
+        # checksums, so they are handled by Tier 1 above.
+        is_eml_file = Path(self.filename).suffix.lower() == '.eml'
+        if not existing_doc.exists() and self.input_doc.mail_uid and is_eml_file:
             try:
                 mail_uid_field_name = settings.PAPERLESS_MAIL_CORRELATION_FIELD
                 uid_field = CustomField.objects.filter(

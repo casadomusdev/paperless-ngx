@@ -32,8 +32,8 @@ When a duplicate document is detected during consumption, instead of silently re
 **Tier 1 — MD5 Checksum** (all document types):
 Computes MD5 of the incoming file and checks against `Document.checksum` and `Document.archive_checksum`. Works reliably for binary-identical files like PDFs and images.
 
-**Tier 2 — Mail UID Custom Field** (mail-sourced documents only):
-When no checksum match is found and the incoming document carries a `mail_uid` (set by the mail fetcher), queries `CustomFieldInstance` for an existing document with the same Mail UID value in the configured correlation field (`PAPERLESS_MAIL_UID_FIELD`, default: "Mail UID"). This catches EML duplicates where checksum-based dedup fails because `message.obj.as_bytes()` can produce different byte representations for the same email across fetches due to header reordering, MIME boundary regeneration, and line ending normalization.
+**Tier 2 — Mail UID Custom Field** (`.eml` files only):
+When no checksum match is found and the incoming file has a `.eml` extension and carries a `mail_uid` (set by the mail fetcher), queries `CustomFieldInstance` for an existing document with the same Mail UID value in the configured correlation field (`PAPERLESS_MAIL_UID_FIELD`, default: "Mail UID"). This catches EML duplicates where checksum-based dedup fails because `message.obj.as_bytes()` can produce different byte representations for the same email across fetches due to header reordering, MIME boundary regeneration, and line ending normalization. The `.eml` extension check is critical because attachments (PDFs, images) from the same email share the same `mail_uid` but have stable checksums — without this guard, Tier 2 would falsely match attachment consume tasks against the already-consumed EML document.
 
 Both tiers search `Document.global_objects` (including trashed documents) to ensure soft-deleted duplicates are caught.
 
