@@ -842,8 +842,10 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
+        # RKC: Use CorrelatedFormatter to include consume task correlation ID
         "verbose": {
-            "format": "[{asctime}] [{levelname}] [{name}] {message}",
+            "()": "documents.loggers.CorrelatedFormatter",
+            "format": "[{asctime}] [{levelname}] [{name}] [{group_short}] {message}",
             "style": "{",
         },
         "simple": {
