@@ -937,14 +937,20 @@ class ConsumerPreflightPlugin(
                 if uid_field:
                     # Use global_objects to include soft-deleted instances
                     # (trashed documents cascade soft-delete to their custom
-                    # field instances, hiding them from the default manager)
+                    # field instances, hiding them from the default manager).
+                    # Also filter by document mime_type='message/rfc822' so we
+                    # only match against existing EML documents — attachments
+                    # (PDFs, images) from the same email share the same
+                    # mail_uid but are a different document type.
                     uid_match = CustomFieldInstance.global_objects.filter(
                         field=uid_field,
                         value_text=self.input_doc.mail_uid,
+                        document__mime_type='message/rfc822',
                     ).select_related('document').first()
                     self.log.info(
                         f"Dedup Tier 2: queried value_text="
-                        f"'{self.input_doc.mail_uid}' → "
+                        f"'{self.input_doc.mail_uid}' "
+                        f"(mime_type=message/rfc822) → "
                         f"{'match doc #' + str(uid_match.document.pk) if uid_match else 'NO MATCH'}"
                     )
                     if uid_match:
