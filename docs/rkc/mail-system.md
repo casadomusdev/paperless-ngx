@@ -159,7 +159,26 @@ Added Mail UID as first visible data column, searchable via filter dropdown.
 - Filter-aware deletion with confirmation dialogs showing counts
 - Backend `bulk_delete` endpoint supports `delete_all` with filter parameters
 
-## 9. UI/UX Enhancements (v1.1.0)
+## 9. Email Date as Document Created Date (v1.2.2)
+
+When consuming emails (both attachments and `.eml` files), Paperless now sets the document's `created` date from the email's `Date:` header rather than leaving it to the OCR content parser or defaulting to today.
+
+### Behaviour
+- Both `_process_attachments()` and `_process_eml()` now pass `created=` in `DocumentMetadataOverrides`
+- The value is `message.date` (a `datetime.datetime`), timezone-normalized via `make_aware()` if naive
+- If `message.date` is `None` (malformed email), the field is omitted and normal fallback logic applies
+- The override feeds into `signals/handlers.py` which applies it to the document's `created` field before save
+
+### Why This Matters
+Previously all mail-consumed documents had their `created` date set to either the date inferred from OCR text or the consumption date — whichever the document parser picked. A PDF invoice received by email on 2024-01-15 would appear in Paperless with a random OCR-guessed date or today's date.  Now it reliably appears with the date the email arrived.
+
+### Implementation
+Two lines added to `mail.py`, one in each of the `DocumentMetadataOverrides()` constructor calls:
+```python
+created=(make_aware(message.date) if is_naive(message.date) else message.date) if message.date else None,
+```
+
+## 10. UI/UX Enhancements (v1.1.0)
 
 ### Mail Account Edit Dialog
 - Split into "Receiving (IMAP)" and "Sending (SMTP)" sections
@@ -252,3 +271,4 @@ Set SMTP From field to shared mailbox email. User must have Send As/Send on Beha
 - **v1.0.27**: Smart correspondent matching (FROM_SMART)
 - **v1.0.28**: Correspondent matching algorithm fix
 - **v1.1.0**: Universal SMTP, Graph API integration, multi-mailbox, UI/UX overhaul
+- **v1.2.2**: Email `Date:` header used as document `created` date for all mail-consumed documents

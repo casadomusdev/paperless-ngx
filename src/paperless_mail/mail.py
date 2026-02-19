@@ -1050,6 +1050,9 @@ class MailAccountHandler(LoggingMixin):
                     correspondent_id=correspondent.id if correspondent else None,
                     document_type_id=doc_type.id if doc_type else None,
                     tag_ids=tag_ids,
+                    # RKC: Set document created date from email Date: header (v1.2.2)
+                    created=(make_aware(message.date) if is_naive(message.date) else message.date) if message.date else None,
+                    # /end RKC edit
                     owner_id=(
                         rule.owner.id
                         if (rule.assign_owner_from_rule and rule.owner)
@@ -1159,6 +1162,9 @@ class MailAccountHandler(LoggingMixin):
             correspondent_id=correspondent.id if correspondent else None,
             document_type_id=doc_type.id if doc_type else None,
             tag_ids=tag_ids,
+            # RKC: Set document created date from email Date: header (v1.2.2)
+            created=(make_aware(message.date) if is_naive(message.date) else message.date) if message.date else None,
+            # /end RKC edit
             owner_id=rule.owner.id if rule.owner else None,
         )
 

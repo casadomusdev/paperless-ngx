@@ -83,6 +83,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 - **Connection pooling** via Celery Beat to eliminate OAuth2 authentication storms
 - **Smart correspondent matching** using RFC 5322 format with email-based three-tier matching
 - **Email metadata capture** into custom fields (UID, From, Sender, Subject, Date)
+- **Email Date: header as document created date** — attachments and .eml files get their `created` date set from the email's `Date:` header instead of OCR text or today's date
 - **"Process all mails"** action for read+unread without modifying mail state
 - **Processed mail UI** with server-side filtering, error modals, Mail UID column, select-all-in-database, pagination fix
 - **Correspondent matching algorithm** consistency between mail-created and UI-created correspondents
@@ -194,6 +195,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.2.2** — Mail consumption sets document `created` from email `Date:` header
 - **v1.2.1** — Duplicate Document Re-Add with two-tier dedup (MD5 + Mail UID for EML), tagging, notes, and trashed document handling
 - **v1.2.0** — Dynamic Workflow Email with Jinja2 templating for all 6 fields, HTML auto-detection, error tagging
 - **v1.1.1** — Webhook Docker hostname validation fix
