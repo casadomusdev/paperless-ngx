@@ -1,7 +1,13 @@
 """
-RKC: Microsoft Graph API Mail Retrieval Backend (v1.2.3)
+RKC: Microsoft Graph API Mail Retrieval Backend (v1.2.4)
 Implements email receiving for Outlook OAuth accounts using Microsoft Graph API instead of IMAP.
 This complements the Graph API sending functionality and avoids scope mixing issues.
+
+v1.2.4 Changes:
+- Opaque S/MIME signed message support: Extracts attachments from smime.p7m CMS blobs
+- Uses OpenSSL subprocess (cms -verify -noverify) to unwrap signed-data without certificates
+- Refactored shared MIME walking into _parse_mime_for_attachments() helper
+- Handles both detached (smime.p7s) and opaque (smime.p7m) signing variants
 
 v1.2.3 Changes:
 - S/MIME signed message support: Extracts attachments from digitally signed emails
@@ -463,27 +469,49 @@ class OutlookGraphMailRetriever:
             
             logger.debug(f"[Graph API] Found {len(attachments_data)} raw attachments for message {message_id}")
             
-            # RKC: v1.2.3 - S/MIME signed message support
-            # For S/MIME signed messages, Graph API returns only signature attachment (smime.p7s)
-            # but the actual file attachments are inside the signed MIME structure.
-            # Detect this case and extract attachments from the raw MIME message.
+            # RKC: v1.2.3/v1.2.4 - S/MIME signed message support
+            # Graph API surfaces S/MIME structure as attachments instead of inline content.
+            # Two variants must be handled:
+            #   - Detached signing (smime.p7s / pkcs7-signature): The message body is plain
+            #     MIME and the signature is a separate attachment. Real file attachments are
+            #     embedded in the raw MIME structure → fetch $value and parse MIME.
+            #   - Opaque signing (smime.p7m / pkcs7-mime with signed-data): The entire
+            #     message content including attachments is wrapped in a CMS blob. Must
+            #     unwrap with OpenSSL before parsing MIME.
             has_smime_signature = False
+            has_opaque_signed = False
+            smime_opaque_bytes = None
+
             for att_data in attachments_data:
                 if att_data.get('@odata.type') == '#microsoft.graph.fileAttachment':
                     content_type = att_data.get('contentType', '').lower()
                     filename = att_data.get('name', '').lower()
-                    
-                    # Detect S/MIME signature (pkcs7-signature or smime.p7s file)
-                    if 'pkcs7-signature' in content_type or filename == 'smime.p7s':
+
+                    # Detached S/MIME signature (multipart/signed with smime.p7s)
+                    if 'pkcs7-signature' in content_type or 'x-pkcs7-signature' in content_type or filename == 'smime.p7s':
                         has_smime_signature = True
-                        logger.info(f"[Graph API] Detected S/MIME signed message, will extract from MIME structure")
+                        logger.info(f"[Graph API] Detected detached S/MIME signed message (smime.p7s), will extract from raw MIME")
                         break
-            
-            # If S/MIME signed, fetch raw MIME and extract real attachments
+
+                    # Opaque S/MIME signed (smime.p7m with smime-type=signed-data)
+                    # Exclude enveloped-data which would be encrypted - we don't handle that
+                    if ('pkcs7-mime' in content_type or 'x-pkcs7-mime' in content_type) and 'enveloped-data' not in content_type:
+                        content_b64 = att_data.get('contentBytes', '')
+                        if content_b64:
+                            smime_opaque_bytes = base64.b64decode(content_b64)
+                            has_opaque_signed = True
+                            logger.info(f"[Graph API] Detected opaque S/MIME signed message (smime.p7m), will unwrap via OpenSSL")
+                            break
+
+            # Detached signing: fetch raw MIME $value and parse MIME tree
             if has_smime_signature:
                 return self._extract_attachments_from_signed_mime(message_id)
+
+            # Opaque signing: unwrap CMS blob with OpenSSL, then parse extracted MIME
+            if has_opaque_signed and smime_opaque_bytes:
+                return self._extract_from_opaque_signed_cms(smime_opaque_bytes)
             # /end RKC edit
-            
+
             # RKC: v1.1.0 - Filter out S/MIME signature and encryption attachments
             # S/MIME emails include technical attachments (smime.p7s, smime.p7m) that
             # contain signatures or encrypted content. These should not be processed as
@@ -494,7 +522,7 @@ class OutlookGraphMailRetriever:
                 if att_data.get('@odata.type') == '#microsoft.graph.fileAttachment':
                     content_type = att_data.get('contentType', '').lower()
                     filename = att_data.get('name', '').lower()
-                    
+
                     # Skip S/MIME signature/encryption attachments by content type
                     if any(ct in content_type for ct in [
                         'pkcs7-signature',      # S/MIME signature
@@ -504,14 +532,14 @@ class OutlookGraphMailRetriever:
                     ]):
                         logger.debug(f"[Graph API] Skipping S/MIME attachment (type={content_type}): {filename}")
                         continue
-                    
+
                     # Skip S/MIME attachments by filename pattern
                     if filename.startswith('smime.') or filename in ['smime', 'smime.p7s', 'smime.p7m']:
                         logger.debug(f"[Graph API] Skipping S/MIME file: {filename}")
                         continue
-                    
+
                     attachments.append(GraphMailAttachment(att_data))
-            
+
             logger.debug(f"[Graph API] Returning {len(attachments)} legitimate attachments (filtered out S/MIME)")
             return attachments
             # /end RKC edit
@@ -525,83 +553,196 @@ class OutlookGraphMailRetriever:
             logger.exception(f"[Graph API] Error fetching attachments: {e}")
             return []
     
-    # RKC: v1.2.3 - S/MIME signed message support
-    def _extract_attachments_from_signed_mime(self, message_id: str) -> list[GraphMailAttachment]:
+    # RKC: v1.2.3/v1.2.4 - S/MIME signed message support
+
+    def _parse_mime_for_attachments(self, mime_bytes: bytes) -> list[GraphMailAttachment]:
         """
-        Extract attachments from S/MIME signed message by parsing raw MIME.
-        
-        S/MIME signed messages have a multipart/signed structure where the actual
-        attachments are inside the signed content part, not exposed via the
-        attachments API.
-        
+        Walk a MIME message byte string and extract file attachments,
+        skipping S/MIME signature and wrapper parts.
+
+        Shared helper used by both detached and opaque S/MIME extraction paths.
+
         Args:
-            message_id: Graph API message ID
-            
+            mime_bytes: Raw MIME message bytes (headers + body)
+
         Returns:
-            List of GraphMailAttachment objects extracted from signed content
+            List of GraphMailAttachment objects
         """
         from email import message_from_bytes
-        from email.message import Message
-        
-        logger.info(f"[Graph API] Fetching raw MIME for S/MIME signed message {message_id}")
-        
-        # Fetch raw MIME using $value endpoint
+
+        mime_message = message_from_bytes(mime_bytes)
+        attachments = []
+
+        for part in mime_message.walk():
+            content_disposition = part.get_content_disposition()
+            if content_disposition != 'attachment':
+                continue
+
+            filename = part.get_filename()
+            content_type = part.get_content_type()
+
+            # Skip S/MIME signature / wrapper parts
+            if any(ct in content_type for ct in [
+                'pkcs7-signature', 'x-pkcs7-signature',
+                'pkcs7-mime', 'x-pkcs7-mime',
+            ]):
+                logger.debug(f"[Graph API] Skipping S/MIME crypto part in MIME walk: {filename}")
+                continue
+            if 'smime' in (filename or '').lower():
+                logger.debug(f"[Graph API] Skipping S/MIME filename in MIME walk: {filename}")
+                continue
+
+            payload = part.get_payload(decode=True)
+            if payload and filename:
+                att_data = {
+                    'name': filename,
+                    'contentType': content_type,
+                    'size': len(payload),
+                    'isInline': False,
+                    'contentBytes': base64.b64encode(payload).decode('ascii'),
+                }
+                attachments.append(GraphMailAttachment(att_data))
+                logger.debug(
+                    f"[Graph API] Extracted attachment from MIME: {filename} "
+                    f"({content_type}, {len(payload)} bytes)"
+                )
+
+        return attachments
+
+    def _extract_attachments_from_signed_mime(self, message_id: str) -> list[GraphMailAttachment]:
+        """
+        Extract attachments from a detached S/MIME signed message by fetching
+        and parsing the raw MIME ($value endpoint).
+
+        Detached signing wraps the original message in multipart/signed with a
+        separate smime.p7s signature part. The real file attachments are inside
+        the signed content part of the raw MIME structure.
+
+        Args:
+            message_id: Graph API message ID
+
+        Returns:
+            List of GraphMailAttachment objects extracted from the signed MIME
+        """
+        logger.info(f"[Graph API] Fetching raw MIME for detached S/MIME signed message {message_id}")
+
         endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}/$value"
-        
+
         try:
             with httpx.Client(timeout=30.0) as client:
-                response = client.get(
-                    endpoint,
-                    headers=self._get_headers(),
-                )
+                response = client.get(endpoint, headers=self._get_headers())
                 response.raise_for_status()
-                
                 raw_mime_bytes = response.content
                 logger.debug(f"[Graph API] Retrieved {len(raw_mime_bytes)} bytes of raw MIME")
-            
-            # Parse MIME message
-            mime_message = message_from_bytes(raw_mime_bytes)
-            
-            # Extract attachments from MIME structure
-            attachments = []
-            for part in mime_message.walk():
-                # Look for file attachments
-                content_disposition = part.get_content_disposition()
-                if content_disposition == 'attachment':
-                    filename = part.get_filename()
-                    content_type = part.get_content_type()
-                    
-                    # Skip S/MIME signature parts
-                    if 'pkcs7-signature' in content_type or 'smime' in (filename or '').lower():
-                        logger.debug(f"[Graph API] Skipping S/MIME signature part: {filename}")
-                        continue
-                    
-                    # Extract payload
-                    payload = part.get_payload(decode=True)
-                    if payload and filename:
-                        # Create attachment data dict compatible with GraphMailAttachment
-                        att_data = {
-                            'name': filename,
-                            'contentType': content_type,
-                            'size': len(payload),
-                            'isInline': False,
-                            'contentBytes': base64.b64encode(payload).decode('ascii'),
-                        }
-                        
-                        attachments.append(GraphMailAttachment(att_data))
-                        logger.debug(f"[Graph API] Extracted attachment from MIME: {filename} ({content_type}, {len(payload)} bytes)")
-            
-            logger.info(f"[Graph API] Extracted {len(attachments)} attachments from S/MIME signed message")
+
+            attachments = self._parse_mime_for_attachments(raw_mime_bytes)
+            logger.info(
+                f"[Graph API] Extracted {len(attachments)} attachments from detached S/MIME signed message"
+            )
             return attachments
-            
+
         except httpx.HTTPStatusError as e:
+            logger.error(f"[Graph API] Error fetching raw MIME: HTTP {e.response.status_code}")
+            return []
+        except Exception as e:
+            logger.exception(f"[Graph API] Error extracting attachments from detached signed MIME: {e}")
+            return []
+
+    def _extract_from_opaque_signed_cms(self, pkcs7_bytes: bytes) -> list[GraphMailAttachment]:
+        """
+        Extract attachments from an opaque S/MIME signed CMS blob (smime.p7m).
+
+        Opaque signing wraps the entire original message (including all attachments)
+        inside a CMS SignedData structure stored as DER-encoded binary. OpenSSL can
+        unwrap this without certificate verification (-noverify), producing the inner
+        MIME message which is then parsed normally.
+
+        Falls back to PEM encoding if DER fails (some senders produce base64-armoured
+        p7m blobs despite the binary content type).
+
+        Args:
+            pkcs7_bytes: Raw bytes of the CMS blob (DER or PEM)
+
+        Returns:
+            List of GraphMailAttachment objects extracted from inner MIME content
+        """
+        import subprocess
+        import tempfile
+        import os
+
+        logger.info(
+            f"[Graph API] Unwrapping opaque S/MIME CMS blob via OpenSSL "
+            f"({len(pkcs7_bytes)} bytes)"
+        )
+
+        # Write blob to a temp file so openssl can read it
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.p7m') as tmp:
+            tmp.write(pkcs7_bytes)
+            tmp_path = tmp.name
+
+        inner_mime_bytes: bytes | None = None
+
+        try:
+            # Try DER encoding first (standard for smime.p7m)
+            for inform in ('DER', 'PEM'):
+                cmd = [
+                    'openssl', 'cms',
+                    '-verify',
+                    '-noverify',          # Skip certificate chain validation
+                    '-inform', inform,
+                    '-in', tmp_path,
+                ]
+                logger.debug(f"[Graph API] Running: {' '.join(cmd)}")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    timeout=30,
+                )
+
+                if result.returncode == 0 and result.stdout:
+                    inner_mime_bytes = result.stdout
+                    logger.debug(
+                        f"[Graph API] OpenSSL unwrapped CMS blob ({inform}): "
+                        f"{len(inner_mime_bytes)} bytes of inner MIME"
+                    )
+                    break
+                else:
+                    stderr_text = result.stderr.decode('utf-8', errors='replace').strip()
+                    logger.debug(
+                        f"[Graph API] OpenSSL CMS unwrap failed ({inform}): {stderr_text[:200]}"
+                    )
+
+        except subprocess.TimeoutExpired:
+            logger.error("[Graph API] OpenSSL CMS unwrap timed out after 30s")
+            return []
+        except FileNotFoundError:
             logger.error(
-                f"[Graph API] Error fetching raw MIME: HTTP {e.response.status_code}"
+                "[Graph API] 'openssl' binary not found - cannot unwrap opaque S/MIME. "
+                "Ensure OpenSSL is installed in the container."
             )
             return []
         except Exception as e:
-            logger.exception(f"[Graph API] Error extracting attachments from signed MIME: {e}")
+            logger.exception(f"[Graph API] Unexpected error running OpenSSL: {e}")
             return []
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+        if not inner_mime_bytes:
+            logger.error(
+                "[Graph API] Could not unwrap opaque S/MIME blob with DER or PEM encoding. "
+                "Skipping message."
+            )
+            return []
+
+        attachments = self._parse_mime_for_attachments(inner_mime_bytes)
+        logger.info(
+            f"[Graph API] Extracted {len(attachments)} attachments from opaque S/MIME signed message"
+        )
+        return attachments
+
     # /end RKC edit
     
     def mark_message_read(self, message_uid: str):

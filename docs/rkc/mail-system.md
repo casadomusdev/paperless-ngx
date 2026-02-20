@@ -255,70 +255,75 @@ Set SMTP From field to shared mailbox email. User must have Send As/Send on Beha
 ### Environment Variable Fallback
 `PAPERLESS_EMAIL_*` variables continue working as fallback. Account-based sending takes priority.
 
-## 11. S/MIME Signed Message Support (v1.2.3)
+## 11. S/MIME Signed Message Support (v1.2.3 + v1.2.4)
 
-### Problem
-For S/MIME **signed** messages (not encrypted), the Microsoft Graph API attachments endpoint returns only the signature file (`smime.p7s` with content type `application/pkcs7-signature`), but does NOT return the actual file attachments that are visible in Outlook. This caused paperless to log "Returning 0 legitimate attachments" even though PDFs and other documents were attached to the email.
+### Background: Two S/MIME Signing Variants
 
-### Solution
-The implementation detects S/MIME signed messages and automatically extracts attachments from the raw MIME structure:
+S/MIME defines two ways to digitally sign an email. Both are transparent to the Outlook user (both show "This message has a digital signature") but produce very different MIME structures:
 
-1. **Detection**: When fetching attachments via Graph API, check if any attachment is a S/MIME signature (`pkcs7-signature` content type or `smime.p7s` filename)
-2. **MIME Retrieval**: Use the `$value` endpoint to fetch the complete raw MIME message
-3. **Parsing**: Parse the MIME structure using Python's `email` library
-4. **Extraction**: Walk the MIME tree and extract file attachments, skipping signature parts
-5. **Wrapping**: Wrap extracted attachments in `GraphMailAttachment` objects for normal processing
+| Variant | MIME type | Blob file | Structure |
+|---------|-----------|-----------|-----------|
+| **Detached** | `multipart/signed` | `smime.p7s` | Original message + separate signature |
+| **Opaque** | `application/pkcs7-mime; smime-type=signed-data` | `smime.p7m` | Entire message wrapped inside CMS blob |
 
-### Implementation Details
+The Microsoft Graph API attachments endpoint surfaces the S/MIME wrapper as an attachment but does **not** expose the real file attachments inside. This caused paperless to log "Returning 0 legitimate attachments" even though PDFs were visible in Outlook.
 
-**Detection Logic** (`get_attachments` method):
-```python
-has_smime_signature = False
-for att_data in attachments_data:
-    content_type = att_data.get('contentType', '').lower()
-    filename = att_data.get('name', '').lower()
-    
-    if 'pkcs7-signature' in content_type or filename == 'smime.p7s':
-        has_smime_signature = True
-        logger.info(f"[Graph API] Detected S/MIME signed message")
-        break
+### Detached Signing (v1.2.3) — smime.p7s
 
-if has_smime_signature:
-    return self._extract_attachments_from_signed_mime(message_id)
-```
+**Detection**: Any attachment with `pkcs7-signature`/`x-pkcs7-signature` content type, or filename `smime.p7s`.
 
-**MIME Extraction** (`_extract_attachments_from_signed_mime` method):
-- Fetches raw MIME via `GET /messages/{id}/$value` endpoint
-- Parses with `email.message_from_bytes()`
-- Walks MIME parts looking for `Content-Disposition: attachment`
-- Skips S/MIME signature parts (pkcs7-signature content type)
-- Base64-encodes extracted payloads to match Graph API format
-- Returns list of `GraphMailAttachment` objects
+**Extraction flow**:
+1. Fetch raw MIME via `GET /messages/{id}/$value`
+2. Parse with Python's `email.message_from_bytes()`
+3. Walk MIME tree, extract `Content-Disposition: attachment` parts
+4. Skip signature parts (`pkcs7-signature` content type, `smime*` filenames)
+5. Return `GraphMailAttachment` objects for normal processing
 
-### Behavior
-- **No certificate required** — Signed messages can be read without any private keys
-- **Transparent to consumer** — Extracted attachments appear identical to regular attachments
-- **Preserves metadata** — Filename, content type, and size are extracted from MIME headers
-- **Logging** — Clear log messages indicate when S/MIME processing is happening
+No certificates required — signature verification is skipped entirely.
+
+### Opaque Signing (v1.2.4) — smime.p7m
+
+**Detection**: Any attachment with `pkcs7-mime`/`x-pkcs7-mime` content type where `enveloped-data` is NOT in the content type (which would indicate encryption, not signing).
+
+**Extraction flow**:
+1. Decode `contentBytes` from the attachment (already in Graph API response — no extra API call)
+2. Write DER blob to a temp file
+3. Run `openssl cms -verify -noverify -inform DER -in {tmp}` — `-noverify` skips certificate validation entirely
+4. If DER fails, retry with `-inform PEM` (some senders produce base64-armoured blobs)
+5. Parse the extracted inner MIME bytes with `_parse_mime_for_attachments()`
+6. Delete temp file, return `GraphMailAttachment` objects
+
+**Requirement**: OpenSSL binary must be available in the container (it is in the standard paperless-ngx image).
+
+### Shared Helper: `_parse_mime_for_attachments(mime_bytes)`
+
+Both extraction paths share a common MIME walking helper that:
+- Parses byte string as MIME with `email.message_from_bytes()`
+- Selects only `Content-Disposition: attachment` parts
+- Skips S/MIME crypto parts (`pkcs7-signature`, `pkcs7-mime`, etc.)
+- Skips parts with `smime` in the filename
+- Collects `GraphMailAttachment` objects (with base64-encoded payload)
+
+### Behavior Summary
+
+- **No certificate required for either variant** — both paths bypass signature verification
+- **Transparent to consumer** — extracted attachments appear identical to regular attachments
+- **Preserves metadata** — filename, content type, and size from MIME headers
+- **Temp file cleanup** — always performed in `finally` block even if OpenSSL fails
+- **Graceful degradation** — if OpenSSL is missing or CMS unwrap fails, logs an error and returns 0 attachments (email is still processed without attachments, not crashed)
 
 ### S/MIME Encrypted Messages
-**Not yet supported.** Encrypted messages (`pkcs7-mime` with `smime-type=enveloped-data`) require the recipient's private key for decryption. This is on the roadmap for a future version but is not part of v1.2.3.
 
-For encrypted emails:
-- The smime.p7m blob would be filtered out (as part of the existing v1.1.0 S/MIME filter)
-- 0 attachments would be returned
-- No error is logged - the email is simply processed without attachments
+**Not supported.** Encrypted messages (`pkcs7-mime` with `smime-type=enveloped-data`) require the recipient's private key for decryption. The detection logic explicitly excludes `enveloped-data` content types, so encrypted messages fall through to the existing v1.1.0 filter which skips the smime blob and returns 0 attachments.
 
-Future implementation would require:
-- Recipient's S/MIME certificate and private key (PEM format)
-- OpenSSL or equivalent decryption library
-- Environment variables to configure certificate paths
+Future implementation would require recipient S/MIME certificate + private key and is not on the current roadmap.
 
 ---
 
 ## Version History
 
-- **v1.2.3**: S/MIME signed message support for Graph API mail retrieval
+- **v1.2.4**: Opaque S/MIME signed message support (smime.p7m) via OpenSSL CMS unwrap; shared MIME walking helper
+- **v1.2.3**: Detached S/MIME signed message support (smime.p7s) via raw MIME $value fetch
 - **v1.0.12**: Mail-document correlation via IMAP UID custom field
 - **v1.0.13**: Processed mail pagination fix
 - **v1.0.14**: Error modal & date+time columns in processed mail
