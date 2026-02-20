@@ -195,6 +195,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.2.3** — S/MIME signed message support for Graph API mail retrieval
 - **v1.2.2** — Mail consumption sets document `created` from email `Date:` header
 - **v1.2.1** — Duplicate Document Re-Add with two-tier dedup (MD5 + Mail UID for EML), tagging, notes, and trashed document handling
 - **v1.2.0** — Dynamic Workflow Email with Jinja2 templating for all 6 fields, HTML auto-detection, error tagging

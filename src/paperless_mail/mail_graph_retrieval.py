@@ -1,7 +1,12 @@
 """
-RKC: Microsoft Graph API Mail Retrieval Backend (v1.1.0)
+RKC: Microsoft Graph API Mail Retrieval Backend (v1.2.3)
 Implements email receiving for Outlook OAuth accounts using Microsoft Graph API instead of IMAP.
 This complements the Graph API sending functionality and avoids scope mixing issues.
+
+v1.2.3 Changes:
+- S/MIME signed message support: Extracts attachments from digitally signed emails
+- Handles multipart/signed MIME structures without requiring certificates
+- Distinguishes between signature wrappers (skip) and signed content (extract)
 
 v1.1.0 Changes:
 - Multi-mailbox support: Uses /users/{username}/ endpoints instead of /me/
@@ -456,13 +461,33 @@ class OutlookGraphMailRetriever:
             data = response.json()
             attachments_data = data.get('value', [])
             
-            logger.debug(f"[Graph API] Found {len(attachments_data)} attachments for message {message_id}")
+            logger.debug(f"[Graph API] Found {len(attachments_data)} raw attachments for message {message_id}")
+            
+            # RKC: v1.2.3 - S/MIME signed message support
+            # For S/MIME signed messages, Graph API returns only signature attachment (smime.p7s)
+            # but the actual file attachments are inside the signed MIME structure.
+            # Detect this case and extract attachments from the raw MIME message.
+            has_smime_signature = False
+            for att_data in attachments_data:
+                if att_data.get('@odata.type') == '#microsoft.graph.fileAttachment':
+                    content_type = att_data.get('contentType', '').lower()
+                    filename = att_data.get('name', '').lower()
+                    
+                    # Detect S/MIME signature (pkcs7-signature or smime.p7s file)
+                    if 'pkcs7-signature' in content_type or filename == 'smime.p7s':
+                        has_smime_signature = True
+                        logger.info(f"[Graph API] Detected S/MIME signed message, will extract from MIME structure")
+                        break
+            
+            # If S/MIME signed, fetch raw MIME and extract real attachments
+            if has_smime_signature:
+                return self._extract_attachments_from_signed_mime(message_id)
+            # /end RKC edit
             
             # RKC: v1.1.0 - Filter out S/MIME signature and encryption attachments
             # S/MIME emails include technical attachments (smime.p7s, smime.p7m) that
             # contain signatures or encrypted content. These should not be processed as
             # documents - only legitimate file attachments should be ingested.
-            # This makes Graph API behavior identical to IMAP which also excludes these.
             attachments = []
             for att_data in attachments_data:
                 # Only process file attachments (not item attachments)
@@ -499,6 +524,85 @@ class OutlookGraphMailRetriever:
         except Exception as e:
             logger.exception(f"[Graph API] Error fetching attachments: {e}")
             return []
+    
+    # RKC: v1.2.3 - S/MIME signed message support
+    def _extract_attachments_from_signed_mime(self, message_id: str) -> list[GraphMailAttachment]:
+        """
+        Extract attachments from S/MIME signed message by parsing raw MIME.
+        
+        S/MIME signed messages have a multipart/signed structure where the actual
+        attachments are inside the signed content part, not exposed via the
+        attachments API.
+        
+        Args:
+            message_id: Graph API message ID
+            
+        Returns:
+            List of GraphMailAttachment objects extracted from signed content
+        """
+        from email import message_from_bytes
+        from email.message import Message
+        
+        logger.info(f"[Graph API] Fetching raw MIME for S/MIME signed message {message_id}")
+        
+        # Fetch raw MIME using $value endpoint
+        endpoint = f"{self.GRAPH_BASE}/users/{self.mail_account.username}/messages/{message_id}/$value"
+        
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.get(
+                    endpoint,
+                    headers=self._get_headers(),
+                )
+                response.raise_for_status()
+                
+                raw_mime_bytes = response.content
+                logger.debug(f"[Graph API] Retrieved {len(raw_mime_bytes)} bytes of raw MIME")
+            
+            # Parse MIME message
+            mime_message = message_from_bytes(raw_mime_bytes)
+            
+            # Extract attachments from MIME structure
+            attachments = []
+            for part in mime_message.walk():
+                # Look for file attachments
+                content_disposition = part.get_content_disposition()
+                if content_disposition == 'attachment':
+                    filename = part.get_filename()
+                    content_type = part.get_content_type()
+                    
+                    # Skip S/MIME signature parts
+                    if 'pkcs7-signature' in content_type or 'smime' in (filename or '').lower():
+                        logger.debug(f"[Graph API] Skipping S/MIME signature part: {filename}")
+                        continue
+                    
+                    # Extract payload
+                    payload = part.get_payload(decode=True)
+                    if payload and filename:
+                        # Create attachment data dict compatible with GraphMailAttachment
+                        att_data = {
+                            'name': filename,
+                            'contentType': content_type,
+                            'size': len(payload),
+                            'isInline': False,
+                            'contentBytes': base64.b64encode(payload).decode('ascii'),
+                        }
+                        
+                        attachments.append(GraphMailAttachment(att_data))
+                        logger.debug(f"[Graph API] Extracted attachment from MIME: {filename} ({content_type}, {len(payload)} bytes)")
+            
+            logger.info(f"[Graph API] Extracted {len(attachments)} attachments from S/MIME signed message")
+            return attachments
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"[Graph API] Error fetching raw MIME: HTTP {e.response.status_code}"
+            )
+            return []
+        except Exception as e:
+            logger.exception(f"[Graph API] Error extracting attachments from signed MIME: {e}")
+            return []
+    # /end RKC edit
     
     def mark_message_read(self, message_uid: str):
         """
