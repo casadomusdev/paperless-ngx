@@ -487,6 +487,13 @@ class OutlookGraphMailRetriever:
                     content_type = att_data.get('contentType', '').lower()
                     filename = att_data.get('name', '').lower()
 
+                    # Log all attachment metadata for diagnostic purposes
+                    logger.info(
+                        f"[Graph API] Attachment scan: name='{att_data.get('name', '')}' "
+                        f"contentType='{att_data.get('contentType', '')}' "
+                        f"hasBytes={bool(att_data.get('contentBytes'))}"
+                    )
+
                     # Detached S/MIME signature (multipart/signed with smime.p7s)
                     if 'pkcs7-signature' in content_type or 'x-pkcs7-signature' in content_type or filename == 'smime.p7s':
                         has_smime_signature = True
@@ -502,6 +509,27 @@ class OutlookGraphMailRetriever:
                             has_opaque_signed = True
                             logger.info(f"[Graph API] Detected opaque S/MIME signed message (smime.p7m), will unwrap via OpenSSL")
                             break
+                        else:
+                            logger.warning(
+                                f"[Graph API] Opaque S/MIME attachment '{att_data.get('name','')}' "
+                                f"(type={att_data.get('contentType','')}) has no contentBytes - cannot unwrap"
+                            )
+
+                    # Detect smime.p7m by filename even if content type is unexpected
+                    if filename == 'smime.p7m' and not has_opaque_signed:
+                        logger.warning(
+                            f"[Graph API] smime.p7m found with unexpected contentType='{att_data.get('contentType','')}' "
+                            f"- contentType did not match pkcs7-mime. Treating as opaque-signed anyway."
+                        )
+                        content_b64 = att_data.get('contentBytes', '')
+                        if content_b64:
+                            smime_opaque_bytes = base64.b64decode(content_b64)
+                            has_opaque_signed = True
+                        else:
+                            logger.warning(
+                                f"[Graph API] smime.p7m has no contentBytes - cannot unwrap, will skip"
+                            )
+                        break
 
             # Detached signing: fetch raw MIME $value and parse MIME tree
             if has_smime_signature:
@@ -535,7 +563,7 @@ class OutlookGraphMailRetriever:
 
                     # Skip S/MIME attachments by filename pattern
                     if filename.startswith('smime.') or filename in ['smime', 'smime.p7s', 'smime.p7m']:
-                        logger.debug(f"[Graph API] Skipping S/MIME file: {filename}")
+                        logger.info(f"[Graph API] v1.1.0 filter: skipping smime file '{filename}' (type={content_type}) - was not caught by S/MIME detection")
                         continue
 
                     attachments.append(GraphMailAttachment(att_data))
