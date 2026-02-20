@@ -480,7 +480,9 @@ class OutlookGraphMailRetriever:
             #     unwrap with OpenSSL before parsing MIME.
             has_smime_signature = False
             has_opaque_signed = False
+            has_embedded_mime = False
             smime_opaque_bytes = None
+            embedded_mime_bytes = None
 
             for att_data in attachments_data:
                 if att_data.get('@odata.type') == '#microsoft.graph.fileAttachment':
@@ -500,6 +502,25 @@ class OutlookGraphMailRetriever:
                         logger.info(f"[Graph API] Detected detached S/MIME signed message (smime.p7s), will extract from raw MIME")
                         break
 
+                    # Graph API sometimes presents a multipart/signed message as an
+                    # attachment named smime.p7m. In this case contentBytes IS the raw
+                    # MIME of the outer signed message — no OpenSSL needed, parse directly.
+                    if 'multipart/signed' in content_type and filename.startswith('smime.'):
+                        content_b64 = att_data.get('contentBytes', '')
+                        if content_b64:
+                            embedded_mime_bytes = base64.b64decode(content_b64)
+                            has_embedded_mime = True
+                            logger.info(
+                                f"[Graph API] Detected multipart/signed embedded as attachment "
+                                f"({len(embedded_mime_bytes)} bytes), will parse MIME directly"
+                            )
+                        else:
+                            logger.warning(
+                                f"[Graph API] multipart/signed attachment '{att_data.get('name','')}' "
+                                f"has no contentBytes - cannot extract"
+                            )
+                        break
+
                     # Opaque S/MIME signed (smime.p7m with smime-type=signed-data)
                     # Exclude enveloped-data which would be encrypted - we don't handle that
                     if ('pkcs7-mime' in content_type or 'x-pkcs7-mime' in content_type) and 'enveloped-data' not in content_type:
@@ -515,27 +536,33 @@ class OutlookGraphMailRetriever:
                                 f"(type={att_data.get('contentType','')}) has no contentBytes - cannot unwrap"
                             )
 
-                    # Detect smime.p7m by filename even if content type is unexpected
-                    if filename == 'smime.p7m' and not has_opaque_signed:
+                    # Filename fallback for smime.p7m with unknown content type: try OpenSSL
+                    if filename == 'smime.p7m' and not has_opaque_signed and not has_embedded_mime:
                         logger.warning(
-                            f"[Graph API] smime.p7m found with unexpected contentType='{att_data.get('contentType','')}' "
-                            f"- contentType did not match pkcs7-mime. Treating as opaque-signed anyway."
+                            f"[Graph API] smime.p7m found with unrecognised contentType='{att_data.get('contentType','')}' "
+                            f"- falling back to OpenSSL CMS unwrap"
                         )
                         content_b64 = att_data.get('contentBytes', '')
                         if content_b64:
                             smime_opaque_bytes = base64.b64decode(content_b64)
                             has_opaque_signed = True
                         else:
-                            logger.warning(
-                                f"[Graph API] smime.p7m has no contentBytes - cannot unwrap, will skip"
-                            )
+                            logger.warning(f"[Graph API] smime.p7m has no contentBytes - skipping")
                         break
 
             # Detached signing: fetch raw MIME $value and parse MIME tree
             if has_smime_signature:
                 return self._extract_attachments_from_signed_mime(message_id)
 
-            # Opaque signing: unwrap CMS blob with OpenSSL, then parse extracted MIME
+            # Graph API embedded multipart/signed as attachment contentBytes — parse MIME directly
+            if has_embedded_mime and embedded_mime_bytes:
+                attachments = self._parse_mime_for_attachments(embedded_mime_bytes)
+                logger.info(
+                    f"[Graph API] Extracted {len(attachments)} attachments from embedded multipart/signed MIME"
+                )
+                return attachments
+
+            # Opaque CMS blob: unwrap with OpenSSL, then parse extracted MIME
             if has_opaque_signed and smime_opaque_bytes:
                 return self._extract_from_opaque_signed_cms(smime_opaque_bytes)
             # /end RKC edit
