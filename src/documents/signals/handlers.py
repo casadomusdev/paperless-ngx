@@ -4,6 +4,10 @@ import ipaddress
 import logging
 import shutil
 import socket
+
+# RKC: pathvalidate used for sanitizing email attachment filenames
+import pathvalidate
+# /end RKC edit
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -1274,10 +1278,11 @@ def run_workflows(
                     WorkflowTrigger.WorkflowTriggerType.DOCUMENT_UPDATED,
                     WorkflowTrigger.WorkflowTriggerType.SCHEDULED,
                 ] and isinstance(document, Document):
-                    friendly_name = (
-                        Path(current_filename).name
-                        if current_filename
-                        else document.source_path.name
+                    # RKC: Ensures attachment filename is the document title with the
+                    # correct file extension — no date prefix, no storage path elements.
+                    friendly_name = pathvalidate.sanitize_filename(
+                        f"{document.title}{document.file_type}",
+                        replacement_text="-",
                     )
                     attachment = EmailAttachment(
                         path=document.source_path,
@@ -1285,11 +1290,8 @@ def run_workflows(
                         friendly_name=friendly_name,
                     )
                 elif original_file:
-                    friendly_name = (
-                        Path(current_filename).name
-                        if current_filename
-                        else original_file.name
-                    )
+                    # Pre-consumption: no Document object yet, use original filename
+                    friendly_name = original_file.name
                     attachment = EmailAttachment(
                         path=original_file,
                         mime_type=document.mime_type,
