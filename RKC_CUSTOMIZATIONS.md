@@ -92,6 +92,9 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 
 ### Document Processing
 
+**AI OCR via Post-Consumption Script** — Replaces Tesseract OCR output with higher-quality text from an AI OCR provider (Mistral OCR, Azure Document Intelligence, or any LiteLLM-compatible OCR model) without modifying the paperless-ngx source code. Implemented as a `PAPERLESS_POST_CONSUME_SCRIPT` hook — zero changes to paperless-ngx itself. Sends the archived PDF as a base64 data URL to LiteLLM's `/v1/ocr` endpoint (native endpoint, not the Mistral pass-through, so cost tracking works). The `content` field is overwritten via `PATCH /api/documents/{id}/`; the search index auto-updates. Disabled by default via `AI_OCR_ENABLED`.
+→ [Details](docs/rkc/ai-ocr.md)
+
 **Duplicate Document Re-Add** — When a duplicate is detected during consumption, the existing document's `added` date is reset so it surfaces in the inbox again. Uses two-tier deduplication: MD5 checksum for binary-identical files (PDFs, images) and Mail UID custom field lookup for EML documents whose byte representation varies across fetches. Supports optional tagging, informational notes with source context (mail metadata or source type), and trashed document handling (restore-readd-optionally-retrash). Disabled by default.
 → [Details](docs/rkc/duplicate-readd.md)
 
@@ -186,6 +189,11 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `PAPERLESS_MAIL_SENDER_FIELD` | String | `"Mail Sender"` | Mail Sender custom field name |
 | `PAPERLESS_MAIL_SUBJECT_FIELD` | String | `"Mail Subject"` | Mail Subject custom field name |
 | `PAPERLESS_MAIL_DATE_FIELD` | String | `"Mail Date"` | Mail Date custom field name |
+| `AI_OCR_ENABLED` | Bool | `false` | Enable AI OCR post-consume replacement |
+| `AI_OCR_URL` | String | — | LiteLLM proxy base URL |
+| `AI_OCR_KEY` | String | — | LiteLLM virtual API key |
+| `AI_OCR_MODEL` | String | `mistral-ocr-latest` | OCR model name |
+| `PAPERLESS_API_TOKEN` | String | — | Paperless API token for AI OCR script |
 | `PAPERLESS_CONSUMER_READD_DOCUMENTS` | Bool | `false` | Enable duplicate re-add |
 | `PAPERLESS_CONSUMER_READD_TAG_ID` | Int | None | Tag ID for re-added documents |
 | `PAPERLESS_CONSUMER_READD_ADD_NOTE` | Bool | `true` | Add note on re-add |
@@ -195,6 +203,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.2.5** — AI OCR post-consumption script: replaces Tesseract content with Mistral/Azure OCR via LiteLLM `/v1/ocr`
 - **v1.2.4** — Opaque S/MIME signed message support (smime.p7m) via OpenSSL CMS unwrap; shared MIME walking helper
 - **v1.2.3** — Detached S/MIME signed message support (smime.p7s) for Graph API mail retrieval
 - **v1.2.2** — Mail consumption sets document `created` from email `Date:` header
@@ -262,6 +271,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | [`docs/rkc/ui-defaults.md`](docs/rkc/ui-defaults.md) | Theme color, dark mode thumbnails, default language, unsaved changes warning, date+time formats |
 | [`docs/rkc/sso-debug.md`](docs/rkc/sso-debug.md) | SSO debug logging, UiSettings auto-creation for SSO users |
 | [`docs/rkc/custom-field-filters.md`](docs/rkc/custom-field-filters.md) | Filter buttons on document detail page + card views, field name display |
+| [`docs/rkc/ai-ocr.md`](docs/rkc/ai-ocr.md) | AI OCR post-consumption hook — LiteLLM `/v1/ocr`, Mistral/Azure providers, cost tracking, Docker Compose setup |
 | [`docs/rkc/duplicate-readd.md`](docs/rkc/duplicate-readd.md) | Duplicate document re-add with tagging, notes, trash handling |
 | [`docs/rkc/mail-system.md`](docs/rkc/mail-system.md) | Universal SMTP, Graph API, multi-mailbox, OAuth2, connection pooling, smart correspondents, metadata, processed mail UI |
 | [`docs/rkc/workflow-email.md`](docs/rkc/workflow-email.md) | Dynamic workflow email templates with Jinja2, HTML auto-detection, error tagging |

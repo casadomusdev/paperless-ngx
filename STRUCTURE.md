@@ -14,6 +14,7 @@ paperless-ngx/
 │
 ├── docs/                           # Documentation
 │   ├── rkc/                        # RKC customization detail docs
+│   │   ├── ai-ocr.md
 │   │   ├── pdf-editor-restriction.md
 │   │   ├── global-saved-views.md
 │   │   ├── ui-defaults.md
@@ -80,6 +81,12 @@ paperless-ngx/
 │   │               └── custom-field-display/ # RKC: reusable filter component
 │   └── ...
 │
+├── scripts/                        # Deployment scripts and hooks
+│   ├── ai_ocr_post_consume.py      # RKC: AI OCR post-consumption hook (LiteLLM /v1/ocr)
+│   ├── post-consumption-example.sh # Upstream example post-consumption script
+│   ├── start_services.sh           # Service startup script
+│   └── paperless-*.service         # Systemd service unit files
+│
 └── docker/                         # Docker configuration
 ```
 
@@ -94,7 +101,8 @@ RKC_CUSTOMIZATIONS.md (232 lines)
   ├── Maintenance Notes
   └── Links to detailed docs ↓
 
-docs/rkc/ (10 files, ~1200 lines total)
+docs/rkc/ (11 files)
+  ├── ai-ocr.md                     — Processing: AI OCR post-consumption hook
   ├── pdf-editor-restriction.md     — Security: PDF editor access control
   ├── global-saved-views.md         — Collaborative: shared views system
   ├── ui-defaults.md                — Defaults: theme, language, appearance

@@ -35,6 +35,19 @@ Complete reference of all environment variables introduced by RKC customizations
 | `PAPERLESS_MAIL_SUBJECT_FIELD` | String | `"Mail Subject"` | Custom field name for email subject | [Mail System](mail-system.md) |
 | `PAPERLESS_MAIL_DATE_FIELD` | String | `"Mail Date"` | Custom field name for received date | [Mail System](mail-system.md) |
 
+## AI OCR
+
+| Variable | Type | Default | Description | Details |
+|----------|------|---------|-------------|---------|
+| `AI_OCR_ENABLED` | Boolean | `false` | Enable AI OCR post-consumption script | [AI OCR](ai-ocr.md) |
+| `AI_OCR_URL` | String | — | LiteLLM proxy base URL (e.g. `http://litellm:4000`) | [AI OCR](ai-ocr.md) |
+| `AI_OCR_KEY` | String | — | LiteLLM virtual API key | [AI OCR](ai-ocr.md) |
+| `AI_OCR_MODEL` | String | `mistral-ocr-latest` | OCR model name as configured in LiteLLM | [AI OCR](ai-ocr.md) |
+| `PAPERLESS_URL` | String | `http://localhost:8000` | Internal paperless URL (used by OCR script) | [AI OCR](ai-ocr.md) |
+| `PAPERLESS_API_TOKEN` | String | — | Paperless superuser API token for OCR script | [AI OCR](ai-ocr.md) |
+
+> Note: `PAPERLESS_URL` and `PAPERLESS_API_TOKEN` are used exclusively by the AI OCR post-consumption script. They are not consumed by paperless-ngx itself.
+
 ## Document Processing
 
 | Variable | Type | Default | Description | Details |
