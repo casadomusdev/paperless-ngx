@@ -63,6 +63,7 @@ is a no-op when `AI_OCR_ENABLED` is absent or not `"true"`.
 | Variable         | Default                 | Description |
 |------------------|-------------------------|-------------|
 | `AI_OCR_MODEL`   | `mistral-ocr-latest`    | Model name as configured in LiteLLM |
+| `AI_OCR_TAG_ID`  | _(none)_                | Tag ID to apply to the document on successful OCR. Requires a GET to fetch existing tags before the PATCH, so existing tags are preserved. No tag is added if unset. |
 | `PAPERLESS_URL`  | `http://localhost:8000` | Internal paperless URL |
 
 ---

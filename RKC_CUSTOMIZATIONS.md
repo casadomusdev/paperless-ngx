@@ -193,6 +193,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `AI_OCR_URL` | String | — | LiteLLM proxy base URL |
 | `AI_OCR_KEY` | String | — | LiteLLM virtual API key |
 | `AI_OCR_MODEL` | String | `mistral-ocr-latest` | OCR model name |
+| `AI_OCR_TAG_ID` | Int | None | Tag ID to apply on successful AI OCR |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless API token for AI OCR script |
 | `PAPERLESS_CONSUMER_READD_DOCUMENTS` | Bool | `false` | Enable duplicate re-add |
 | `PAPERLESS_CONSUMER_READD_TAG_ID` | Int | None | Tag ID for re-added documents |

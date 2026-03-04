@@ -15,6 +15,7 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_URL               - LiteLLM proxy base URL, e.g. "http://litellm:4000"
   AI_OCR_KEY               - LiteLLM virtual API key
   AI_OCR_MODEL             - Model name, e.g. "mistral-ocr-latest" or "azure-doc-intel"
+  AI_OCR_TAG_ID            - (optional) Tag ID to apply on successful OCR
   PAPERLESS_URL            - Internal paperless URL, e.g. "http://webserver:8000"
   PAPERLESS_API_TOKEN      - Paperless superuser API token
 
@@ -48,6 +49,9 @@ def main():
     paperless_tok = os.getenv("PAPERLESS_API_TOKEN", "")
     document_id   = os.getenv("DOCUMENT_ID", "")
     archive_path  = os.getenv("DOCUMENT_ARCHIVE_PATH", "")
+
+    tag_id_str    = os.getenv("AI_OCR_TAG_ID", "").strip()
+    ai_ocr_tag_id = int(tag_id_str) if tag_id_str.isdigit() else None
 
     missing = [k for k, v in {
         "AI_OCR_URL": ai_ocr_url,
@@ -125,10 +129,35 @@ def main():
         )
         sys.exit(0)  # Not fatal; Tesseract result remains
 
-    # ── 7. PATCH document content via paperless REST API ──────────────────────
+    # ── 7. Build PATCH payload ─────────────────────────────────────────────────
+    patch_payload: dict = {"content": content}
+
+    if ai_ocr_tag_id is not None:
+        # Fetch current document tags so we can merge without clobbering existing ones.
+        # PATCH with a list field replaces the whole list, so we must include all tags.
+        get_req = urllib.request.Request(
+            f"{paperless_url}/api/documents/{document_id}/",
+            headers={"Authorization": f"Token {paperless_tok}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(get_req, timeout=30) as resp:
+                doc_data = json.loads(resp.read())
+            current_tags: list = doc_data.get("tags", [])
+            if ai_ocr_tag_id not in current_tags:
+                current_tags.append(ai_ocr_tag_id)
+            patch_payload["tags"] = current_tags
+        except (urllib.error.URLError, urllib.error.HTTPError) as exc:
+            print(
+                f"AI OCR: Could not fetch document tags — {exc}. "
+                f"Tag {ai_ocr_tag_id} not added, but content update proceeds.",
+                file=sys.stderr,
+            )
+
+    # ── 8. PATCH document content (and optionally tags) via paperless API ──────
     patch_req = urllib.request.Request(
         f"{paperless_url}/api/documents/{document_id}/",
-        data=json.dumps({"content": content}).encode("utf-8"),
+        data=json.dumps(patch_payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Token {paperless_tok}",
@@ -154,10 +183,11 @@ def main():
         )
         sys.exit(1)
 
-    # ── 8. Done ────────────────────────────────────────────────────────────────
+    # ── 9. Done ────────────────────────────────────────────────────────────────
+    tag_info = f", tag: {ai_ocr_tag_id}" if ai_ocr_tag_id is not None else ""
     print(
         f"AI OCR: Document {document_id} updated — "
-        f"{len(pages)} page(s), {len(content)} chars, model: {ai_ocr_model}"
+        f"{len(pages)} page(s), {len(content)} chars, model: {ai_ocr_model}{tag_info}"
     )
 
 
