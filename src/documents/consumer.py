@@ -54,7 +54,7 @@ from documents.utils import run_subprocess
 from paperless_mail.parsers import MailDocumentParser
 
 
-# RKC: Helper function to attach email metadata as custom fields
+# RKC: Attach email metadata as custom fields before document filename is generated
 def _attach_mail_metadata_custom_fields(
     document,
     mail_uid: str | None = None,
@@ -66,18 +66,29 @@ def _attach_mail_metadata_custom_fields(
     """
     Attaches email metadata to the document as custom fields.
     Creates custom field definitions if they don't exist.
-    
+
+    All five fields are always created for mail-sourced documents, even when a
+    value is absent (stored as empty string for text fields, NULL for dates).
+    This ensures storage path and filename templates can reference these fields
+    safely before document.save() triggers filename generation.
+
+    Must be called AFTER the Document row exists in the DB (so
+    CustomFieldInstance can reference it) but BEFORE document.save() (so
+    filename/path templates can resolve the fields).
+
     Args:
         document: The Document instance to attach fields to
-        mail_uid: The IMAP UID from the source email
+        mail_uid: The IMAP UID / Graph message hash from the source email
         mail_from: The sender's email address
         mail_sender: The sender's display name
         mail_subject: The email subject line
         mail_date: The email received date
     """
     logger = logging.getLogger("paperless.consumer")
-    
-    # Define all metadata fields with their settings keys and data types
+
+    # Define all metadata fields with their settings keys and data types.
+    # value=None is allowed — string fields fall back to "" so the custom
+    # field instance always exists and templates never encounter a missing key.
     metadata_fields = [
         {
             'value': mail_uid,
@@ -115,15 +126,9 @@ def _attach_mail_metadata_custom_fields(
             'label': 'Mail Date',
         },
     ]
-    
-    # Process each metadata field
+
     for field_config in metadata_fields:
-        # Skip if no value provided
-        if field_config['value'] is None:
-            continue
-        
         try:
-            # Get or create the custom field definition
             field_name = getattr(settings, field_config['setting_key'])
             field, created = CustomField.objects.get_or_create(
                 name=field_name,
@@ -131,23 +136,32 @@ def _attach_mail_metadata_custom_fields(
                     'data_type': field_config['data_type'],
                 }
             )
-            
+
             if created:
                 logger.info(f"Created mail metadata custom field: {field_name}")
-            
-            # Set the custom field value for this document
+
+            # Determine stored value: string fields use "" when absent so that
+            # filename templates never fail with a missing-key error.
+            # Date fields stay NULL (None) when absent — no meaningful empty date.
+            raw_value = field_config['value']
+            if raw_value is None and field_config['data_type'] == CustomField.FieldDataType.STRING:
+                stored_value = ""
+            else:
+                stored_value = raw_value
+
             CustomFieldInstance.objects.update_or_create(
                 document=document,
                 field=field,
                 defaults={
-                    field_config['value_field']: field_config['value'],
+                    field_config['value_field']: stored_value,
                 }
             )
-            
+
             logger.debug(
-                f"Attached {field_config['label']} to document {document.pk}"
+                f"Attached {field_config['label']} to document {document.pk}: "
+                f"{repr(stored_value)}"
             )
-            
+
         except Exception as e:
             logger.warning(
                 f"Failed to attach {field_config['label']} custom field: {e}"
@@ -583,6 +597,24 @@ class ConsumerPlugin(
                     mime_type=mime_type,
                 )
 
+                # RKC: Attach email metadata custom fields immediately after the document
+                # row is created, before any signal or filename-generation code runs.
+                # All five fields are always written for mail-sourced documents so that
+                # storage-path / filename templates can access them unconditionally.
+                # Trigger on mailrule_id rather than checking individual values: even a
+                # mail with no subject (value=None) must still produce an empty field
+                # instance so templates don't fail with a missing-key error. (v1.0.26+)
+                if self.input_doc.mailrule_id:
+                    _attach_mail_metadata_custom_fields(
+                        document,
+                        mail_uid=self.input_doc.mail_uid,
+                        mail_from=self.input_doc.mail_from,
+                        mail_sender=self.input_doc.mail_sender,
+                        mail_subject=self.input_doc.mail_subject,
+                        mail_date=self.input_doc.mail_date,
+                    )
+                # /end RKC edit
+
                 # If we get here, it was successful. Proceed with post-consume
                 # hooks. If they fail, nothing will get changed.
 
@@ -637,24 +669,6 @@ class ConsumerPlugin(
                 # renaming logic to acquire the lock as well.
                 # This triggers things like file renaming
                 document.save()
-
-                # RKC: Attach email metadata as custom fields if document came from mail
-                if any([
-                    self.input_doc.mail_uid,
-                    self.input_doc.mail_from,
-                    self.input_doc.mail_sender,
-                    self.input_doc.mail_subject,
-                    self.input_doc.mail_date,
-                ]):
-                    _attach_mail_metadata_custom_fields(
-                        document,
-                        mail_uid=self.input_doc.mail_uid,
-                        mail_from=self.input_doc.mail_from,
-                        mail_sender=self.input_doc.mail_sender,
-                        mail_subject=self.input_doc.mail_subject,
-                        mail_date=self.input_doc.mail_date,
-                    )
-                # /end RKC edit
 
                 # Delete the file only if it was successfully consumed
                 self.log.debug(f"Deleting original file {self.input_doc.original_file}")

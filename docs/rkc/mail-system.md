@@ -123,7 +123,13 @@ Fixed inconsistency where mail-created correspondents used `MATCH_ANY` (1) while
 ### Implementation
 - `ConsumableDocument` dataclass extended with 5 optional fields
 - Consumer helper `_attach_mail_metadata_custom_fields()` creates `CustomField` definitions on first run, then `CustomFieldInstance` for each document
+- Triggered on `mailrule_id` (not on individual field values) — all five fields are always written for every mail-sourced document
+- **Mandatory for all five fields**: string fields store `""` when the value is absent so templates never encounter a missing key; date fields store `NULL`
+- Called immediately after `_store()` creates the document row, **before** `document_consumption_finished.send()` and `document.save()` — ensuring filename/storage-path templates that reference these fields (e.g. `{{ custom_fields["Mail Betreff"].value }}`) always resolve correctly
 - Non-critical: failures log warnings without aborting consumption
+
+### Why All Fields Must Be Created Unconditionally
+Filename and storage-path templates are rendered as part of `generate_unique_filename()`, which is called just before and again inside `document.save()`. If any of these custom fields are referenced in a template but the `CustomFieldInstance` does not yet exist, Jinja2 raises a key/attribute error that propagates out of the transaction and causes the entire document ingestion to fail with `'dict' object has no attribute '<field-name>'`. Creating all five fields upfront (including empty-value ones) prevents this regardless of email content.
 
 ### Querying by Mail UID
 ```
