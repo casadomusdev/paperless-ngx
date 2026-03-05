@@ -55,6 +55,27 @@ from paperless_mail.parsers import MailDocumentParser
 
 
 # RKC: Attach email metadata as custom fields before document filename is generated
+
+# Matches CustomFieldInstance.value_text max_length — if a value exceeds this
+# the DB INSERT raises DataError and aborts the whole transaction, leaving ALL
+# fields missing (not just the offending one).
+_TEXT_FIELD_MAX_LENGTH = 128
+
+
+def _truncate_text_field(value: str | None) -> str:
+    """
+    Safely truncates a string to fit within value_text's max_length (128).
+    Returns an empty string for None/empty inputs.
+    Appends a single ellipsis character ('…') when truncation occurs so
+    the stored value is still recognisable as a truncated original.
+    """
+    if not value:
+        return ""
+    if len(value) <= _TEXT_FIELD_MAX_LENGTH:
+        return value
+    return value[: _TEXT_FIELD_MAX_LENGTH - 1] + "…"
+
+
 def _attach_mail_metadata_custom_fields(
     document,
     mail_uid: str | None = None,
@@ -140,12 +161,22 @@ def _attach_mail_metadata_custom_fields(
             if created:
                 logger.info(f"Created mail metadata custom field: {field_name}")
 
-            # Determine stored value: string fields use "" when absent so that
-            # filename templates never fail with a missing-key error.
+            # Determine stored value: string fields are run through
+            # _truncate_text_field() which handles both None → "" (so that
+            # filename templates never fail with a missing-key error) and
+            # strings longer than value_text's max_length=128 (truncated with
+            # a trailing ellipsis — otherwise the DB raises DataError and the
+            # whole transaction aborts, leaving ALL fields missing).
             # Date fields stay NULL (None) when absent — no meaningful empty date.
             raw_value = field_config['value']
-            if raw_value is None and field_config['data_type'] == CustomField.FieldDataType.STRING:
-                stored_value = ""
+            if field_config['data_type'] == CustomField.FieldDataType.STRING:
+                stored_value = _truncate_text_field(raw_value)
+                if raw_value and len(raw_value) > _TEXT_FIELD_MAX_LENGTH:
+                    logger.warning(
+                        f"{field_config['label']} value truncated from "
+                        f"{len(raw_value)} to {_TEXT_FIELD_MAX_LENGTH} chars "
+                        f"for document {document.pk}"
+                    )
             else:
                 stored_value = raw_value
 

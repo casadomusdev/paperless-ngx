@@ -125,6 +125,7 @@ Fixed inconsistency where mail-created correspondents used `MATCH_ANY` (1) while
 - Consumer helper `_attach_mail_metadata_custom_fields()` creates `CustomField` definitions on first run, then `CustomFieldInstance` for each document
 - Triggered on `mailrule_id` (not on individual field values) — all five fields are always written for every mail-sourced document
 - **Mandatory for all five fields**: string fields store `""` when the value is absent so templates never encounter a missing key; date fields store `NULL`
+- **Truncation of long values**: `CustomFieldInstance.value_text` has `max_length=128`. A value exceeding this causes a `DataError` that aborts the entire `transaction.atomic()` block, leaving **all** fields missing (not just the offending one). The `_truncate_text_field()` helper truncates to 127 chars + `"…"` when needed; a WARNING is logged so the event is visible in the paperless consumer log
 - Called immediately after `_store()` creates the document row, **before** `document_consumption_finished.send()` and `document.save()` — ensuring filename/storage-path templates that reference these fields (e.g. `{{ custom_fields["Mail Betreff"].value }}`) always resolve correctly
 - Non-critical: failures log warnings without aborting consumption
 
