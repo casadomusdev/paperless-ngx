@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import tempfile
+import time
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -734,16 +735,32 @@ class ConsumerPlugin(
             document_parser.cleanup()
             tempdir.cleanup()
 
+        # RKC: Diagnostic timing around post-consume script (AI OCR hang investigation)
+        _t0_pcs = time.monotonic()
+        self.log.info(
+            f"Post-consume script starting for document {document.id}...",
+        )
         self.run_post_consume_script(document)
+        _elapsed_pcs = time.monotonic() - _t0_pcs
+        self.log.info(
+            f"Post-consume script completed in {_elapsed_pcs:.1f}s for document {document.id}",
+        )
+        # /end RKC
 
         self.log.info(f"Document {document} consumption finished")
 
+        self.log.info(
+            f"Sending SUCCESS progress for document {document.id}...",
+        )
         self._send_progress(
             100,
             100,
             ProgressStatusOptions.SUCCESS,
             ConsumerStatusShortMessage.FINISHED,
             document.id,
+        )
+        self.log.info(
+            f"SUCCESS progress sent for document {document.id}",
         )
 
         # Return the most up to date fields
