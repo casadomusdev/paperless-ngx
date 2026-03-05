@@ -15,8 +15,14 @@ class StatusConsumer(WebsocketConsumer):
         owner_id = data.get("owner_id")
         users_can_view = data.get("users_can_view", [])
         groups_can_view = data.get("groups_can_view", [])
+        # RKC: Fix UI hang when uploading documents via web interface (AI OCR investigation)
+        # Match frontend behavior: if no owner_id is set, allow all authenticated users
+        # to view the message. This prevents SUCCESS messages from being silently
+        # filtered out when owner_id=None, which caused the UI to hang indefinitely
+        # waiting for a completion signal that never arrived.
         return (
-            user.is_superuser
+            not owner_id
+            or user.is_superuser
             or user.id == owner_id
             or user.id in users_can_view
             or any(

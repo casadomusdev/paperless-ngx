@@ -63,6 +63,48 @@ Global CSS rule in `src-ui/src/styles.scss`:
 ::ng-deep .tooltip-inner { color: white !important; }
 ```
 
+## WebSocket Upload Progress UI Hang (v1.2.6)
+
+### Problem
+When uploading documents via the web interface, the UI would get stuck in "Upload complete, waiting..." state indefinitely, even though the backend successfully processed the document and sent a SUCCESS WebSocket message. The issue was in `StatusConsumer._can_view()` in `src/paperless/consumers.py`, which filters WebSocket messages server-side before forwarding them to the browser.
+
+The Angular frontend has this check:
+```typescript
+!messageData.owner_id ||  // If no owner, everyone sees it
+user.is_superuser ||
+(messageData.owner_id && messageData.owner_id === user.id) ||
+...
+```
+
+But the Python backend was missing the crucial `not owner_id` fallback:
+```python
+return (
+    user.is_superuser
+    or user.id == owner_id  # Fails when owner_id=None!
+    or user.id in users_can_view
+    or ...
+)
+```
+
+When the consumer sends a SUCCESS message with `owner_id=None` (which happens when documents are uploaded via the web UI without explicit ownership), non-superuser WebSocket connections would fail the `_can_view()` check → message silently dropped on the server → browser never receives SUCCESS → UI hangs forever.
+
+### Solution
+Added the missing `not owner_id` condition to match the frontend's behavior:
+```python
+return (
+    not owner_id  # NEW: Allow all authenticated users if no owner is set
+    or user.is_superuser
+    or user.id == owner_id
+    or user.id in users_can_view
+    or ...
+)
+```
+
+This ensures that WebSocket progress messages with no owner restriction (`owner_id=None`) are visible to all authenticated users, just like the frontend expects.
+
+### Files Modified
+- `src/paperless/consumers.py` — Added `not owner_id` condition to `StatusConsumer._can_view()`
+
 ## Correspondent Matching Algorithm (v1.0.28)
 
 See [Mail System](mail-system.md#5-smart-correspondent-matching-v1027) for details on the matching algorithm fix.
