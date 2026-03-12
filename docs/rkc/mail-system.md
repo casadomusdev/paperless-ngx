@@ -56,6 +56,7 @@ Microsoft 365 Security Defaults block SMTP AUTH protocol entirely (even with OAu
 - Full support: HTML/text content, attachments (base64), CC, BCC, reply-to, custom from address
 - Automatic OAuth token refresh before sending
 - Structured JSON error responses (better than SMTP status codes)
+- **Shared mailbox Sent Items**: when `from_email` differs from the account's own username, `_get_send_endpoint()` scopes the `sendMail` call to the shared mailbox's user endpoint (`/users/{from_email}/sendMail`). Graph API then deposits the Sent Items copy in the shared mailbox's Sent folder instead of the sending account's. Requires `Mail.Send.Shared` scope (already present) and Exchange "Send As" permission on the shared mailbox.
 
 ### Graph API Retrieval (`mail_graph_retrieval.py`)
 - Uses `/v1.0/users/{username}/messages` endpoint
@@ -210,6 +211,7 @@ Changed "No rules enabled for account..." to clarify that send-only accounts don
 | S/MIME attachments | Unwanted "smime" documents for every signed email | Filter by content type AND filename |
 | Single-account enforcement | Recursive `save()` infinite loop | Use `.update()` when disabling other accounts |
 | Multi-mailbox endpoints | Username field ignored, wrong mailbox accessed | ALL 8 Graph API methods must use `/users/{username}/` not `/me/` |
+| Shared mailbox Sent Items | Sent Items land in sending account, not shared mailbox | Call `sendMail` on the shared mailbox's user endpoint, not the sending account's |
 | SMTP password in API | Security: password exposed in plain text | Obfuscate in serializer responses |
 
 ## Files Modified
@@ -329,6 +331,7 @@ Future implementation would require recipient S/MIME certificate + private key a
 
 ## Version History
 
+- **v1.2.7**: Shared mailbox Sent Items — `sendMail` endpoint scoped to shared mailbox when `from_email` differs from account username
 - **v1.2.4**: Opaque S/MIME signed message support (smime.p7m) via OpenSSL CMS unwrap; shared MIME walking helper
 - **v1.2.3**: Detached S/MIME signed message support (smime.p7s) via raw MIME $value fetch
 - **v1.0.12**: Mail-document correlation via IMAP UID custom field

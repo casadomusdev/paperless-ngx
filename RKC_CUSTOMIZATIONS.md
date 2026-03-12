@@ -204,6 +204,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.2.7** — Graph API shared mailbox Sent Items: `sendMail` endpoint scoped to shared mailbox when `from_email` differs from account username
 - **v1.2.6** — WebSocket upload progress UI hang fix (missing `not owner_id` check in server-side _can_view)
 - **v1.2.5** — AI OCR post-consumption script: replaces Tesseract content with Mistral/Azure OCR via LiteLLM `/v1/ocr`
 - **v1.2.4** — Opaque S/MIME signed message support (smime.p7m) via OpenSSL CMS unwrap; shared MIME walking helper

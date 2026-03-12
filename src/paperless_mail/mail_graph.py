@@ -1,7 +1,10 @@
 """
-RKC: Microsoft Graph API Email Backend (v1.1.0)
+RKC: Microsoft Graph API Email Backend (v1.2.7)
 Implements email sending for Outlook OAuth accounts using Microsoft Graph API instead of SMTP.
 This bypasses Security Defaults restrictions on SMTP AUTH while providing better error handling.
+Sent Items are deposited in the correct mailbox: when sending as a shared mailbox, the
+sendMail call is scoped to the shared mailbox user endpoint so the copy lands there, not in
+the sending account's Sent Items.
 """
 import base64
 import logging
@@ -27,11 +30,15 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
     - Better error messages than SMTP
     - Support for HTML/text content, attachments, CC, BCC, reply-to
     - Automatic OAuth token refresh
+    - Shared mailbox Sent Items: when from_email differs from the account username,
+      sendMail is called on the shared mailbox's user endpoint so that Graph API
+      deposits the Sent Items copy in that shared mailbox (not the sending account).
+      Requires Mail.Send.Shared scope and Exchange "Send As" permission.
     
-    Uses the Graph API endpoint: POST /v1.0/me/sendMail
+    Uses the Graph API endpoint: POST /v1.0/users/{username}/sendMail
     """
     
-    GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0/me/sendMail"
+    GRAPH_BASE = "https://graph.microsoft.com/v1.0/users"
     
     def __init__(self, mail_account: MailAccount, fail_silently: bool = False, **kwargs):
         """
@@ -91,6 +98,35 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
         
         return sent_count
     
+    def _get_send_endpoint(self, from_email: str | None) -> str:
+        """
+        Returns the correct Graph API sendMail endpoint for this message.
+        
+        When from_email differs from the account's own username the call is scoped
+        to the shared mailbox user so Graph API stores the Sent Items copy there.
+        When from_email is absent or matches the account username the sending
+        account's own endpoint is used (normal behaviour).
+        
+        Args:
+            from_email: The From address specified on the outgoing message, or None
+            
+        Returns:
+            Full Graph API sendMail URL
+        """
+        from_addr = (from_email or "").strip().lower()
+        account_addr = (self.mail_account.username or "").strip().lower()
+        
+        if from_addr and from_addr != account_addr:
+            # Sending as a shared mailbox — scope the call to the shared mailbox
+            # so Graph API deposits the Sent Items copy there, not in our own Sent Items
+            logger.debug(
+                f"[Graph API] Shared mailbox send: routing via {from_email.strip()} endpoint "
+                f"(account: {self.mail_account.username})"
+            )
+            return f"{self.GRAPH_BASE}/{from_email.strip()}/sendMail"
+        
+        return f"{self.GRAPH_BASE}/{self.mail_account.username}/sendMail"
+
     def _send_message(self, message: EmailMessage) -> None:
         """
         Send a single email message via Graph API.
@@ -99,6 +135,9 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
             message: Django EmailMessage object
         """
         logger.info(f"[Graph API] Sending email: '{message.subject}' to {message.to}")
+        
+        # Resolve correct endpoint (own mailbox or shared mailbox context)
+        graph_endpoint = self._get_send_endpoint(message.from_email)
         
         # Build Graph API request payload
         payload = self._build_graph_message(message)
@@ -113,7 +152,7 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
         try:
             with httpx.Client(timeout=30.0) as client:
                 response = client.post(
-                    self.GRAPH_ENDPOINT,
+                    graph_endpoint,
                     headers=headers,
                     json=payload,
                 )
