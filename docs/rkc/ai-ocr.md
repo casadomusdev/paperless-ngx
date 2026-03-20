@@ -121,6 +121,12 @@ model_list:
 
 Then set `AI_OCR_MODEL: "mistral-ocr-latest"`.
 
+Whenever `AI_OCR_MODEL` contains the string `"mistral"` (case-insensitive), the
+script automatically adds `extract_header: true` and `extract_footer: true` to
+every OCR request. These Mistral-specific parameters instruct the model to
+include document headers and footers in the extracted text, which are skipped by
+default. No extra configuration is needed.
+
 ### Azure Document Intelligence
 
 ```yaml

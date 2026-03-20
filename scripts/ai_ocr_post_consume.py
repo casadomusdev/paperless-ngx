@@ -111,6 +111,12 @@ def main():
         },
     }
 
+    # ── 5a. Provider-specific extra params ─────────────────────────────────────
+    if "mistral" in ai_ocr_model.lower():
+        ocr_payload["extract_header"] = True
+        ocr_payload["extract_footer"] = True
+        _log("Mistral model detected — adding extract_header=true, extract_footer=true")
+
     ocr_req = urllib.request.Request(
         f"{ai_ocr_url}/v1/ocr",
         data=json.dumps(ocr_payload).encode("utf-8"),
