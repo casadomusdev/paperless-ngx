@@ -4,7 +4,7 @@
 # Usage:
 #   ./ai_ocr_rerun.sh <document_id>
 #
-# Required env vars (same as the docker-compose setup):
+# Reads from env vars already present in the docker-compose / .env setup:
 #   PAPERLESS_API_TOKEN  — Paperless superuser API token
 #   PAPERLESS_URL        — Internal paperless URL (default: http://localhost:8000)
 #
