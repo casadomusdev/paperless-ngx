@@ -164,8 +164,19 @@ def main():
         sys.exit(1)
 
     # ── 6. Extract text from pages ─────────────────────────────────────────────
-    pages   = ocr_result.get("pages", [])
-    content = "\n\n".join(p.get("markdown", "") for p in pages).strip()
+    # When extract_header/extract_footer are set (Mistral), those fields are
+    # returned separately from `markdown` and must be merged explicitly.
+    pages = ocr_result.get("pages", [])
+
+    def _page_text(p: dict) -> str:
+        parts = []
+        for field in ("header", "markdown", "footer"):
+            val = (p.get(field) or "").strip()
+            if val:
+                parts.append(val)
+        return "\n\n".join(parts)
+
+    content = "\n\n".join(_page_text(p) for p in pages).strip()
 
     _log(f"Extracted {len(pages)} page(s), {len(content)} chars of text")
 
