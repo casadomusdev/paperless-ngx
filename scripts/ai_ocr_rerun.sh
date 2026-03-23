@@ -35,7 +35,7 @@ echo "Fetching document $DOC_ID from $PAPERLESS_URL …"
 ARCHIVE_NAME=$(curl -sf \
   -H "Authorization: Token ${PAPERLESS_API_TOKEN}" \
   "${PAPERLESS_URL}/api/documents/${DOC_ID}/" \
-  | jq -r '.archived_file_name')
+  | python3 -c "import sys, json; print(json.load(sys.stdin)['archived_file_name'])")
 
 if [[ -z "$ARCHIVE_NAME" || "$ARCHIVE_NAME" == "null" ]]; then
   echo "Error: could not resolve archive path for document $DOC_ID." >&2
