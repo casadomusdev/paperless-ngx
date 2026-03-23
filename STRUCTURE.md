@@ -83,6 +83,7 @@ paperless-ngx/
 │
 ├── scripts/                        # Deployment scripts and hooks
 │   ├── ai_ocr_post_consume.py      # RKC: AI OCR post-consumption hook (LiteLLM /v1/ocr)
+│   ├── ai_ocr_rerun.sh             # RKC: Re-run AI OCR on an existing document by ID
 │   ├── post-consumption-example.sh # Upstream example post-consumption script
 │   ├── start_services.sh           # Service startup script
 │   └── paperless-*.service         # Systemd service unit files
