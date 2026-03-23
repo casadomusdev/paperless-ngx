@@ -16,6 +16,7 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_KEY               - LiteLLM virtual API key
   AI_OCR_MODEL             - Model name, e.g. "mistral-ocr-latest" or "azure-doc-intel"
   AI_OCR_TAG_ID            - (optional) Tag ID to apply on successful OCR
+  AI_OCR_DEBUG             - Set to "true" to print OCR output to stdout and skip the PATCH
   PAPERLESS_URL            - Internal paperless URL, e.g. "http://webserver:8000"
   PAPERLESS_API_TOKEN      - Paperless superuser API token
 
@@ -64,6 +65,7 @@ def main():
     paperless_tok = os.getenv("PAPERLESS_API_TOKEN", "")
     document_id   = os.getenv("DOCUMENT_ID", "")
     archive_path  = os.getenv("DOCUMENT_ARCHIVE_PATH", "")
+    debug_mode    = os.getenv("AI_OCR_DEBUG", "false").lower() == "true"
 
     tag_id_str    = os.getenv("AI_OCR_TAG_ID", "").strip()
     ai_ocr_tag_id = int(tag_id_str) if tag_id_str.isdigit() else None
@@ -173,6 +175,16 @@ def main():
             error=True,
         )
         sys.exit(0)  # Not fatal; Tesseract result remains
+
+    # ── 6a. Debug mode — print OCR output and exit without patching ────────────
+    if debug_mode:
+        _log("DEBUG MODE — OCR output follows (document NOT updated):")
+        separator = "─" * 72
+        print(separator, flush=True)
+        print(content, flush=True)
+        print(separator, flush=True)
+        _log(f"DEBUG MODE done — {len(pages)} page(s), {len(content)} chars")
+        sys.exit(0)
 
     # ── 7. Build PATCH payload ─────────────────────────────────────────────────
     patch_payload: dict = {"content": content}
