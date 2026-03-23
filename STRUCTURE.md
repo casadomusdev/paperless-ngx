@@ -84,7 +84,6 @@ paperless-ngx/
 ├── scripts/                        # Deployment scripts and hooks
 │   ├── ai_ocr_post_consume.py      # RKC: AI OCR post-consumption hook (LiteLLM /v1/ocr)
 │   ├── ai_ocr_rerun.py             # RKC: Re-run logic (runs inside container, all env vars present)
-│   ├── ai_ocr_rerun.sh             # RKC: Host wrapper — docker compose exec celery python3 ai_ocr_rerun.py
 │   ├── post-consumption-example.sh # Upstream example post-consumption script
 │   ├── start_services.sh           # Service startup script
 │   └── paperless-*.service         # Systemd service unit files
