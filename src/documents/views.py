@@ -1247,37 +1247,16 @@ class DocumentViewSet(
 
             # RKC: Recipient domain verification (v1.3.0)
             if settings.MAIL_VERIFY_RECIPIENT != "none":
-                from documents.mail import verify_recipient_domain
-                check_addresses = addresses + cc_list + bcc_list
-                failures = []
-                checked_domains: dict = {}
-                for addr in check_addresses:
-                    domain = addr.split("@", 1)[1].lower() if "@" in addr else None
-                    if domain and domain in checked_domains:
-                        ok, reason = checked_domains[domain]
-                    else:
-                        ok, reason = verify_recipient_domain(addr, level=settings.MAIL_VERIFY_RECIPIENT)
-                        if domain:
-                            checked_domains[domain] = (ok, reason)
-                    logger.info(
-                        f"email_documents: Recipient verification [{settings.MAIL_VERIFY_RECIPIENT}] "
-                        f"{addr}: {'PASS' if ok else 'FAIL'} — {reason}",
-                    )
-                    if not ok:
-                        failures.append(f"{addr}: {reason}")
+                from documents.mail import check_recipient_addresses, create_mail_verify_fail_note
+                failures = check_recipient_addresses(addresses, cc_list, bcc_list, settings.MAIL_VERIFY_RECIPIENT)
                 if failures:
                     failure_summary = "; ".join(failures)
                     logger.error(f"email_documents: Recipient verification failed: {failure_summary}")
-                    _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
                     for doc in documents:
                         if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
                             doc.tags.add(settings.MAIL_SEND_FAILURE_TAG_ID)
                         if settings.MAIL_SEND_ADD_NOTE:
-                            Note.objects.create(
-                                note=f"[{_ts}] Mail not sent — recipient verification failed: {failure_summary}",
-                                document=doc,
-                                user=request.user,
-                            )
+                            create_mail_verify_fail_note(doc, failure_summary, user=request.user)
                     return HttpResponseBadRequest(
                         f"Recipient verification failed: {failure_summary}",
                     )
@@ -1294,7 +1273,6 @@ class DocumentViewSet(
             )
 
             # RKC: Apply send success feedback — tags + note (v1.3.0)
-            _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
             to_str = ", ".join(addresses)
             for doc in documents:
                 if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
@@ -1302,11 +1280,8 @@ class DocumentViewSet(
                 if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
                     doc.tags.remove(settings.MAIL_SEND_FAILURE_TAG_ID)
                 if settings.MAIL_SEND_ADD_NOTE:
-                    Note.objects.create(
-                        note=f"[{_ts}] Mail to {to_str} — OK",
-                        document=doc,
-                        user=request.user,
-                    )
+                    from documents.mail import create_mail_send_note
+                    create_mail_send_note(doc, to_str, True, user=request.user)
             # /end RKC edit
 
             logger.debug(
@@ -1316,18 +1291,14 @@ class DocumentViewSet(
         except Exception as e:
             # RKC: Apply send failure feedback — tags + note (v1.3.0)
             logger.warning(f"An error occurred emailing documents: {e!s}")
-            _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
             for doc in documents:
                 if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
                     doc.tags.add(settings.MAIL_SEND_FAILURE_TAG_ID)
                 if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
                     doc.tags.remove(settings.MAIL_SEND_SUCCESS_TAG_ID)
                 if settings.MAIL_SEND_ADD_NOTE:
-                    Note.objects.create(
-                        note=f"[{_ts}] Mail to {', '.join(addresses)} — FAILED: {e!s}",
-                        document=doc,
-                        user=request.user,
-                    )
+                    from documents.mail import create_mail_send_note
+                    create_mail_send_note(doc, ", ".join(addresses), False, str(e), user=request.user)
             # /end RKC edit
             return HttpResponseServerError(
                 "Error emailing documents, check logs for more detail.",
@@ -2588,12 +2559,12 @@ class UiSettingsView(GenericAPIView):
 
         # RKC: Pass mail custom field name configuration to frontend for dialog pre-fill (v1.3.0)
         ui_settings["mail_cf_field_names"] = {
-            "to":      getattr(settings, "MAIL_TO_FIELD", ""),
+            "to":      getattr(settings, "PAPERLESS_MAIL_TO_FIELD", ""),
             "from":    getattr(settings, "PAPERLESS_MAIL_FROM_FIELD", ""),
             "subject": getattr(settings, "PAPERLESS_MAIL_SUBJECT_FIELD", ""),
-            "cc":      getattr(settings, "MAIL_CC_FIELD", ""),
-            "bcc":     getattr(settings, "MAIL_BCC_FIELD", ""),
-            "body":    getattr(settings, "MAIL_BODY_FIELD", ""),
+            "cc":      getattr(settings, "PAPERLESS_MAIL_CC_FIELD", ""),
+            "bcc":     getattr(settings, "PAPERLESS_MAIL_BCC_FIELD", ""),
+            "body":    getattr(settings, "PAPERLESS_MAIL_BODY_FIELD", ""),
         }
         # /end RKC edit
 

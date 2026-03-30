@@ -94,6 +94,72 @@ def verify_recipient_domain(address: str, level: str = "dns") -> tuple[bool, str
 # /end RKC edit
 
 
+# RKC: Shared helpers for recipient verification and send feedback (v1.3.0)
+def check_recipient_addresses(
+    to_list: list[str],
+    cc_list: list[str],
+    bcc_list: list[str],
+    level: str,
+) -> list[str]:
+    """
+    Run verify_recipient_domain() on all unique domains across TO, CC, and BCC.
+    Returns a list of failure strings; empty list means all addresses passed.
+    """
+    failures: list[str] = []
+    checked_domains: dict[str, tuple[bool, str]] = {}
+    for addr in to_list + cc_list + bcc_list:
+        domain = addr.split("@", 1)[1].lower() if "@" in addr else None
+        if domain and domain in checked_domains:
+            ok, reason = checked_domains[domain]
+        else:
+            ok, reason = verify_recipient_domain(addr, level=level)
+            if domain:
+                checked_domains[domain] = (ok, reason)
+        logger.info(
+            f"Recipient verification [{level}] {addr}: {'PASS' if ok else 'FAIL'} — {reason}",
+        )
+        if not ok:
+            failures.append(f"{addr}: {reason}")
+    return failures
+
+
+def create_mail_send_note(document, to_str: str, success: bool, error_msg: str | None = None, user=None) -> None:
+    """
+    Attach a system note to the document recording the mail send outcome.
+    Logs a warning if note creation fails but does not raise.
+    """
+    from django.utils import timezone as tz
+    from documents.models import Note
+    _ts = tz.localtime(tz.now()).strftime("%Y-%m-%dT%H:%M:%S")
+    if success:
+        note_text = f"[{_ts}] Mail to {to_str} — OK"
+    else:
+        note_text = (
+            f"[{_ts}] Mail to {to_str} — FAILED: {error_msg}"
+            if error_msg
+            else f"[{_ts}] Mail to {to_str} — FAILED"
+        )
+    try:
+        Note.objects.create(note=note_text, document=document, user=user)
+    except Exception as e:
+        logger.warning(f"Could not create mail send note for document '{document}': {e}")
+
+
+def create_mail_verify_fail_note(document, failure_summary: str, user=None) -> None:
+    """
+    Attach a system note recording a recipient verification failure.
+    Logs a warning if note creation fails but does not raise.
+    """
+    from django.utils import timezone as tz
+    from documents.models import Note
+    _ts = tz.localtime(tz.now()).strftime("%Y-%m-%dT%H:%M:%S")
+    note_text = f"[{_ts}] Mail not sent — recipient verification failed: {failure_summary}"
+    try:
+        Note.objects.create(note=note_text, document=document, user=user)
+    except Exception as e:
+        logger.warning(f"Could not create mail verification failure note for document '{document}': {e}")
+# /end RKC edit
+
 
 @dataclass(frozen=True)
 class EmailAttachment:

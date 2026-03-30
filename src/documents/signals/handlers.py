@@ -1273,25 +1273,10 @@ def run_workflows(
 
         # RKC: Recipient domain verification — DNS MX and optional SMTP port 25 probe (v1.2.9)
         if settings.MAIL_VERIFY_RECIPIENT != "none":
-            from documents.mail import verify_recipient_domain
-            all_check_addresses = to_list + (cc_list or []) + (bcc_list or [])
-            verification_failures = []
-            checked_domains: dict[str, tuple[bool, str]] = {}
-            for addr in all_check_addresses:
-                domain = addr.split("@", 1)[1].lower() if "@" in addr else None
-                if domain and domain in checked_domains:
-                    ok, reason = checked_domains[domain]
-                else:
-                    ok, reason = verify_recipient_domain(addr, level=settings.MAIL_VERIFY_RECIPIENT)
-                    if domain:
-                        checked_domains[domain] = (ok, reason)
-                logger.info(
-                    f"Recipient verification [{settings.MAIL_VERIFY_RECIPIENT}] {addr}: "
-                    f"{'PASS' if ok else 'FAIL'} — {reason}",
-                    extra={"group": logging_group},
-                )
-                if not ok:
-                    verification_failures.append(f"{addr}: {reason}")
+            from documents.mail import check_recipient_addresses, create_mail_verify_fail_note
+            verification_failures = check_recipient_addresses(
+                to_list, cc_list or [], bcc_list or [], settings.MAIL_VERIFY_RECIPIENT
+            )
             if verification_failures:
                 failure_summary = "; ".join(verification_failures)
                 logger.error(
@@ -1307,7 +1292,7 @@ def run_workflows(
                             f"Applied error tag '{action.email.error_tag.name}' to document '{title}'",
                             extra={"group": logging_group},
                         )
-                    # Apply global failure/success tags (same as send-failure branch)
+                    # Apply global failure/success tags
                     if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
                         if settings.MAIL_SEND_FAILURE_TAG_ID not in doc_tag_ids:
                             doc_tag_ids.append(settings.MAIL_SEND_FAILURE_TAG_ID)
@@ -1323,19 +1308,7 @@ def run_workflows(
                             extra={"group": logging_group},
                         )
                 if settings.MAIL_SEND_ADD_NOTE and not use_overrides and isinstance(document, Document):
-                    _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
-                    note_text = f"[{_ts}] Mail not sent — recipient verification failed: {failure_summary}"
-                    try:
-                        Note.objects.create(note=note_text, document=document, user=None)
-                        logger.info(
-                            f"Mail verification failure note created for '{title}'",
-                            extra={"group": logging_group},
-                        )
-                    except Exception as note_exc:
-                        logger.warning(
-                            f"Could not create mail verification failure note: {note_exc}",
-                            extra={"group": logging_group},
-                        )
+                    create_mail_verify_fail_note(document, failure_summary)
                 return
         # /end RKC edit
 
@@ -1439,23 +1412,11 @@ def run_workflows(
                     )
 
             if settings.MAIL_SEND_ADD_NOTE:
-                _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
-                if send_success:
-                    status_str = "OK"
-                else:
-                    status_str = f"FAILED: {send_error_msg}" if send_error_msg else "FAILED"
-                note_text = f"[{_ts}] Mail to {to_rendered} — {status_str}"
-                try:
-                    Note.objects.create(note=note_text, document=document, user=None)
-                    logger.info(
-                        f"Mail send note created for '{title}': {note_text}",
-                        extra={"group": logging_group},
-                    )
-                except Exception as note_exc:
-                    logger.warning(
-                        f"Could not create mail send note for document '{title}': {note_exc}",
-                        extra={"group": logging_group},
-                    )
+                from documents.mail import create_mail_send_note
+                create_mail_send_note(
+                    document, to_rendered, send_success,
+                    send_error_msg if not send_success else None,
+                )
         # /end RKC edit
 
     def webhook_action():
