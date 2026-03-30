@@ -1326,25 +1326,48 @@ def run_workflows(
             )
 
         # Apply send-feedback tags and optional note when we have a real Document (not pre-consumption)
+        # Tags are mutated in doc_tag_ids (the enclosing-scope list) so that the outer
+        # document.tags.set(doc_tag_ids) call at the end of the workflow loop picks them up.
+        # Calling document.tags.add/remove directly would be overwritten by that set().
         if not use_overrides and isinstance(document, Document):
+            logger.info(
+                f"Mail send feedback: send_success={send_success}, "
+                f"success_tag={settings.MAIL_SEND_SUCCESS_TAG_ID}, "
+                f"failure_tag={settings.MAIL_SEND_FAILURE_TAG_ID}, "
+                f"add_note={settings.MAIL_SEND_ADD_NOTE}, "
+                f"doc_tag_ids_before={list(doc_tag_ids)}",
+                extra={"group": logging_group},
+            )
             if send_success:
                 if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
-                    document.tags.add(settings.MAIL_SEND_SUCCESS_TAG_ID)
-                    logger.debug(
-                        f"Mail send success: applied tag {settings.MAIL_SEND_SUCCESS_TAG_ID} to '{title}'",
+                    if settings.MAIL_SEND_SUCCESS_TAG_ID not in doc_tag_ids:
+                        doc_tag_ids.append(settings.MAIL_SEND_SUCCESS_TAG_ID)
+                    logger.info(
+                        f"Mail send success: queued add of tag {settings.MAIL_SEND_SUCCESS_TAG_ID} to '{title}'",
                         extra={"group": logging_group},
                     )
                 if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
-                    document.tags.remove(settings.MAIL_SEND_FAILURE_TAG_ID)
+                    if settings.MAIL_SEND_FAILURE_TAG_ID in doc_tag_ids:
+                        doc_tag_ids.remove(settings.MAIL_SEND_FAILURE_TAG_ID)
+                    logger.info(
+                        f"Mail send success: queued remove of tag {settings.MAIL_SEND_FAILURE_TAG_ID} from '{title}'",
+                        extra={"group": logging_group},
+                    )
             else:
                 if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
-                    document.tags.add(settings.MAIL_SEND_FAILURE_TAG_ID)
-                    logger.debug(
-                        f"Mail send failure: applied tag {settings.MAIL_SEND_FAILURE_TAG_ID} to '{title}'",
+                    if settings.MAIL_SEND_FAILURE_TAG_ID not in doc_tag_ids:
+                        doc_tag_ids.append(settings.MAIL_SEND_FAILURE_TAG_ID)
+                    logger.info(
+                        f"Mail send failure: queued add of tag {settings.MAIL_SEND_FAILURE_TAG_ID} to '{title}'",
                         extra={"group": logging_group},
                     )
                 if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
-                    document.tags.remove(settings.MAIL_SEND_SUCCESS_TAG_ID)
+                    if settings.MAIL_SEND_SUCCESS_TAG_ID in doc_tag_ids:
+                        doc_tag_ids.remove(settings.MAIL_SEND_SUCCESS_TAG_ID)
+                    logger.info(
+                        f"Mail send failure: queued remove of tag {settings.MAIL_SEND_SUCCESS_TAG_ID} from '{title}'",
+                        extra={"group": logging_group},
+                    )
 
             if settings.MAIL_SEND_ADD_NOTE:
                 _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
@@ -1355,6 +1378,10 @@ def run_workflows(
                 note_text = f"[{_ts}] Mail to {to_rendered} — {status_str}"
                 try:
                     Note.objects.create(note=note_text, document=document, user=None)
+                    logger.info(
+                        f"Mail send note created for '{title}': {note_text}",
+                        extra={"group": logging_group},
+                    )
                 except Exception as note_exc:
                     logger.warning(
                         f"Could not create mail send note for document '{title}': {note_exc}",
