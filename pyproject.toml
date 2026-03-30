@@ -21,6 +21,7 @@ dependencies = [
   "celery[redis]~=5.5.1",
   "channels~=4.2",
   "channels-redis~=4.2",
+  "dnspython>=2.7",
   "concurrent-log-handler~=0.9.25",
   "dateparser~=1.2",
   # WARNING: django does not use semver.
