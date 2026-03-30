@@ -1568,4 +1568,10 @@ MAIL_SEND_FAILURE_TAG_ID = (
     else None
 )
 MAIL_SEND_ADD_NOTE = __get_boolean("PAPERLESS_MAIL_SEND_ADD_NOTE", "no")
+# RKC: Recipient domain verification level for workflow email actions (v1.2.9)
+# "none"     = skip verification entirely
+# "dns"      = check MX records only (default — fast, passive, no connection to target)
+# "dns+smtp" = also probe port 25 on the first MX host (opt-in, adds ~4s; see docs/rkc/mail-system.md)
+MAIL_VERIFY_RECIPIENT = os.getenv("PAPERLESS_MAIL_VERIFY_RECIPIENT", "dns")
 # /end RKC edit
+

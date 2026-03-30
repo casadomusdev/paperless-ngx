@@ -18,7 +18,81 @@ from paperless_mail.mail_oauth import (
 )
 
 logger = logging.getLogger("paperless_mail")
+
+
+# RKC: Recipient domain verification — DNS MX and optional SMTP port probe (v1.2.9)
+def verify_recipient_domain(address: str, level: str = "dns") -> tuple[bool, str]:
+    """
+    Verify that an email address's domain can receive mail.
+
+    Level 'dns':      Check that the domain has at least one MX record (2s timeout).
+    Level 'dns+smtp': Also probe port 25 on the first MX host (4s connect timeout).
+                      - Connection refused → hard fail (no server listening)
+                      - Timeout → inconclusive, logs warning, returns True (don't block send)
+                      - Connected → pass (banner optional)
+
+    Returns:
+        (ok, reason) — ok=True means verification passed or was inconclusive.
+    """
+    if "@" not in address:
+        return False, f"Cannot extract domain from address '{address}'"
+    domain = address.split("@", 1)[1].lower()
+
+    # --- DNS MX check ---
+    try:
+        import dns.resolver
+        import dns.exception
+        answers = dns.resolver.resolve(domain, "MX", lifetime=2.0)
+        mx_records = sorted(answers, key=lambda r: r.preference)
+        if not mx_records:
+            return False, f"No MX records found for domain '{domain}'"
+        mx_host = str(mx_records[0].exchange).rstrip(".")
+    except ImportError:
+        return True, "dnspython not available — DNS check skipped"
+    except dns.resolver.NXDOMAIN:
+        return False, f"Domain '{domain}' does not exist (NXDOMAIN)"
+    except dns.resolver.NoAnswer:
+        return False, f"No MX records found for domain '{domain}'"
+    except dns.exception.Timeout:
+        return False, f"DNS lookup timed out for domain '{domain}'"
+    except Exception as e:
+        return False, f"DNS lookup failed for domain '{domain}': {e}"
+
+    if level != "dns+smtp":
+        return True, f"MX record found for '{domain}': {mx_host}"
+
+    # --- SMTP port 25 probe ---
+    import socket
+    try:
+        conn = socket.create_connection((mx_host, 25), timeout=4.0)
+        banner = ""
+        try:
+            conn.settimeout(2.0)
+            banner_bytes = conn.recv(512)
+            banner = banner_bytes.decode("ascii", errors="replace").strip()
+        except Exception:
+            pass
+        try:
+            conn.sendall(b"QUIT\r\n")
+        except Exception:
+            pass
+        conn.close()
+        if banner:
+            return True, f"SMTP server at {mx_host}:25 responding (banner: {banner[:80]})"
+        return True, f"SMTP server at {mx_host}:25 is listening"
+    except ConnectionRefusedError:
+        return False, f"SMTP connection refused at {mx_host}:25 — no mail server listening on this port"
+    except socket.timeout:
+        logger.warning(
+            f"SMTP port 25 probe timed out for {mx_host} — outbound port 25 may be blocked. "
+            f"Consider PAPERLESS_MAIL_VERIFY_RECIPIENT=dns if timeouts persist.",
+        )
+        return True, f"SMTP probe timed out for {mx_host}:25 (inconclusive — proceeding with send)"
+    except OSError as e:
+        logger.warning(f"SMTP port 25 probe error for {mx_host}: {e} — treating as inconclusive")
+        return True, f"SMTP probe error for {mx_host}:25: {e} (inconclusive — proceeding with send)"
 # /end RKC edit
+
 
 
 @dataclass(frozen=True)

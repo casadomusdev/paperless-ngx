@@ -15,6 +15,8 @@ Comprehensive mail system overhaul: universal SMTP sending, Microsoft Graph API 
 | `PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID` | Int | None | Tag ID to apply when workflow email sends successfully |
 | `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` | Int | None | Tag ID to apply when workflow email fails to send |
 | `PAPERLESS_MAIL_SEND_ADD_NOTE` | Bool | `false` | Attach a system note on every send attempt with timestamp, recipients, and OK/FAILED status |
+| `PAPERLESS_MAIL_VERIFY_RECIPIENT` | String | `"dns"` | Recipient domain verification level: `"none"` (off), `"dns"` (MX check), or `"dns+smtp"` (MX + port 25 probe) |
+
 
 ## Architecture Overview
 
@@ -332,9 +334,90 @@ Future implementation would require recipient S/MIME certificate + private key a
 
 ---
 
+## 12. Recipient Domain Verification (v1.2.9)
+
+Before sending a workflow email action, Paperless can verify that the recipient domain(s) are deliverable. Three levels are available:
+
+| Level | Setting | Behaviour |
+|-------|---------|-----------|
+| **Off** | `none` | Skip verification entirely — send unconditionally |
+| **DNS** (default) | `dns` | Look up MX records for each recipient domain (2s timeout). Fails if the domain has no MX records, does not exist, or the lookup times out |
+| **DNS + SMTP** | `dns+smtp` | DNS check **plus** a TCP connection probe to port 25 on the first MX host (4s connect timeout). See semantics below |
+
+Verification applies to **all** recipient addresses: TO, CC, and BCC. Duplicate domains are deduplicated (each domain is only checked once per email action).
+
+### SMTP Port 25 Probe Semantics (`dns+smtp`)
+
+Port 25 is the only port used by MX records for inbound mail delivery. Ports 587 (submission) and 465 (SMTPS) are for outbound mail clients connecting to their own server — they are not relevant for verifying that a recipient domain can receive mail.
+
+| TCP outcome | Result | Behaviour |
+|-------------|--------|-----------|
+| **Connected** (with or without banner) | ✓ Pass | Email is sent |
+| **Connection refused** (TCP RESET) | ✗ Fail | Hard block — no server listening on port 25 |
+| **Timeout** | ⚠ Inconclusive | Warning logged, email **is** sent (don't block on blocked ports) |
+| **Other OS error** | ⚠ Inconclusive | Warning logged, email **is** sent |
+
+Timeout behaviour is intentionally lenient. Many VPS and cloud providers (Hetzner, AWS EC2, DigitalOcean, etc.) block outbound port 25 by default. A timeout in that environment does not prove the recipient domain can't receive mail — it just means you can't probe it from this server.
+
+### On Failure
+
+When verification fails (hard fail only — DNS NXDOMAIN, no MX, connection refused):
+
+1. The email is **not sent**
+2. An `ERROR` entry is written to the log with the per-address failure reasons
+3. If a workflow `error_tag` is configured, it is added to `doc_tag_ids` (picked up by the enclosing `document.tags.set()` call)
+4. If `PAPERLESS_MAIL_SEND_ADD_NOTE=yes`, a system note is attached to the document:
+   ```
+   [2025-01-15T14:30:00] Mail not sent — recipient verification failed: user@bad-domain.com: Domain 'bad-domain.com' does not exist (NXDOMAIN)
+   ```
+
+### Admin Check: Is Outbound Port 25 Available?
+
+Run the provided helper script from inside the paperless worker container:
+
+```bash
+# From outside the container:
+docker exec <paperless-worker> python3 /opt/paperless/scripts/check_smtp_port25.py
+
+# Test against a specific MX host:
+docker exec <paperless-worker> python3 /opt/paperless/scripts/check_smtp_port25.py alt1.gmr-smtp-in.l.google.com
+```
+
+**Exit codes:**
+- `0` — Port 25 is reachable → `PAPERLESS_MAIL_VERIFY_RECIPIENT=dns+smtp` will work
+- `1` — Connection refused → TCP RESET from firewall or no server
+- `2` — Timeout → outbound port 25 is **blocked** by your provider. Options:
+  - Contact provider to unblock (may require account verification)
+  - Keep `PAPERLESS_MAIL_VERIFY_RECIPIENT=dns` (the default) — skips the port probe
+- `3` — Other network error
+
+### Configuration
+
+```bash
+# Default — DNS MX check only (fast, passive, no connection to target)
+PAPERLESS_MAIL_VERIFY_RECIPIENT=dns
+
+# Opt-in to also probe port 25 (adds ~4s per unique domain)
+PAPERLESS_MAIL_VERIFY_RECIPIENT=dns+smtp
+
+# Disable entirely
+PAPERLESS_MAIL_VERIFY_RECIPIENT=none
+```
+
+### Implementation
+
+- `verify_recipient_domain(address, level)` in `src/documents/mail.py` — standalone function, catches all exceptions
+- Called from `email_action()` in `src/documents/signals/handlers.py` **after** address validation and **before** the send attempt
+- `dnspython>=2.7` required (added to `pyproject.toml`)
+- Admin port check script: `scripts/check_smtp_port25.py`
+
+---
+
 ## Version History
 
+- **v1.2.9**: Recipient domain verification for workflow emails — DNS MX check (default) with optional SMTP port 25 probe; admin check script at `scripts/check_smtp_port25.py`
 - **v1.2.8**: Mail send feedback — success/failure tags and optional system note on workflow email send attempts (both SMTP and Graph API paths)
+
 - **v1.2.7**: Shared mailbox Sent Items — `sendMail` endpoint scoped to shared mailbox when `from_email` differs from account username
 - **v1.2.4**: Opaque S/MIME signed message support (smime.p7m) via OpenSSL CMS unwrap; shared MIME walking helper
 - **v1.2.3**: Detached S/MIME signed message support (smime.p7s) via raw MIME $value fetch

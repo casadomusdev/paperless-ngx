@@ -202,12 +202,16 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID` | Int | None | Tag ID to apply when workflow email sends successfully |
 | `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` | Int | None | Tag ID to apply when workflow email fails to send |
 | `PAPERLESS_MAIL_SEND_ADD_NOTE` | Bool | `false` | Attach a system note on every send attempt |
+| `PAPERLESS_MAIL_VERIFY_RECIPIENT` | String | `"dns"` | Recipient domain verification for workflow emails (`none`/`dns`/`dns+smtp`) |
+
 
 ---
 
 ## Version History
 
+- **v1.2.9** — Recipient domain verification for workflow emails: DNS MX check (default) with optional SMTP port 25 probe (`dns+smtp`); admin check script at `scripts/check_smtp_port25.py`
 - **v1.2.8** — Mail send feedback: apply success/failure tags and optional system note on every workflow email send attempt
+
 - **v1.2.7** — Graph API shared mailbox Sent Items: `sendMail` endpoint scoped to shared mailbox when `from_email` differs from account username
 - **v1.2.6** — WebSocket upload progress UI hang fix (missing `not owner_id` check in server-side _can_view)
 - **v1.2.5** — AI OCR post-consumption script: replaces Tesseract content with Mistral/Azure OCR via LiteLLM `/v1/ocr`
