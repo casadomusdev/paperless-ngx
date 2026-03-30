@@ -377,10 +377,10 @@ Run the provided helper script from inside the paperless worker container:
 
 ```bash
 # From outside the container:
-docker exec <paperless-worker> python3 /opt/paperless/scripts/check_smtp_port25.py
+docker exec <paperless-worker> python3 /usr/src/paperless/scripts/check_smtp_port25.py
 
 # Test against a specific MX host:
-docker exec <paperless-worker> python3 /opt/paperless/scripts/check_smtp_port25.py alt1.gmr-smtp-in.l.google.com
+docker exec <paperless-worker> python3 /usr/src/paperless/scripts/check_smtp_port25.py alt1.gmr-smtp-in.l.google.com
 ```
 
 **Exit codes:**
