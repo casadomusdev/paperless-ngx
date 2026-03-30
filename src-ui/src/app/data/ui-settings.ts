@@ -91,6 +91,9 @@ export const SETTINGS_KEYS = {
   // RKC: SMTP environment variable configuration indicator (v1.1.0+)
   SMTP_ENV_CONFIGURED: 'smtp_env_configured',
   // /end RKC edit
+  // RKC: Mail custom field names for dialog pre-fill (v1.3.0)
+  MAIL_CF_FIELD_NAMES: 'mail_cf_field_names',
+  // /end RKC edit
 }
 
 export const SETTINGS: UiSetting[] = [
@@ -341,6 +344,12 @@ export const SETTINGS: UiSetting[] = [
     key: SETTINGS_KEYS.SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT,
     type: 'boolean',
     default: true,
+  },
+  // RKC: Mail custom field names for dialog pre-fill (v1.3.0)
+  {
+    key: SETTINGS_KEYS.MAIL_CF_FIELD_NAMES,
+    type: 'object',
+    default: {},
   },
   // /end RKC edit
 ]

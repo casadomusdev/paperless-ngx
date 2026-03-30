@@ -413,6 +413,70 @@ PAPERLESS_MAIL_VERIFY_RECIPIENT=none
 
 ---
 
+## 13. Enhanced Manual Send Email Dialog (v1.3.0)
+
+The "Send Email" dialog available from the document detail screen (the envelope icon) has been upgraded to match the feature set of workflow email actions.
+
+### New Dialog Fields
+
+| Field | Required | Pre-fill CF env var | Notes |
+|-------|----------|---------------------|-------|
+| **From** | No | `PAPERLESS_MAIL_FROM_FIELD` | Overrides the sending account's default sender |
+| **To** | Yes | `PAPERLESS_MAIL_TO_FIELD` | One or more comma-separated addresses |
+| **CC** | No | `PAPERLESS_MAIL_CC_FIELD` | Comma-separated addresses |
+| **BCC** | No | `PAPERLESS_MAIL_BCC_FIELD` | Comma-separated addresses |
+| **Subject** | Yes | `PAPERLESS_MAIL_SUBJECT_FIELD` | Pre-filled from Mail Subject CF if configured |
+| **Message** | No | `PAPERLESS_MAIL_BODY_FIELD` | Optional message body |
+
+### Custom Field Pre-fill
+
+When a single document is opened in the detail view and the dialog is opened, the dialog automatically reads the document's custom field values and pre-fills the matching form fields. This uses the same `PAPERLESS_MAIL_*_FIELD` naming scheme as the mail ingestion system.
+
+**Pre-fill occurs only when ALL of these conditions are met:**
+
+1. The corresponding env var is set to a non-empty string
+2. A custom field with that name exists in the Paperless system
+3. The custom field is assigned to the current document
+4. The document has a non-null, non-empty value for that field
+
+**No pre-fill for bulk send**: When the dialog is opened via the document list (multiple document IDs), CF pre-fill is skipped entirely.
+
+**Configuration example** — use existing mail ingestion fields as send dialog pre-fill sources:
+```bash
+# Already used for ingestion — now also pre-fills the dialog
+PAPERLESS_MAIL_FROM_FIELD="Mail From"
+PAPERLESS_MAIL_SUBJECT_FIELD="Mail Subject"
+
+# New: pre-fill To, CC, BCC, and message body
+PAPERLESS_MAIL_TO_FIELD="Invoice Recipient"
+PAPERLESS_MAIL_CC_FIELD="Invoice CC"
+PAPERLESS_MAIL_BCC_FIELD=""        # disabled
+PAPERLESS_MAIL_BODY_FIELD=""       # disabled
+```
+
+### Backend Enhancements
+
+The `POST /api/documents/email/` endpoint now accepts and passes through `from_address`, `cc`, and `bcc` fields — matching the full `send_email()` signature in `documents/mail.py`.
+
+**Recipient domain verification** applies to all recipient addresses (TO, CC, BCC) using the same `PAPERLESS_MAIL_VERIFY_RECIPIENT` setting as workflow emails.
+
+**Send feedback** (tags + notes) applies to manual sends using the same `PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID`, `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID`, and `PAPERLESS_MAIL_SEND_ADD_NOTE` settings as workflow emails.
+
+### Implementation
+
+| Layer | File | Change |
+|-------|------|--------|
+| Backend settings | `src/paperless/settings.py` | 4 new env vars: `MAIL_TO_FIELD`, `MAIL_CC_FIELD`, `MAIL_BCC_FIELD`, `MAIL_BODY_FIELD` |
+| Backend serializer | `src/documents/serialisers.py` | `from_address`, `cc`, `bcc` optional fields + validators on `EmailSerializer` |
+| Backend view | `src/documents/views.py` | `email_documents()` extended with from/cc/bcc, domain verify, tags+notes; `UiSettingsView.get()` exposes `mail_cf_field_names` |
+| Frontend settings | `src-ui/src/app/data/ui-settings.ts` | `MAIL_CF_FIELD_NAMES` key + default object entry |
+| Frontend service | `src-ui/src/app/services/rest/document.service.ts` | `emailDocuments()` extended with optional `fromEmail`, `cc`, `bcc` params |
+| Frontend dialog TS | `src-ui/.../email-document-dialog/email-document-dialog.component.ts` | `OnInit` added; CF pre-fill logic; `@Input customFields` and `@Input customFieldInstances`; new email fields |
+| Frontend dialog HTML | `src-ui/.../email-document-dialog/email-document-dialog.component.html` | From (optional), To, CC, BCC, Subject, Message fields |
+| Frontend detail TS | `src-ui/.../document-detail/document-detail.component.ts` | `openEmailDocument()` passes `customFields` and `customFieldInstances` to dialog |
+
+---
+
 ## Version History
 
 - **v1.2.9**: Recipient domain verification for workflow emails — DNS MX check (default) with optional SMTP port 25 probe; admin check script at `scripts/check_smtp_port25.py`

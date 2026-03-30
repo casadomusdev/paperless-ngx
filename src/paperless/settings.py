@@ -1421,6 +1421,12 @@ PAPERLESS_MAIL_DATE_FIELD = os.getenv(
     "PAPERLESS_MAIL_DATE_FIELD",
     "Mail Date",
 )
+# RKC: Additional custom field names for manual send dialog pre-fill (v1.3.0)
+# All default to "" (empty) which disables pre-fill for that field.
+MAIL_TO_FIELD = os.getenv("PAPERLESS_MAIL_TO_FIELD", "")
+MAIL_CC_FIELD = os.getenv("PAPERLESS_MAIL_CC_FIELD", "")
+MAIL_BCC_FIELD = os.getenv("PAPERLESS_MAIL_BCC_FIELD", "")
+MAIL_BODY_FIELD = os.getenv("PAPERLESS_MAIL_BODY_FIELD", "")
 # /end RKC edit
 
 # RKC: Show custom field names in card views

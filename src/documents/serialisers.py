@@ -1941,6 +1941,47 @@ class EmailSerializer(DocumentListSerializer):
         help_text="Use archive version of documents if available",
     )
 
+    # RKC: Extended email header fields for manual send dialog (v1.3.0)
+    from_address = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        label="From address",
+        help_text="Override sender address (uses mail account default if blank)",
+    )
+
+    cc = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        label="CC",
+        help_text="Comma-separated CC email addresses",
+    )
+
+    bcc = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        label="BCC",
+        help_text="Comma-separated BCC email addresses",
+    )
+    # /end RKC edit
+
+    def _validate_address_list(self, value):
+        """Validate a comma-separated list of email addresses, returning a normalised string."""
+        if not value or not value.strip():
+            return ""
+        address_list = [addr.strip() for addr in value.split(",") if addr.strip()]
+        email_validator = EmailValidator()
+        for address in address_list:
+            try:
+                email_validator(address)
+            except ValidationError:
+                raise serializers.ValidationError(
+                    f"Invalid email address: {address}",
+                )
+        return ",".join(address_list)
+
     def validate_addresses(self, addresses):
         address_list = [addr.strip() for addr in addresses.split(",")]
         if not address_list:
@@ -1954,6 +1995,24 @@ class EmailSerializer(DocumentListSerializer):
             raise serializers.ValidationError(f"Invalid email address: {address}")
 
         return ",".join(address_list)
+
+    # RKC: Validators for extended email fields (v1.3.0)
+    def validate_from_address(self, value):
+        if not value or not value.strip():
+            return ""
+        email_validator = EmailValidator()
+        try:
+            email_validator(value.strip())
+        except ValidationError:
+            raise serializers.ValidationError(f"Invalid email address: {value}")
+        return value.strip()
+
+    def validate_cc(self, value):
+        return self._validate_address_list(value)
+
+    def validate_bcc(self, value):
+        return self._validate_address_list(value)
+    # /end RKC edit
 
     def validate_documents(self, documents):
         super().validate_documents(documents)

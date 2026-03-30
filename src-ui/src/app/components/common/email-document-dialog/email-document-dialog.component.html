@@ -8,12 +8,24 @@
 </div>
 <div class="modal-body">
     <div class="mb-1">
-        <label for="email" class="form-label" i18n>Email address(es)</label>
+        <label for="emailFrom" class="form-label" i18n>From (optional)</label>
+        <input type="email" class="form-control" id="emailFrom" [(ngModel)]="emailFrom" placeholder="Sender override (blank = mail account default)">
+    </div>
+    <div class="mb-1">
+        <label for="email" class="form-label" i18n>To (email address(es))</label>
         <input type="email" class="form-control" id="email" [(ngModel)]="emailAddress">
     </div>
     <div class="mb-1">
-        <label for="email" class="form-label" i18n>Subject</label>
-        <input type="email" class="form-control" id="subject" [(ngModel)]="emailSubject">
+        <label for="emailCc" class="form-label" i18n>CC (optional)</label>
+        <input type="email" class="form-control" id="emailCc" [(ngModel)]="emailCc">
+    </div>
+    <div class="mb-1">
+        <label for="emailBcc" class="form-label" i18n>BCC (optional)</label>
+        <input type="email" class="form-control" id="emailBcc" [(ngModel)]="emailBcc">
+    </div>
+    <div class="mb-1">
+        <label for="subject" class="form-label" i18n>Subject</label>
+        <input type="text" class="form-control" id="subject" [(ngModel)]="emailSubject">
     </div>
     <div>
         <label for="message" class="form-label" i18n>Message</label>

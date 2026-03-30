@@ -1209,6 +1209,14 @@ class DocumentViewSet(
         subject = validated_data.get("subject")
         message = validated_data.get("message")
         use_archive_version = validated_data.get("use_archive_version", True)
+        # RKC: Extended email parameters for manual send dialog (v1.3.0)
+        from_address_raw = validated_data.get("from_address", "").strip()
+        cc_raw = validated_data.get("cc", "").strip()
+        bcc_raw = validated_data.get("bcc", "").strip()
+        from_email = from_address_raw if from_address_raw else None
+        cc_list = [a.strip() for a in cc_raw.split(",") if a.strip()] if cc_raw else []
+        bcc_list = [a.strip() for a in bcc_raw.split(",") if a.strip()] if bcc_raw else []
+        # /end RKC edit
 
         documents = Document.objects.select_related("owner").filter(pk__in=document_ids)
         for document in documents:
@@ -1237,19 +1245,90 @@ class DocumentViewSet(
                     ),
                 )
 
+            # RKC: Recipient domain verification (v1.3.0)
+            if settings.MAIL_VERIFY_RECIPIENT != "none":
+                from documents.mail import verify_recipient_domain
+                check_addresses = addresses + cc_list + bcc_list
+                failures = []
+                checked_domains: dict = {}
+                for addr in check_addresses:
+                    domain = addr.split("@", 1)[1].lower() if "@" in addr else None
+                    if domain and domain in checked_domains:
+                        ok, reason = checked_domains[domain]
+                    else:
+                        ok, reason = verify_recipient_domain(addr, level=settings.MAIL_VERIFY_RECIPIENT)
+                        if domain:
+                            checked_domains[domain] = (ok, reason)
+                    logger.info(
+                        f"email_documents: Recipient verification [{settings.MAIL_VERIFY_RECIPIENT}] "
+                        f"{addr}: {'PASS' if ok else 'FAIL'} — {reason}",
+                    )
+                    if not ok:
+                        failures.append(f"{addr}: {reason}")
+                if failures:
+                    failure_summary = "; ".join(failures)
+                    logger.error(f"email_documents: Recipient verification failed: {failure_summary}")
+                    _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
+                    for doc in documents:
+                        if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
+                            doc.tags.add(settings.MAIL_SEND_FAILURE_TAG_ID)
+                        if settings.MAIL_SEND_ADD_NOTE:
+                            Note.objects.create(
+                                note=f"[{_ts}] Mail not sent — recipient verification failed: {failure_summary}",
+                                document=doc,
+                                user=request.user,
+                            )
+                    return HttpResponseBadRequest(
+                        f"Recipient verification failed: {failure_summary}",
+                    )
+            # /end RKC edit
+
             send_email(
                 subject=subject,
                 body=message,
                 to=addresses,
                 attachments=attachments,
+                from_email=from_email,  # RKC: v1.3.0
+                cc=cc_list or None,     # RKC: v1.3.0
+                bcc=bcc_list or None,   # RKC: v1.3.0
             )
+
+            # RKC: Apply send success feedback — tags + note (v1.3.0)
+            _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
+            to_str = ", ".join(addresses)
+            for doc in documents:
+                if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
+                    doc.tags.add(settings.MAIL_SEND_SUCCESS_TAG_ID)
+                if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
+                    doc.tags.remove(settings.MAIL_SEND_FAILURE_TAG_ID)
+                if settings.MAIL_SEND_ADD_NOTE:
+                    Note.objects.create(
+                        note=f"[{_ts}] Mail to {to_str} — OK",
+                        document=doc,
+                        user=request.user,
+                    )
+            # /end RKC edit
 
             logger.debug(
                 f"Sent documents {[doc.id for doc in documents]} via email to {addresses}",
             )
             return Response({"message": "Email sent"})
         except Exception as e:
+            # RKC: Apply send failure feedback — tags + note (v1.3.0)
             logger.warning(f"An error occurred emailing documents: {e!s}")
+            _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
+            for doc in documents:
+                if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
+                    doc.tags.add(settings.MAIL_SEND_FAILURE_TAG_ID)
+                if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
+                    doc.tags.remove(settings.MAIL_SEND_SUCCESS_TAG_ID)
+                if settings.MAIL_SEND_ADD_NOTE:
+                    Note.objects.create(
+                        note=f"[{_ts}] Mail to {', '.join(addresses)} — FAILED: {e!s}",
+                        document=doc,
+                        user=request.user,
+                    )
+            # /end RKC edit
             return HttpResponseServerError(
                 "Error emailing documents, check logs for more detail.",
             )
@@ -2505,6 +2584,17 @@ class UiSettingsView(GenericAPIView):
         from paperless_mail.mail_oauth import get_sending_mail_account
         ui_settings["email_enabled"] = settings.EMAIL_ENABLED or get_sending_mail_account() is not None
         ui_settings["smtp_env_configured"] = settings.EMAIL_ENABLED
+        # /end RKC edit
+
+        # RKC: Pass mail custom field name configuration to frontend for dialog pre-fill (v1.3.0)
+        ui_settings["mail_cf_field_names"] = {
+            "to":      getattr(settings, "MAIL_TO_FIELD", ""),
+            "from":    getattr(settings, "PAPERLESS_MAIL_FROM_FIELD", ""),
+            "subject": getattr(settings, "PAPERLESS_MAIL_SUBJECT_FIELD", ""),
+            "cc":      getattr(settings, "MAIL_CC_FIELD", ""),
+            "bcc":     getattr(settings, "MAIL_BCC_FIELD", ""),
+            "body":    getattr(settings, "MAIL_BODY_FIELD", ""),
+        }
         # /end RKC edit
 
         user_resp = {

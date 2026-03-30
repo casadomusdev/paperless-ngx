@@ -203,12 +203,17 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` | Int | None | Tag ID to apply when workflow email fails to send |
 | `PAPERLESS_MAIL_SEND_ADD_NOTE` | Bool | `false` | Attach a system note on every send attempt |
 | `PAPERLESS_MAIL_VERIFY_RECIPIENT` | String | `"dns"` | Recipient domain verification for workflow emails (`none`/`dns`/`dns+smtp`) |
+| `PAPERLESS_MAIL_TO_FIELD` | String | `""` | CF name to pre-fill the To field in the manual send dialog |
+| `PAPERLESS_MAIL_CC_FIELD` | String | `""` | CF name to pre-fill the CC field in the manual send dialog |
+| `PAPERLESS_MAIL_BCC_FIELD` | String | `""` | CF name to pre-fill the BCC field in the manual send dialog |
+| `PAPERLESS_MAIL_BODY_FIELD` | String | `""` | CF name to pre-fill the message body in the manual send dialog |
 
 
 ---
 
 ## Version History
 
+- **v1.3.0** — Enhanced manual send email dialog: From/CC/BCC fields, custom field pre-fill from document CF values, recipient domain verification and send feedback (tags+notes) now applied to manual sends
 - **v1.2.9** — Recipient domain verification for workflow emails: DNS MX check (default) with optional SMTP port 25 probe (`dns+smtp`); admin check script at `scripts/check_smtp_port25.py`
 - **v1.2.8** — Mail send feedback: apply success/failure tags and optional system note on every workflow email send attempt
 

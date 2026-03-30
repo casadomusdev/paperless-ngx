@@ -261,14 +261,23 @@ export class DocumentService extends AbstractPaperlessService<Document> {
     addresses: string,
     subject: string,
     message: string,
-    useArchiveVersion: boolean
+    useArchiveVersion: boolean,
+    fromEmail?: string,  // RKC: v1.3.0
+    cc?: string,         // RKC: v1.3.0
+    bcc?: string         // RKC: v1.3.0
   ): Observable<any> {
-    return this.http.post(this.getResourceUrl(null, 'email'), {
+    const body: any = {
       documents: documentIds,
       addresses: addresses,
       subject: subject,
       message: message,
       use_archive_version: useArchiveVersion,
-    })
+    }
+    // RKC: Include optional from/cc/bcc if provided (v1.3.0)
+    if (fromEmail) body.from_address = fromEmail
+    if (cc) body.cc = cc
+    if (bcc) body.bcc = bcc
+    // /end RKC edit
+    return this.http.post(this.getResourceUrl(null, 'email'), body)
   }
 }

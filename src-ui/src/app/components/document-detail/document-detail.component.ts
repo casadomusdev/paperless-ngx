@@ -1527,6 +1527,11 @@ export class DocumentDetailComponent
     modal.componentInstance.documentIds = [this.document.id]
     modal.componentInstance.hasArchiveVersion =
       !!this.document?.archived_file_name
+    // RKC: Pass CF definitions + instances for dialog pre-fill (v1.3.0)
+    modal.componentInstance.customFields = this.customFields
+    modal.componentInstance.customFieldInstances =
+      this.document.custom_fields ?? []
+    // /end RKC edit
   }
 
   private tryRenderTiff() {
