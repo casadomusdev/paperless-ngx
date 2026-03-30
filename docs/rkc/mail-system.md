@@ -12,6 +12,9 @@ Comprehensive mail system overhaul: universal SMTP sending, Microsoft Graph API 
 | `PAPERLESS_MAIL_SENDER_FIELD` | String | `"Mail Sender"` | Custom field name for sender display name |
 | `PAPERLESS_MAIL_SUBJECT_FIELD` | String | `"Mail Subject"` | Custom field name for email subject |
 | `PAPERLESS_MAIL_DATE_FIELD` | String | `"Mail Date"` | Custom field name for received date |
+| `PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID` | Int | None | Tag ID to apply when workflow email sends successfully |
+| `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` | Int | None | Tag ID to apply when workflow email fails to send |
+| `PAPERLESS_MAIL_SEND_ADD_NOTE` | Bool | `false` | Attach a system note on every send attempt with timestamp, recipients, and OK/FAILED status |
 
 ## Architecture Overview
 
@@ -331,6 +334,7 @@ Future implementation would require recipient S/MIME certificate + private key a
 
 ## Version History
 
+- **v1.2.8**: Mail send feedback — success/failure tags and optional system note on workflow email send attempts (both SMTP and Graph API paths)
 - **v1.2.7**: Shared mailbox Sent Items — `sendMail` endpoint scoped to shared mailbox when `from_email` differs from account username
 - **v1.2.4**: Opaque S/MIME signed message support (smime.p7m) via OpenSSL CMS unwrap; shared MIME walking helper
 - **v1.2.3**: Detached S/MIME signed message support (smime.p7s) via raw MIME $value fetch

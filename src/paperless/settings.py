@@ -1552,3 +1552,20 @@ WEBHOOKS_ALLOW_INTERNAL_REQUESTS = __get_boolean(
     "PAPERLESS_WEBHOOKS_ALLOW_INTERNAL_REQUESTS",
     "true",
 )
+
+# RKC: Mail send feedback — success/failure tags and delivery note (v1.2.8)
+# Apply a tag when a workflow email is sent successfully or fails (SMTP or Graph API).
+# Set to None (unset env var) to disable; set to a Tag primary key integer to enable.
+# MAIL_SEND_ADD_NOTE attaches a system note to the document on every send attempt.
+MAIL_SEND_SUCCESS_TAG_ID = (
+    __get_int("PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID", -1)
+    if os.getenv("PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID")
+    else None
+)
+MAIL_SEND_FAILURE_TAG_ID = (
+    __get_int("PAPERLESS_MAIL_SEND_FAILURE_TAG_ID", -1)
+    if os.getenv("PAPERLESS_MAIL_SEND_FAILURE_TAG_ID")
+    else None
+)
+MAIL_SEND_ADD_NOTE = __get_boolean("PAPERLESS_MAIL_SEND_ADD_NOTE", "no")
+# /end RKC edit

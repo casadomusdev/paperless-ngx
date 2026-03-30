@@ -48,6 +48,7 @@ from documents.models import CustomFieldInstance
 from documents.models import Document
 from documents.models import DocumentType
 from documents.models import MatchingModel
+from documents.models import Note
 from documents.models import PaperlessTask
 from documents.models import SavedView
 from documents.models import Tag
@@ -1270,6 +1271,9 @@ def run_workflows(
         ) if body else False
         # /end RKC edit
 
+        # RKC: Mail send feedback — track success/failure for tag and note actions (v1.2.8)
+        send_success = False
+        send_error_msg: str | None = None
         try:
             attachments: list[EmailAttachment] = []
             if action.email.include_document:
@@ -1309,15 +1313,54 @@ def run_workflows(
                 bcc=bcc_list or None,
                 is_html=is_html,
             )
+            send_success = n_messages > 0
             logger.debug(
                 f"Sent {n_messages} notification email(s) to {to_rendered}",
                 extra={"group": logging_group},
             )
         except Exception as e:
+            send_error_msg = str(e)
             logger.exception(
                 f"Error occurred sending notification email: {e}",
                 extra={"group": logging_group},
             )
+
+        # Apply send-feedback tags and optional note when we have a real Document (not pre-consumption)
+        if not use_overrides and isinstance(document, Document):
+            if send_success:
+                if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
+                    document.tags.add(settings.MAIL_SEND_SUCCESS_TAG_ID)
+                    logger.debug(
+                        f"Mail send success: applied tag {settings.MAIL_SEND_SUCCESS_TAG_ID} to '{title}'",
+                        extra={"group": logging_group},
+                    )
+                if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
+                    document.tags.remove(settings.MAIL_SEND_FAILURE_TAG_ID)
+            else:
+                if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
+                    document.tags.add(settings.MAIL_SEND_FAILURE_TAG_ID)
+                    logger.debug(
+                        f"Mail send failure: applied tag {settings.MAIL_SEND_FAILURE_TAG_ID} to '{title}'",
+                        extra={"group": logging_group},
+                    )
+                if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
+                    document.tags.remove(settings.MAIL_SEND_SUCCESS_TAG_ID)
+
+            if settings.MAIL_SEND_ADD_NOTE:
+                _ts = timezone.localtime(timezone.now()).strftime("%Y-%m-%dT%H:%M:%S")
+                if send_success:
+                    status_str = "OK"
+                else:
+                    status_str = f"FAILED: {send_error_msg}" if send_error_msg else "FAILED"
+                note_text = f"[{_ts}] Mail to {to_rendered} — {status_str}"
+                try:
+                    Note.objects.create(note=note_text, document=document, user=None)
+                except Exception as note_exc:
+                    logger.warning(
+                        f"Could not create mail send note for document '{title}': {note_exc}",
+                        extra={"group": logging_group},
+                    )
+        # /end RKC edit
 
     def webhook_action():
         if not use_overrides:
