@@ -17,6 +17,8 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_MODEL             - Model name, e.g. "mistral-ocr-latest" or "azure-doc-intel"
   AI_OCR_TAG_ID            - (optional) Tag ID to apply on successful OCR
   AI_OCR_DEBUG             - Set to "true" to print OCR output to stdout and skip the PATCH
+  AI_OCR_LOG_FILE          - (optional) Path to a log file; all log lines are appended there
+                             with a wallclock datetime prefix, e.g. "/logs/ai_ocr.log"
   PAPERLESS_URL            - Internal paperless URL, e.g. "http://webserver:8000"
   PAPERLESS_API_TOKEN      - Paperless superuser API token
 
@@ -30,6 +32,7 @@ Usage with paperless-ngx:
 """
 
 import base64
+import datetime
 import json
 import os
 import sys
@@ -39,17 +42,34 @@ import urllib.error
 import urllib.request
 
 
+_SCRIPT_START = time.monotonic()
+
+# ── Optional file logging ──────────────────────────────────────────────────────
+# When AI_OCR_LOG_FILE is set, every _log() call is also appended to that file
+# with a wallclock datetime prefix. The file is opened once here so output is
+# captured even if the script crashes before main() runs.
+_log_file_path = os.getenv("AI_OCR_LOG_FILE", "").strip()
+_log_fh = None
+if _log_file_path:
+    try:
+        os.makedirs(os.path.dirname(_log_file_path) or ".", exist_ok=True)
+        _log_fh = open(_log_file_path, "a", encoding="utf-8", buffering=1)  # line-buffered
+    except OSError as _e:
+        print(f"AI OCR: WARNING — cannot open log file '{_log_file_path}': {_e}", file=sys.stderr, flush=True)
+
+
 def _log(msg: str, error: bool = False):
-    """Timestamped log helper. Flushes immediately so logs appear real-time in Celery output."""
+    """Timestamped log helper. Flushes immediately so logs appear real-time in Celery output.
+    When AI_OCR_LOG_FILE is set, also appends to that file with a wallclock prefix."""
     elapsed = time.monotonic() - _SCRIPT_START
     line = f"AI OCR [{elapsed:6.1f}s]: {msg}"
     if error:
         print(line, file=sys.stderr, flush=True)
     else:
         print(line, flush=True)
-
-
-_SCRIPT_START = time.monotonic()
+    if _log_fh is not None:
+        ts = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        _log_fh.write(f"{ts} {line}\n")
 
 
 def main():

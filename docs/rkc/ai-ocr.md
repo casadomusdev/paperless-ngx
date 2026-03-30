@@ -64,8 +64,9 @@ is a no-op when `AI_OCR_ENABLED` is absent or not `"true"`.
 |------------------|-------------------------|-------------|
 | `AI_OCR_MODEL`   | `mistral-ocr-latest`    | Model name as configured in LiteLLM |
 | `AI_OCR_TAG_ID`  | _(none)_                | Tag ID to apply to the document on successful OCR. Requires a GET to fetch existing tags before the PATCH, so existing tags are preserved. No tag is added if unset. |
-| `AI_OCR_DEBUG`   | `false`                 | Set to `"true"` to print the extracted OCR text to stdout and skip writing to the document. Useful for inspecting OCR quality without modifying any data. |
-| `PAPERLESS_URL`  | `http://localhost:8000` | Internal paperless URL |
+| `AI_OCR_DEBUG`    | `false`                 | Set to `"true"` to print the extracted OCR text to stdout and skip writing to the document. Useful for inspecting OCR quality without modifying any data. |
+| `AI_OCR_LOG_FILE` | _(none)_                | Absolute path to a log file inside the container, e.g. `/logs/ai_ocr.log`. When set, every log line is appended to this file with a wallclock datetime prefix. Opt-in — no log file is written when unset. |
+| `PAPERLESS_URL`   | `http://localhost:8000` | Internal paperless URL |
 
 ---
 
@@ -209,6 +210,55 @@ Or via CLI:
 ```bash
 docker compose exec webserver python3 manage.py drf_create_token <username>
 ```
+
+---
+
+## Log File
+
+By default the script logs only to stdout/stderr, which ends up in the celery
+container log. To get a persistent, human-readable audit log, set
+`AI_OCR_LOG_FILE` to an absolute path **inside the container**.
+
+### Docker Compose example
+
+```yaml
+services:
+  webserver: &paperless
+    environment:
+      AI_OCR_LOG_FILE: "/logs/ai_ocr.log"
+    volumes:
+      - paperless-ai-ocr-logs:/logs
+
+  celery: *paperless
+
+volumes:
+  paperless-ai-ocr-logs:
+```
+
+The directory is created automatically if it does not exist. The file is opened
+in append mode, so it accumulates across restarts.
+
+### Log format
+
+Each line in the file has a wallclock datetime prefix followed by the normal
+`AI OCR [Xs]:` line that also appears in celery's output:
+
+```
+2026-03-30T12:05:01 AI OCR [  0.0s]: Starting — doc=447, model=mistral-ocr-latest, archive=/tmp/tmpXXXXXX.pdf
+2026-03-30T12:05:01 AI OCR [  0.1s]: Read archive file: 1,204,832 bytes
+2026-03-30T12:05:01 AI OCR [  0.1s]: Mistral model detected — adding extract_header=true, extract_footer=true
+2026-03-30T12:05:01 AI OCR [  0.1s]: Sending OCR request to http://litellm:4000/v1/ocr (timeout=300s)...
+2026-03-30T12:05:14 AI OCR [ 13.4s]: OCR request completed in 13.3s — HTTP 200
+2026-03-30T12:05:14 AI OCR [ 13.4s]: Extracted 4 page(s), 3821 chars of text
+2026-03-30T12:05:14 AI OCR [ 13.4s]: Sending PATCH to http://webserver:8000/api/documents/447/ ...
+2026-03-30T12:05:14 AI OCR [ 13.5s]: PATCH completed in 0.1s — HTTP 200
+2026-03-30T12:05:14 AI OCR [ 13.5s]: Document 447 updated successfully — 4 page(s), 3821 chars, model: mistral-ocr-latest, total time: 13.5s
+```
+
+> **Tip:** To watch the log in real time from outside the container:
+> ```bash
+> docker exec paperless-celery tail -f /logs/ai_ocr.log
+> ```
 
 ---
 
