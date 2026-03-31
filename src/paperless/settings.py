@@ -1536,6 +1536,16 @@ OUTLOOK_OAUTH_ENABLED = bool(
     and OUTLOOK_OAUTH_CLIENT_ID
     and OUTLOOK_OAUTH_CLIENT_SECRET,
 )
+# RKC: App-only (client_credentials) sending for personal mailboxes (v1.2.10)
+# When enabled, Graph API sendMail calls use an application-level token obtained via
+# client_credentials grant instead of the delegated user token.  This allows sending
+# from / on behalf of any licensed personal mailbox in the tenant without per-user
+# Exchange delegation and deposits Sent Items in the correct mailbox.
+# Requires:  Mail.Send APPLICATION permission in the Azure App Registration + admin consent.
+# Falls back to delegated token behaviour (v1.2.7) when not set.
+OUTLOOK_OAUTH_TENANT_ID = os.getenv("PAPERLESS_OUTLOOK_OAUTH_TENANT_ID")
+OUTLOOK_OAUTH_USE_APP_SEND = __get_boolean("PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND", "NO")
+# /end RKC edit
 
 ###############################################################################
 # Webhooks

@@ -403,6 +403,56 @@ When you enable an account for sending:
 
 ---
 
+## App-Only Send Mode (Personal Mailboxes)
+
+### Background
+
+By default, Paperless-ngx uses the **delegated token** (the signed-in `casabot` account) for sending.  This works perfectly for shared mailboxes, but Graph API refuses cross-user calls with delegated tokens when the target is a **personal (licensed) mailbox** — returning `404 ErrorItemNotFound` regardless of Exchange permissions.
+
+To send as any personal mailbox in the tenant (e.g. `hoebold@wgbg.de`) and have the Sent Items copy land in **that user's Sent Items folder**, enable app-only send mode.
+
+### Azure Portal — One-Time Admin Setup
+
+1. Go to [Azure Portal](https://portal.azure.com) → **App registrations** → your Paperless app
+2. Click **API permissions** in the left menu
+3. Click **Add a permission** → **Microsoft Graph** → **Application permissions**
+4. Search for `Mail.Send` and tick the **Application** variant (NOT the delegated one)
+5. Click **Add permissions**
+6. Click **Grant admin consent for [your organisation]** and confirm
+
+That is the **only** Azure change needed.  The existing delegated permissions (`Mail.Read`, `Mail.Send` delegated, etc.) remain untouched.
+
+### Paperless Environment Variables
+
+Add to your `docker-compose.env` / `.env`:
+
+```bash
+# Your Azure AD tenant — find it on the App Registration Overview page
+PAPERLESS_OUTLOOK_OAUTH_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
+# Enable app-only sending
+PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND=true
+```
+
+The same `PAPERLESS_OUTLOOK_OAUTH_CLIENT_ID` and `PAPERLESS_OUTLOOK_OAUTH_CLIENT_SECRET` are reused — no new app registration needed.
+
+### What Changes, What Doesn't
+
+| | Before | After |
+|---|---|---|
+| Mail receiving | Delegated token | Delegated token (unchanged) |
+| Sending to shared mailbox | Delegated token | App-only token |
+| Sending to personal mailbox | ❌ 404 error | ✅ App-only token |
+| Per-user Send As delegation | Not required | Not required |
+| Mail account in Paperless UI | Configured as today | Unchanged |
+| GUI re-authorization needed? | — | No |
+
+### Mixing Delegated and Application Permissions
+
+It is fully supported and common to have both delegated and application permissions on the same app registration.  They produce different tokens via different flows and never conflict.  Microsoft explicitly documents this pattern for hybrid service/user apps.
+
+---
+
 ## References
 
 - [Microsoft Identity Platform Documentation](https://docs.microsoft.com/en-us/azure/active-directory/develop/)

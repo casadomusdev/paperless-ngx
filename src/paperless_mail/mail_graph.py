@@ -1,16 +1,30 @@
 """
-RKC: Microsoft Graph API Email Backend (v1.2.7)
+RKC: Microsoft Graph API Email Backend (v1.2.10)
 Implements email sending for Outlook OAuth accounts using Microsoft Graph API instead of SMTP.
 This bypasses Security Defaults restrictions on SMTP AUTH while providing better error handling.
-Sent Items are deposited in the correct mailbox: when sending as a shared mailbox, the
-sendMail call is scoped to the shared mailbox user endpoint so the copy lands there, not in
-the sending account's Sent Items.
+
+Two send modes are supported, selected by the PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND setting:
+
+Delegated mode (default, v1.2.7 behaviour):
+  Uses the casabot account's delegated OAuth token.  sendMail is called on the shared mailbox
+  endpoint when from_email ≠ account username, so Sent Items land in the shared mailbox.
+  Personal (licensed) mailboxes CANNOT be used as from_email — Graph API blocks cross-user
+  calls with delegated tokens regardless of Exchange permissions.
+
+App-only mode (v1.2.10, PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND=true):
+  Uses a client_credentials (application-level) access token obtained from Azure AD.
+  This token can send from / on behalf of ANY licensed mailbox in the tenant.
+  Sent Items always land in the mailbox identified by from_email (or the account username
+  if from_email is not set).  No per-user Exchange delegation required.
+  Requires: Mail.Send APPLICATION permission + admin consent in the Azure App Registration,
+  PAPERLESS_OUTLOOK_OAUTH_TENANT_ID set to the tenant GUID or domain.
 """
 import base64
 import logging
 from typing import Any
 
 import httpx
+from django.conf import settings
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.mail.message import EmailMessage
 from django.utils import timezone
@@ -61,6 +75,16 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
     def send_messages(self, email_messages: list[EmailMessage]) -> int:
         """
         Send one or more EmailMessage objects.
+
+        In delegated mode (default): the account's own delegated OAuth token is
+        refreshed and used as the Bearer token.  Only shared mailboxes can be
+        targeted via from_email; personal mailboxes will return 404.
+
+        In app-only mode (PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND=true): the
+        delegated token is still refreshed (so mail receiving keeps working), but
+        a separate client_credentials token is obtained and used exclusively for
+        the sendMail calls.  This token can target any licensed mailbox in the
+        tenant without per-user Exchange delegation.
         
         Args:
             email_messages: List of Django EmailMessage objects to send
@@ -71,25 +95,44 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
         if not email_messages:
             return 0
         
-        # Refresh OAuth token if needed
         oauth_manager = PaperlessMailOAuth2Manager()
-        logger.debug(f"[Graph API] Checking token expiration for {self.mail_account.name}")
-        
+
+        # RKC v1.2.10: Always refresh the delegated token — it is still required
+        # for mail retrieval (mail_graph_retrieval.py).  We just won't use it for
+        # sending when app-only mode is active.
+        logger.debug(f"[Graph API] Checking delegated token for {self.mail_account.name}")
         if not oauth_manager.refresh_account_oauth_token(self.mail_account):
             logger.error(f"Failed to refresh OAuth2 token for {self.mail_account.name}")
             if not self.fail_silently:
                 raise Exception("OAuth2 token refresh failed")
             return 0
-        
-        # Reload account to get fresh token
+
         self.mail_account.refresh_from_db()
-        logger.debug(f"[Graph API] Token ready, expiration: {self.mail_account.expiration}")
+        logger.debug(f"[Graph API] Delegated token ready, expiration: {self.mail_account.expiration}")
+
+        # Determine the Bearer token to use for sending
+        use_app_send = getattr(settings, "OUTLOOK_OAUTH_USE_APP_SEND", False)
+        if use_app_send:
+            logger.debug(
+                f"[Graph API] App-only send mode enabled — obtaining client_credentials token"
+            )
+            try:
+                send_token = oauth_manager.get_outlook_app_access_token()
+            except Exception as e:
+                logger.error(f"[Graph API] Failed to obtain app-only token: {e}")
+                if not self.fail_silently:
+                    raise
+                return 0
+        else:
+            # Delegated mode (v1.2.7 behaviour): use the account's own access token
+            send_token = self.mail_account.password
+        # /end RKC edit
         
         # Send each message
         sent_count = 0
         for message in email_messages:
             try:
-                self._send_message(message)
+                self._send_message(message, access_token=send_token)
                 sent_count += 1
             except Exception as e:
                 logger.error(f"Failed to send email via Graph API: {e}")
@@ -127,12 +170,15 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
         
         return f"{self.GRAPH_BASE}/{self.mail_account.username}/sendMail"
 
-    def _send_message(self, message: EmailMessage) -> None:
+    def _send_message(self, message: EmailMessage, access_token: str | None = None) -> None:
         """
         Send a single email message via Graph API.
         
         Args:
             message: Django EmailMessage object
+            access_token: Bearer token to use.  When None, falls back to the
+                          account's stored delegated access token (self.mail_account.password).
+                          Pass an app-only token here for cross-mailbox sends.
         """
         logger.info(f"[Graph API] Sending email: '{message.subject}' to {message.to}")
         
@@ -141,10 +187,13 @@ class OutlookGraphEmailBackend(BaseEmailBackend):
         
         # Build Graph API request payload
         payload = self._build_graph_message(message)
+
+        # Use provided token (app-only) or fall back to delegated token
+        bearer = access_token if access_token else self.mail_account.password
         
         # Prepare HTTP request
         headers = {
-            "Authorization": f"Bearer {self.mail_account.password}",  # Access token
+            "Authorization": f"Bearer {bearer}",
             "Content-Type": "application/json",
         }
         

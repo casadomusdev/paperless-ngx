@@ -1,8 +1,11 @@
 import asyncio
 import logging
 import secrets
+import threading
+import time
 from datetime import timedelta
 
+import httpx
 from django.conf import settings
 from django.utils import timezone
 from httpx_oauth.clients.google import GoogleOAuth2
@@ -11,6 +14,13 @@ from httpx_oauth.oauth2 import OAuth2Token
 from httpx_oauth.oauth2 import RefreshTokenError
 
 from paperless_mail.models import MailAccount
+
+# RKC: Process-level token cache for app-only (client_credentials) tokens (v1.2.10)
+# Keyed by (client_id, tenant_id).  Stores (access_token, expiry_timestamp).
+# Access token lifetime is 3600s; we refresh 5 minutes early to avoid races.
+_app_token_cache: dict[tuple[str, str], tuple[str, float]] = {}
+_app_token_lock = threading.Lock()
+# /end RKC edit
 
 
 class PaperlessMailOAuth2Manager:
@@ -129,3 +139,95 @@ class PaperlessMailOAuth2Manager:
 
     def validate_state(self, state: str) -> bool:
         return settings.DEBUG or (len(state) > 0 and state == self.state)
+
+    # RKC: App-only (client_credentials) token for personal mailbox sending (v1.2.10)
+    def get_outlook_app_access_token(self) -> str:
+        """
+        Returns a valid Microsoft Graph API access token obtained via the
+        client_credentials (app-only) flow.
+
+        This token allows calling /users/{any-user}/sendMail for ANY licensed
+        mailbox in the tenant without per-user Exchange delegation.  Requires
+        the Mail.Send APPLICATION permission granted with admin consent in the
+        Azure App Registration.
+
+        Tokens are cached in-process and refreshed automatically 5 minutes
+        before expiry.  Thread-safe via a module-level lock.
+
+        Returns:
+            Access token string
+
+        Raises:
+            ValueError: If PAPERLESS_OUTLOOK_OAUTH_TENANT_ID is not configured
+            Exception:  If the token request to Azure AD fails
+        """
+        logger = logging.getLogger("paperless_mail")
+
+        tenant_id = getattr(settings, "OUTLOOK_OAUTH_TENANT_ID", None)
+        client_id = settings.OUTLOOK_OAUTH_CLIENT_ID
+        client_secret = settings.OUTLOOK_OAUTH_CLIENT_SECRET
+
+        if not tenant_id:
+            raise ValueError(
+                "[Graph API] PAPERLESS_OUTLOOK_OAUTH_TENANT_ID must be set when "
+                "PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND=true"
+            )
+
+        cache_key = (client_id, tenant_id)
+        now = time.time()
+
+        with _app_token_lock:
+            cached = _app_token_cache.get(cache_key)
+            if cached:
+                token, expiry = cached
+                # Use cached token if it won't expire within 5 minutes
+                if now < expiry - 300:
+                    logger.debug("[Graph API] Using cached app-only access token")
+                    return token
+
+            # Fetch a fresh token from Azure AD
+            token_url = (
+                f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+            )
+            payload = {
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "scope": "https://graph.microsoft.com/.default",
+            }
+
+            logger.debug(
+                f"[Graph API] Fetching app-only access token for tenant {tenant_id}"
+            )
+
+            try:
+                with httpx.Client(timeout=15.0) as client:
+                    response = client.post(token_url, data=payload)
+
+                if response.status_code != 200:
+                    try:
+                        err = response.json()
+                        detail = f"{err.get('error', '?')}: {err.get('error_description', response.text[:200])}"
+                    except Exception:
+                        detail = response.text[:200]
+                    raise Exception(
+                        f"[Graph API] App-only token request failed "
+                        f"({response.status_code}): {detail}"
+                    )
+
+                data = response.json()
+                access_token = data["access_token"]
+                expires_in = int(data.get("expires_in", 3600))
+                expiry_ts = now + expires_in
+
+                _app_token_cache[cache_key] = (access_token, expiry_ts)
+                logger.debug(
+                    f"[Graph API] App-only token obtained, expires in {expires_in}s"
+                )
+                return access_token
+
+            except httpx.HTTPError as e:
+                raise Exception(
+                    f"[Graph API] HTTP error fetching app-only token: {e}"
+                ) from e
+    # /end RKC edit

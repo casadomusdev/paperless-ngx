@@ -478,9 +478,56 @@ The `POST /api/documents/email/` endpoint now accepts and passes through `from_a
 
 ---
 
+## 14. App-Only Send Mode for Personal Mailboxes (v1.2.10)
+
+### Problem Addressed
+
+The v1.2.7 shared-mailbox endpoint routing (`/users/{from_email}/sendMail`) works only for shared mailboxes.  When `from_email` is a **personal (licensed) mailbox** belonging to a real user (e.g. `hoebold@wgbg.de`), Graph API returns `404 ErrorItemNotFound` regardless of Exchange Send As permissions.  This is a Graph API protocol constraint: delegated tokens are scoped to the authenticated user's own resources and cannot impersonate another user principal.
+
+### Solution
+
+When `PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND=true`, the backend switches to a **client_credentials (app-only)** token for sending.  App-only tokens have tenant-wide `Mail.Send` application permission over ALL mailboxes in the organisation — no per-user delegation required.  The Sent Items copy lands in the mailbox identified by `from_email` because the `sendMail` call is scoped to that user's endpoint, exactly as before.
+
+### Environment Variables
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `PAPERLESS_OUTLOOK_OAUTH_TENANT_ID` | String | — | Azure AD tenant GUID or domain (e.g. `yourorg.onmicrosoft.com` or `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) |
+| `PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND` | Bool | `false` | Enable app-only send mode |
+
+### Azure App Registration Change Required
+
+1. Azure Portal → **App Registrations** → your Paperless app → **API permissions**
+2. Click **Add a permission** → **Microsoft Graph** → **Application permissions**
+3. Search for and add `Mail.Send`
+4. Click **Grant admin consent for \[your organisation\]**
+
+This is a one-time admin action — covers every mailbox in the tenant.  No per-user configuration.
+
+### Behaviour Comparison
+
+| Scenario | Delegated mode (default) | App-only mode |
+|---|---|---|
+| `from_email` = shared mailbox | ✅ Works, Sent Items in shared | ✅ Works, Sent Items in shared |
+| `from_email` = personal mailbox | ❌ 404 ErrorItemNotFound | ✅ Works, Sent Items in user's mailbox |
+| `from_email` = account's own address | ✅ Works, Sent Items in account | ✅ Works, Sent Items in account |
+| Per-user Exchange delegation needed | ❌ Not needed | ❌ Not needed |
+| Delegated token still refreshed? | ✅ Yes (for receiving) | ✅ Yes (for receiving) |
+
+### Token Caching
+
+App-only tokens are cached in-process (module-level dict, thread-safe lock).  Tokens are reused until 5 minutes before expiry (tokens last 1 hour by default).  No database writes.
+
+### Backwards Compatibility
+
+When `PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND` is not set (default `false`), the code path is **identical to v1.2.7**.  Shared mailbox routing continues to work unchanged.
+
+---
+
 ## Version History
 
 - **v1.3.1**: Workflow email notes always attributed to a valid user — `document.owner` or the system `consumer` user for ownerless documents; prevents `GET /api/documents/{id}/` 500 errors in `NotesSerializer`
+- **v1.2.10**: App-only send mode — `client_credentials` token for personal mailbox sends; Sent Items land in the correct mailbox for any user in the tenant; no per-user Exchange delegation
 - **v1.2.9**: Recipient domain verification for workflow emails — DNS MX check (default) with optional SMTP port 25 probe; admin check script at `scripts/check_smtp_port25.py`
 - **v1.2.8**: Mail send feedback — success/failure tags and optional system note on workflow email send attempts (both SMTP and Graph API paths)
 
