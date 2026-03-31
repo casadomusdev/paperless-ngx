@@ -403,49 +403,101 @@ When you enable an account for sending:
 
 ---
 
-## App-Only Send Mode (Personal Mailboxes)
+## Sending as Personal Mailboxes — Delegated vs App-Only
 
-### Background
+Two approaches allow Paperless-ngx to send email appearing to come from a personal (licensed) user mailbox (e.g. `hoebold@wgbg.de`) using the service account `casabot@wgbg.de`.
 
-By default, Paperless-ngx uses the **delegated token** (the signed-in `casabot` account) for sending.  This works perfectly for shared mailboxes, but Graph API refuses cross-user calls with delegated tokens when the target is a **personal (licensed) mailbox** — returning `404 ErrorItemNotFound` regardless of Exchange permissions.
+---
 
-To send as any personal mailbox in the tenant (e.g. `hoebold@wgbg.de`) and have the Sent Items copy land in **that user's Sent Items folder**, enable app-only send mode.
+### Approach 1 — Delegated Send As (Recommended)
 
-### Azure Portal — One-Time Admin Setup
+**How it works:** casabot's delegated OAuth token carries `Mail.Send.Shared` scope.  When the `sendMail` API call is routed to `/users/hoebold@wgbg.de/sendMail`, Graph API checks whether casabot has Exchange **Send As** permission on hoebold's mailbox.  If yes → the call succeeds, the mail appears from hoebold, and Sent Items land in hoebold's Sent folder.
 
-1. Go to [Azure Portal](https://portal.azure.com) → **App registrations** → your Paperless app
-2. Click **API permissions** in the left menu
-3. Click **Add a permission** → **Microsoft Graph** → **Application permissions**
-4. Search for `Mail.Send` and tick the **Application** variant (NOT the delegated one)
-5. Click **Add permissions**
-6. Click **Grant admin consent for [your organisation]** and confirm
+**Requirements:**
+- `Mail.Send` (delegated) permission added to the Entra App Registration (done already)
+- Exchange **Send As** permission granted to casabot on each target mailbox
 
-That is the **only** Azure change needed.  The existing delegated permissions (`Mail.Read`, `Mail.Send` delegated, etc.) remain untouched.
+**Granting Send As on a single mailbox (Exchange Admin Center):**
+1. Exchange Admin Center → Recipients → Mailboxes → select `hoebold@wgbg.de`
+2. Manage mailbox delegation → Send As → Add → `casabot@wgbg.de`
 
-### Paperless Environment Variables
+**Granting Send As in bulk via PowerShell (Exchange Online):**
 
-Add to your `docker-compose.env` / `.env`:
+```powershell
+# Connect first:
+Connect-ExchangeOnline -UserPrincipalName admin@wgbg.de
 
+# Option A: Grant casabot Send As on ALL user mailboxes in the tenant
+Get-Mailbox -RecipientTypeDetails UserMailbox | 
+    Add-RecipientPermission -Trustee "casabot@wgbg.de" -AccessRights SendAs -Confirm:$false
+
+# Option B: Grant casabot Send As on all members of a specific group
+# (useful when only a subset of users should be sendable-from)
+Get-DistributionGroupMember -Identity "Paperless-Senders" | ForEach-Object {
+    Add-RecipientPermission -Identity $_.PrimarySmtpAddress -Trustee "casabot@wgbg.de" -AccessRights SendAs -Confirm:$false
+}
+
+# Verify permissions on a specific mailbox:
+Get-RecipientPermission -Identity "hoebold@wgbg.de" | Where-Object { $_.Trustee -like "*casabot*" }
+```
+
+Note: Exchange permissions can take **15–30 minutes** to propagate before Graph API will honour them.
+
+**Pros:**
+- ✅ Tight, auditable — casabot can only send as explicitly delegated mailboxes
+- ✅ Exchange audit logs show delegation chain clearly
+- ✅ Blast radius of a compromised `client_secret` is limited to receiving mail only
+- ✅ Entra admin does not need to touch anything once `Mail.Send` delegated is added
+
+**Cons:**
+- ⚠ Requires ongoing Exchange admin work when new users are added (one PowerShell line per batch)
+- ⚠ Exchange delegation propagation delay (~15–30 min)
+
+---
+
+### Approach 2 — App-Only Send (PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND=true)
+
+**How it works:** A separate `client_credentials` token with `Mail.Send` APPLICATION permission is obtained from Azure AD.  This token grants tenant-wide `sendMail` rights over ALL mailboxes, with no Exchange delegation required.
+
+**Requirements:**
+- `Mail.Send` (application) permission added to the Entra App Registration + admin consent (one time)
+- `PAPERLESS_OUTLOOK_OAUTH_TENANT_ID` env var set to tenant GUID or domain
+
+**Azure Portal setup (one-time):**
+1. Azure Portal → App registrations → your Paperless app → **API permissions**
+2. Add a permission → Microsoft Graph → **Application permissions** → `Mail.Send`
+3. Click **Grant admin consent for [your organisation]**
+
+**Paperless environment variables:**
 ```bash
-# Your Azure AD tenant — find it on the App Registration Overview page
 PAPERLESS_OUTLOOK_OAUTH_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
-# Enable app-only sending
 PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND=true
 ```
 
-The same `PAPERLESS_OUTLOOK_OAUTH_CLIENT_ID` and `PAPERLESS_OUTLOOK_OAUTH_CLIENT_SECRET` are reused — no new app registration needed.
+**Pros:**
+- ✅ Zero per-mailbox configuration — covers every current and future user automatically
+- ✅ No Exchange admin work when users are added
+- ✅ No propagation delay
 
-### What Changes, What Doesn't
+**Cons:**
+- ⚠ **Higher blast radius** — a compromised `client_secret` grants `sendMail` as ANY user in the tenant (including executives, finance, legal)
+- ⚠ Less Exchange audit attribution — logs show "sent by application", not "sent by casabot on behalf of hoebold"
+- ⚠ Bypasses Exchange delegation rules entirely — only Entra admin consent is the gate
+- ⚠ Best practice: store `client_secret` in a secrets manager / vault, not only in a `.env` file
 
-| | Before | After |
-|---|---|---|
-| Mail receiving | Delegated token | Delegated token (unchanged) |
-| Sending to shared mailbox | Delegated token | App-only token |
-| Sending to personal mailbox | ❌ 404 error | ✅ App-only token |
-| Per-user Send As delegation | Not required | Not required |
-| Mail account in Paperless UI | Configured as today | Unchanged |
-| GUI re-authorization needed? | — | No |
+---
+
+### Which to Use?
+
+| Scenario | Recommendation |
+|---|---|
+| Small tenant, few sending users | **Delegated** — grant Send As per mailbox or via bulk PowerShell |
+| Large tenant (many users), Exchange admin available | **Delegated** — bulk PowerShell on all or a target group |
+| Large tenant, no Exchange admin, or dynamic user churn | **App-only** — simpler maintenance, higher security risk |
+| `client_secret` stored in a vault | Either — app-only risk is acceptable |
+| `client_secret` only in `.env` file | **Delegated** — limit blast radius |
+
+For most organisations, **delegated mode with one PowerShell bulk-grant** is the right choice.  App-only is available as an opt-in fallback.
 
 ### Mixing Delegated and Application Permissions
 
