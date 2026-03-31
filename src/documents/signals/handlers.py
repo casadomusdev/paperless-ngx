@@ -1308,7 +1308,7 @@ def run_workflows(
                             extra={"group": logging_group},
                         )
                 if settings.MAIL_SEND_ADD_NOTE and not use_overrides and isinstance(document, Document):
-                    create_mail_verify_fail_note(document, failure_summary)
+                    create_mail_verify_fail_note(document, failure_summary, user=document.owner)
                 return
         # /end RKC edit
 
@@ -1416,6 +1416,7 @@ def run_workflows(
                 create_mail_send_note(
                     document, to_rendered, send_success,
                     send_error_msg if not send_success else None,
+                    user=document.owner,
                 )
         # /end RKC edit
 
