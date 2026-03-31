@@ -1308,7 +1308,9 @@ def run_workflows(
                             extra={"group": logging_group},
                         )
                 if settings.MAIL_SEND_ADD_NOTE and not use_overrides and isinstance(document, Document):
-                    create_mail_verify_fail_note(document, failure_summary, user=document.owner)
+                    # RKC: Fall back to the system 'consumer' user for ownerless documents (v1.3.1)
+                    note_user = document.owner or User.objects.filter(username='consumer').first()
+                    create_mail_verify_fail_note(document, failure_summary, user=note_user)
                 return
         # /end RKC edit
 
@@ -1413,10 +1415,12 @@ def run_workflows(
 
             if settings.MAIL_SEND_ADD_NOTE:
                 from documents.mail import create_mail_send_note
+                # RKC: Fall back to the system 'consumer' user for ownerless documents (v1.3.1)
+                note_user = document.owner or User.objects.filter(username='consumer').first()
                 create_mail_send_note(
                     document, to_rendered, send_success,
                     send_error_msg if not send_success else None,
-                    user=document.owner,
+                    user=note_user,
                 )
         # /end RKC edit
 

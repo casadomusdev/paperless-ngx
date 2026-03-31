@@ -370,6 +370,7 @@ When verification fails (hard fail only — DNS NXDOMAIN, no MX, connection refu
    ```
    [2025-01-15T14:30:00] Mail not sent — recipient verification failed: user@bad-domain.com: Domain 'bad-domain.com' does not exist (NXDOMAIN)
    ```
+   The note is attributed to `document.owner`. For ownerless documents (`owner=None`), it falls back to the system `consumer` user (looked up by username). This ensures the note always has a valid user FK, preventing `GET /api/documents/{id}/` 500 errors in the serializer.
 
 ### Admin Check: Is Outbound Port 25 Available?
 
@@ -479,6 +480,7 @@ The `POST /api/documents/email/` endpoint now accepts and passes through `from_a
 
 ## Version History
 
+- **v1.3.1**: Workflow email notes always attributed to a valid user — `document.owner` or the system `consumer` user for ownerless documents; prevents `GET /api/documents/{id}/` 500 errors in `NotesSerializer`
 - **v1.2.9**: Recipient domain verification for workflow emails — DNS MX check (default) with optional SMTP port 25 probe; admin check script at `scripts/check_smtp_port25.py`
 - **v1.2.8**: Mail send feedback — success/failure tags and optional system note on workflow email send attempts (both SMTP and Graph API paths)
 
