@@ -87,6 +87,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 - **"Process all mails"** action for read+unread without modifying mail state
 - **Processed mail UI** with server-side filtering, error modals, Mail UID column, select-all-in-database, pagination fix
 - **Correspondent matching algorithm** consistency between mail-created and UI-created correspondents
+- **Mail send webhook** — every outgoing email (workflow and manual) POSTs a full JSON payload (all fields + base64 attachments) to a configurable endpoint; outcome appended as a second line in the send note
 
 → [Details](docs/rkc/mail-system.md) | [MS365 OAuth Setup](MS365_OAUTH_SETUP.md)
 
@@ -207,12 +208,16 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `PAPERLESS_MAIL_CC_FIELD` | String | `""` | CF name to pre-fill the CC field in the manual send dialog |
 | `PAPERLESS_MAIL_BCC_FIELD` | String | `""` | CF name to pre-fill the BCC field in the manual send dialog |
 | `PAPERLESS_MAIL_BODY_FIELD` | String | `""` | CF name to pre-fill the message body in the manual send dialog |
+| `PAPERLESS_MAIL_SEND_WEBHOOK_URL` | String | `""` | URL to POST full email payload to after every successful send |
+| `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN` | String | `""` | Token value sent in the webhook auth header |
+| `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER` | String | `"Authorization"` | HTTP header name used to carry the webhook token |
 
 
 ---
 
 ## Version History
 
+- **v1.4.0** — Mail send webhook: every outgoing email POSTs full JSON payload (all fields + base64 attachments) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL`; webhook outcome appended as second line of send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1** — Workflow email notes always attributed to a valid user: `document.owner` or the system `consumer` user for ownerless documents, preventing 500 errors on `GET /api/documents/{id}/`
 - **v1.3.0** — Enhanced manual send email dialog: From/CC/BCC fields, custom field pre-fill from document CF values, recipient domain verification and send feedback (tags+notes) now applied to manual sends
 - **v1.2.9** — Recipient domain verification for workflow emails: DNS MX check (default) with optional SMTP port 25 probe (`dns+smtp`); admin check script at `scripts/check_smtp_port25.py`

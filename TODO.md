@@ -1,28 +1,28 @@
 # TODO.md
 
-## Phase 1: Backend — Settings, Serializer, Views
+## Phase 1: Settings
 
-- [x] Add 4 new env vars to `settings.py`: `MAIL_TO_FIELD`, `MAIL_CC_FIELD`, `MAIL_BCC_FIELD`, `MAIL_BODY_FIELD`
-- [x] Add `from_address`, `cc`, `bcc` fields + validators to `EmailSerializer` in `serialisers.py`
-- [x] Upgrade `email_documents()` in `views.py`: from/cc/bcc, address validation, recipient verification, tags, notes
-- [x] Add `mail_cf_field_names` dict to `UiSettingsView.get()` in `views.py`
+- [x] Add 3 new env vars to `settings.py`: `MAIL_SEND_WEBHOOK_URL`, `MAIL_SEND_WEBHOOK_TOKEN`, `MAIL_SEND_WEBHOOK_TOKEN_HEADER`
 
-## Phase 2: Frontend — UiSettings, Service, Dialog, DocumentDetail
+## Phase 2: Core Logic (mail.py)
 
-- [x] Add `MAIL_CF_FIELD_NAMES` key and SETTINGS entry to `ui-settings.ts`
-- [x] Add optional `fromEmail?`, `cc?`, `bcc?` to `emailDocuments()` in `document.service.ts`
-- [x] Add `emailFrom`, `emailCc`, `emailBcc` fields + `ngOnInit()` pre-fill logic to dialog component TS
-- [x] Add From, CC, BCC input fields to dialog template HTML
-- [x] Pass `customFields` + `customFieldInstances` to modal in `document-detail.component.ts`
+- [x] Add `fire_mail_send_webhook(email)` helper to `documents/mail.py`
+- [x] Update `send_email()` return type to `tuple[int, str | None]`
+- [x] Update `create_mail_send_note()` to accept `webhook_note` param and append it to note
 
-## Phase 3: Documentation
+## Phase 3: Caller Updates
 
-- [x] Update `docs/rkc/mail-system.md` with enhanced manual send dialog section
-- [x] Update `RKC_CUSTOMIZATIONS.md` with new env vars
+- [x] Update `email_action()` in `signals/handlers.py` to unpack tuple + pass `webhook_note`
+- [x] Update `email_documents()` in `views.py` to unpack tuple + pass `webhook_note`
+
+## Phase 4: Documentation
+
+- [x] Update `RKC_CUSTOMIZATIONS.md`: new feature, 3 new env vars, version history v1.4.0
+- [x] Update `docs/rkc/mail-system.md`: new env var rows + Mail Send Webhook section
 
 ## Future Improvements
 
-- Consider subject pre-fill for bulk email (use a static default or prompt)
-- Optionally allow the user to toggle CF pre-fill via a UI checkbox in the dialog
-- Consider adding a `Reply-To` header field — the backend `send_email()` would need to attach it via `EmailMessage.extra_headers`
-- Consider persistent dialog defaults (last used From/CC/BCC saved to user settings)
+- Consider adding a per-webhook retry mechanism (e.g., 1 retry with backoff) for transient failures
+- Consider making the webhook fire asynchronously via Celery task to avoid any latency on manual sends
+- Consider adding a `source` field to the webhook payload indicating whether the send was "workflow" or "manual"
+- Consider filtering attachments from webhook payload when they exceed a configurable size threshold

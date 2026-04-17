@@ -1318,6 +1318,9 @@ def run_workflows(
         send_success = False
 
         send_error_msg: str | None = None
+        # RKC: webhook status initialized here so it is available after the try block (v1.4.0)
+        webhook_status: str | None = None
+        # /end RKC edit
         try:
             attachments: list[EmailAttachment] = []
             if action.email.include_document:
@@ -1347,7 +1350,8 @@ def run_workflows(
                     )
                 if attachment:
                     attachments = [attachment]
-            n_messages = send_email(
+            # RKC: Unpack (n_sent, webhook_status) tuple returned by send_email() (v1.4.0)
+            n_messages, webhook_status = send_email(
                 subject=subject,
                 body=body,
                 to=to_list,
@@ -1357,6 +1361,7 @@ def run_workflows(
                 bcc=bcc_list or None,
                 is_html=is_html,
             )
+            # /end RKC edit
             send_success = n_messages > 0
             logger.debug(
                 f"Sent {n_messages} notification email(s) to {to_rendered}",
@@ -1417,11 +1422,14 @@ def run_workflows(
                 from documents.mail import create_mail_send_note
                 # RKC: Fall back to the system 'consumer' user for ownerless documents (v1.3.1)
                 note_user = document.owner or User.objects.filter(username='consumer').first()
+                # RKC: Pass webhook outcome as second note line (v1.4.0)
                 create_mail_send_note(
                     document, to_rendered, send_success,
                     send_error_msg if not send_success else None,
                     user=note_user,
+                    webhook_note=webhook_status,
                 )
+                # /end RKC edit
         # /end RKC edit
 
     def webhook_action():

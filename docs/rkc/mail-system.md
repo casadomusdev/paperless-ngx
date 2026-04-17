@@ -16,6 +16,9 @@ Comprehensive mail system overhaul: universal SMTP sending, Microsoft Graph API 
 | `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` | Int | None | Tag ID to apply when workflow email fails to send |
 | `PAPERLESS_MAIL_SEND_ADD_NOTE` | Bool | `false` | Attach a system note on every send attempt with timestamp, recipients, and OK/FAILED status |
 | `PAPERLESS_MAIL_VERIFY_RECIPIENT` | String | `"dns"` | Recipient domain verification level: `"none"` (off), `"dns"` (MX check), or `"dns+smtp"` (MX + port 25 probe) |
+| `PAPERLESS_MAIL_SEND_WEBHOOK_URL` | String | `""` | URL to POST a JSON payload containing all email fields + base64 attachments after every successful send. No-op when empty |
+| `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN` | String | `""` | Bearer token (or any secret) sent in the webhook auth header. No-op when empty |
+| `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER` | String | `"Authorization"` | HTTP header name used to carry `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN`. Change when the receiving endpoint expects a non-standard header (e.g. `X-Api-Key`) |
 
 
 ## Architecture Overview
@@ -524,8 +527,84 @@ When `PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND` is not set (default `false`), the co
 
 ---
 
+## 15. Mail Send Webhook (v1.4.0)
+
+After every successful email send, Paperless can POST the full email payload to an external HTTP endpoint. This enables downstream integrations — audit logging, CRM systems, notification pipelines, Power Automate flows, etc. — without having to hook into the SMTP/Graph layer directly.
+
+### Behaviour
+
+- Fires **only** for emails that are actually sent (`n_sent > 0`)
+- Fires for **both** workflow-triggered and manual sends (single dispatch point in `send_email()`)
+- The call is **synchronous** within the Celery task / Django request — a slow or unreachable webhook will delay the response, but will not crash it
+- The webhook outcome is returned as `webhook_status: str | None` from `send_email()` and, when `PAPERLESS_MAIL_SEND_ADD_NOTE=true`, appended as a **second line** to the existing send note:
+  ```
+  [2025-01-15T14:30:00] Mail sent to user@example.com — OK
+    Webhook → OK (HTTP 200)
+  ```
+  or on failure:
+  ```
+  [2025-01-15T14:30:00] Mail sent to user@example.com — OK
+    Webhook → FAILED: Connection error: ...
+  ```
+
+### JSON Payload
+
+```json
+{
+  "from":        "billing@company.com",
+  "to":          ["customer@example.com"],
+  "cc":          [],
+  "bcc":         [],
+  "subject":     "Invoice 2025-001",
+  "body":        "Please find your invoice attached.",
+  "is_html":     false,
+  "attachments": [
+    {
+      "filename":  "invoice.pdf",
+      "mime_type": "application/pdf",
+      "content":   "<base64-encoded bytes>"
+    }
+  ]
+}
+```
+
+All fields are always present. `to`, `cc`, `bcc` are lists (never `null`). `attachments` is a list of objects; `content` is standard base64 (no data-URI prefix). For `message/rfc822` attachments (forwarded emails) the raw RFC 2822 bytes are serialised with `.as_bytes()` before base64-encoding.
+
+### Configuration
+
+```bash
+# Minimal — no auth header
+PAPERLESS_MAIL_SEND_WEBHOOK_URL=https://hooks.example.com/paperless-send
+
+# With Bearer token
+PAPERLESS_MAIL_SEND_WEBHOOK_URL=https://hooks.example.com/paperless-send
+PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN=mysecrettoken
+# default header is "Authorization", override if needed:
+PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER=X-Api-Key
+```
+
+### Implementation
+
+| Component | File | Change |
+|-----------|------|--------|
+| Settings | `src/paperless/settings.py` | `MAIL_SEND_WEBHOOK_URL`, `MAIL_SEND_WEBHOOK_TOKEN`, `MAIL_SEND_WEBHOOK_TOKEN_HEADER` |
+| Webhook fire | `src/documents/mail.py` | `fire_mail_send_webhook(email)` → `str \| None` |
+| Note helper | `src/documents/mail.py` | `create_mail_send_note()` gains `webhook_note` param; appends second line |
+| Return type | `src/documents/mail.py` | `send_email()` returns `tuple[int, str \| None]` |
+| Workflow path | `src/documents/signals/handlers.py` | Unpacks `(n_messages, webhook_status)`; passes `webhook_note=webhook_status` |
+| Manual send path | `src/documents/views.py` | Unpacks `(_, webhook_status)`; passes `webhook_note=webhook_status` |
+
+### Error Handling
+
+- Any exception during the HTTP POST is caught and returned as `"FAILED: <exception message>"`
+- A `WARNING` is logged so the event is visible in the paperless worker log
+- The webhook failure **never prevents the email from being recorded as sent** — it is cosmetic/informational only
+
+---
+
 ## Version History
 
+- **v1.4.0**: Mail send webhook — `fire_mail_send_webhook()` POSTs full JSON payload (all fields + base64 attachments) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL` after every successful send; outcome appended as second line to send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1**: Workflow email notes always attributed to a valid user — `document.owner` or the system `consumer` user for ownerless documents; prevents `GET /api/documents/{id}/` 500 errors in `NotesSerializer`
 - **v1.2.10**: App-only send mode — `client_credentials` token for personal mailbox sends; Sent Items land in the correct mailbox for any user in the tenant; no per-user Exchange delegation
 - **v1.2.9**: Recipient domain verification for workflow emails — DNS MX check (default) with optional SMTP port 25 probe; admin check script at `scripts/check_smtp_port25.py`

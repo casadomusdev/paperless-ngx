@@ -1591,3 +1591,14 @@ MAIL_SEND_ADD_NOTE = __get_boolean("PAPERLESS_MAIL_SEND_ADD_NOTE", "no")
 MAIL_VERIFY_RECIPIENT = os.getenv("PAPERLESS_MAIL_VERIFY_RECIPIENT", "dns")
 # /end RKC edit
 
+# RKC: Mail send webhook — POST all sent-email data to a configurable endpoint (v1.4.0)
+# MAIL_SEND_WEBHOOK_URL: target endpoint URL; empty string disables the feature.
+# MAIL_SEND_WEBHOOK_TOKEN: optional token/API-key value sent as a request header.
+# MAIL_SEND_WEBHOOK_TOKEN_HEADER: header name for the token (default "Authorization").
+MAIL_SEND_WEBHOOK_URL = os.getenv("PAPERLESS_MAIL_SEND_WEBHOOK_URL", "")
+MAIL_SEND_WEBHOOK_TOKEN = os.getenv("PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN", "")
+MAIL_SEND_WEBHOOK_TOKEN_HEADER = os.getenv(
+    "PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER", "Authorization"
+)
+# /end RKC edit
+

@@ -1262,7 +1262,8 @@ class DocumentViewSet(
                     )
             # /end RKC edit
 
-            send_email(
+            # RKC: Capture (n_sent, webhook_status) tuple returned by send_email() (v1.4.0)
+            _, webhook_status = send_email(
                 subject=subject,
                 body=message,
                 to=addresses,
@@ -1271,6 +1272,7 @@ class DocumentViewSet(
                 cc=cc_list or None,     # RKC: v1.3.0
                 bcc=bcc_list or None,   # RKC: v1.3.0
             )
+            # /end RKC edit
 
             # RKC: Apply send success feedback — tags + note (v1.3.0)
             to_str = ", ".join(addresses)
@@ -1281,7 +1283,9 @@ class DocumentViewSet(
                     doc.tags.remove(settings.MAIL_SEND_FAILURE_TAG_ID)
                 if settings.MAIL_SEND_ADD_NOTE:
                     from documents.mail import create_mail_send_note
-                    create_mail_send_note(doc, to_str, True, user=request.user)
+                    # RKC: Pass webhook outcome as second note line (v1.4.0)
+                    create_mail_send_note(doc, to_str, True, user=request.user, webhook_note=webhook_status)
+                    # /end RKC edit
             # /end RKC edit
 
             logger.debug(

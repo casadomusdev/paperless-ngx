@@ -123,7 +123,14 @@ def check_recipient_addresses(
     return failures
 
 
-def create_mail_send_note(document, to_str: str, success: bool, error_msg: str | None = None, user=None) -> None:
+def create_mail_send_note(
+    document,
+    to_str: str,
+    success: bool,
+    error_msg: str | None = None,
+    user=None,
+    webhook_note: str | None = None,
+) -> None:
     """
     Attach a system note to the document recording the mail send outcome.
     Logs a warning if note creation fails but does not raise.
@@ -139,6 +146,10 @@ def create_mail_send_note(document, to_str: str, success: bool, error_msg: str |
             if error_msg
             else f"[{_ts}] Mail to {to_str} — FAILED"
         )
+    # RKC: Append webhook outcome as second line when configured (v1.4.0)
+    if webhook_note is not None:
+        note_text += f"\n  Webhook \u2192 {webhook_note}"
+    # /end RKC edit
     try:
         Note.objects.create(note=note_text, document=document, user=user)
     except Exception as e:
@@ -161,6 +172,79 @@ def create_mail_verify_fail_note(document, failure_summary: str, user=None) -> N
 # /end RKC edit
 
 
+# RKC: POST all sent-email data to a configurable webhook endpoint (v1.4.0)
+def fire_mail_send_webhook(email: EmailMessage) -> str | None:
+    """Fire a POST request to the configured webhook URL after a successful email send.
+
+    Builds a JSON payload with all email fields and base64-encoded attachments,
+    then POSTs it with an optional auth header.  Returns a short status string
+    on success or failure so callers can include it in document notes.
+    Returns None immediately when no webhook URL is configured.
+    """
+    import base64
+    import httpx
+    from email.message import Message as RawEmailMessage
+
+    webhook_url = getattr(settings, "MAIL_SEND_WEBHOOK_URL", "")
+    if not webhook_url:
+        return None
+
+    # Build attachments list — handle both raw bytes and parsed RFC-822 Message objects
+    attachments_payload = []
+    for att_filename, att_content, att_mime in getattr(email, "attachments", []):
+        try:
+            if isinstance(att_content, RawEmailMessage):
+                att_bytes = att_content.as_bytes()
+            elif isinstance(att_content, bytes):
+                att_bytes = att_content
+            elif isinstance(att_content, str):
+                att_bytes = att_content.encode("utf-8", errors="replace")
+            else:
+                att_bytes = b""
+            attachments_payload.append({
+                "filename": att_filename or "",
+                "mime_type": att_mime or "",
+                "content": base64.b64encode(att_bytes).decode("ascii"),
+            })
+        except Exception as exc:
+            logger.warning(
+                f"Mail send webhook: could not encode attachment '{att_filename}': {exc}",
+            )
+            attachments_payload.append({
+                "filename": att_filename or "",
+                "mime_type": att_mime or "",
+                "content": "",
+            })
+
+    payload = {
+        "from": email.from_email or "",
+        "to": list(email.to) if email.to else [],
+        "cc": list(email.cc) if email.cc else [],
+        "bcc": list(email.bcc) if email.bcc else [],
+        "subject": email.subject or "",
+        "body": email.body or "",
+        "is_html": getattr(email, "content_subtype", "plain") == "html",
+        "attachments": attachments_payload,
+    }
+
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    token = getattr(settings, "MAIL_SEND_WEBHOOK_TOKEN", "")
+    token_header = getattr(settings, "MAIL_SEND_WEBHOOK_TOKEN_HEADER", "Authorization")
+    if token:
+        headers[token_header] = token
+
+    try:
+        resp = httpx.post(webhook_url, json=payload, headers=headers, timeout=10.0)
+        status = f"OK (HTTP {resp.status_code})"
+        logger.debug(f"Mail send webhook: POST to {webhook_url} → {resp.status_code}")
+        return status
+    except Exception as exc:
+        reason = str(exc)
+        logger.warning(f"Mail send webhook: POST to {webhook_url} failed: {reason}")
+        return f"FAILED: {reason}"
+# /end RKC edit
+
+
 @dataclass(frozen=True)
 class EmailAttachment:
     path: Path
@@ -178,7 +262,7 @@ def send_email(
     cc: list[str] | None = None,
     bcc: list[str] | None = None,
     is_html: bool = False,
-) -> int:
+) -> tuple[int, str | None]:
     """
     Send an email with attachments.
 
@@ -202,7 +286,10 @@ def send_email(
         is_html: Whether the body contains HTML content
 
     Returns:
-        Number of emails sent
+        tuple[int, str | None] — (n_sent, webhook_status)
+            n_sent: number of emails actually sent (0 or 1)
+            webhook_status: short status string from fire_mail_send_webhook(), or None
+                            if no webhook is configured or the email was not sent
 
     TODO: re-evaluate this pending https://code.djangoproject.com/ticket/35581 / https://github.com/django/django/pull/18966
     """
@@ -267,7 +354,11 @@ def send_email(
                     mimetype=attachment.mime_type,
                 )
 
-    return email.send()
+    # RKC: Fire mail send webhook and return (n_sent, webhook_status) (v1.4.0)
+    n_sent = email.send()
+    webhook_status = fire_mail_send_webhook(email) if n_sent > 0 else None
+    return n_sent, webhook_status
+    # /end RKC edit
 
 
 def _get_unique_filename(friendly_name: str, used_names: set[str]) -> str:

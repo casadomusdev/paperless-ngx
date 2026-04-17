@@ -2,54 +2,54 @@
 
 ## GOAL
 
-Enhance the manual "Send Email" dialog in the document detail screen to have full feature parity with workflow email actions. Specifically:
-
-1. Add CC, BCC, From override fields to the dialog
-2. Upgrade the backend `email_documents()` view to support these fields plus recipient verification, success/failure tags, and system notes — identical to what `email_action()` does for workflows
-3. Pre-fill all relevant dialog fields from document custom field values using the existing `PAPERLESS_MAIL_*_FIELD` naming scheme plus 4 new env vars
-4. No pre-fill occurs if: env var is not set/`""`, configured CF name doesn't exist, CF not assigned to doc, or doc has no value for that CF
-5. Bulk editor (multiple documentIds): skip CF pre-fill entirely
+Add a mail send webhook: for every email that is sent (both workflow-triggered and manual), POST a JSON payload to a configurable webhook URL containing all relevant email fields — to, from, cc, bcc, subject, body, and all attachments base64-encoded. Optionally include an access token passed as a configurable header. If document notes are enabled (`PAPERLESS_MAIL_SEND_ADD_NOTE`), append a second line to the note recording the webhook call outcome.
 
 ## ANALYSIS
 
-The `send_email()` function in `documents/mail.py` already fully supports Graph API, OAuth2 SMTP, from_email, CC, BCC, and HTML. The backend `email_documents()` view simply doesn't pass these through — it only passes To, Subject, Body.
+There are two places where `send_email()` is called:
+1. `email_action()` in `signals/handlers.py` — workflow-triggered emails (runs in Celery task context)
+2. `email_documents()` in `views.py` — manual send from UI (runs in Django request context)
 
-The workflow's `email_action()` in `signals/handlers.py` is the reference implementation: it validates addresses, verifies recipient domains, applies success/failure tags, and creates notes. The `email_documents()` endpoint needs to be upgraded to match.
+Both paths call through `send_email()` in `documents/mail.py`, which is the single central dispatch point.
 
-On the frontend, the dialog component needs new From/CC/BCC fields and an `ngOnInit()` pre-fill step that uses the `mail_cf_field_names` dict (passed from the backend via UiSettings) to look up the CF by name → by id → by instance → by value.
+After `email.send()` succeeds, the `EmailMessage` object has all data in memory: `email.from_email`, `email.to`, `email.cc`, `email.bcc`, `email.subject`, `email.body`, `email.content_subtype`, and `email.attachments` (list of `(filename, content, mimetype)` tuples). The attachment content is already loaded at this point, so no extra file reads are needed.
 
-The existing `PAPERLESS_MAIL_FROM_FIELD` and `PAPERLESS_MAIL_SUBJECT_FIELD` settings reuse directly. Four new settings with empty-string defaults are added:
-- `PAPERLESS_MAIL_TO_FIELD` → `settings.MAIL_TO_FIELD`
-- `PAPERLESS_MAIL_CC_FIELD` → `settings.MAIL_CC_FIELD`
-- `PAPERLESS_MAIL_BCC_FIELD` → `settings.MAIL_BCC_FIELD`
-- `PAPERLESS_MAIL_BODY_FIELD` → `settings.MAIL_BODY_FIELD`
+`send_email()` currently returns `int` (number of messages sent). Changing it to return `tuple[int, str | None]` (n_sent, webhook_status) allows callers to thread the webhook outcome into the document note without any global state or separate calls.
+
+The `create_mail_send_note()` function already exists in `mail.py` and is called by both code paths. Adding an optional `webhook_note: str | None = None` parameter lets callers append a second line to the note when the webhook is configured.
 
 ## IMPLEMENTATION
 
-### Phase 1: Backend — Settings, Serializer, Views
+### Phase 1: Settings (settings.py)
 
-**settings.py**: Add 4 new env vars `MAIL_TO_FIELD`, `MAIL_CC_FIELD`, `MAIL_BCC_FIELD`, `MAIL_BODY_FIELD`, all defaulting to `""`.
+Add 3 new env vars inside a new `# RKC:` block after the existing mail send feedback block:
+- `MAIL_SEND_WEBHOOK_URL` (from `PAPERLESS_MAIL_SEND_WEBHOOK_URL`, default `""`)
+- `MAIL_SEND_WEBHOOK_TOKEN` (from `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN`, default `""`)
+- `MAIL_SEND_WEBHOOK_TOKEN_HEADER` (from `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER`, default `"Authorization"`)
 
-**serialisers.py / EmailSerializer**: Add optional `from_address`, `cc`, `bcc` CharField fields with validators mirroring `validate_addresses`.
+### Phase 2: mail.py
 
-**views.py / email_documents()**: Extract from/cc/bcc from validated data. Validate all address lists. Run recipient domain verification if `MAIL_VERIFY_RECIPIENT != "none"`. Call `send_email()` with extended params. Apply success/failure tags and create notes matching workflow behavior.
+**`fire_mail_send_webhook(email: EmailMessage) -> str | None`**:
+- Returns `None` immediately if `settings.MAIL_SEND_WEBHOOK_URL` is empty
+- Builds JSON payload: `from`, `to`, `cc`, `bcc`, `subject`, `body`, `is_html`, `attachments` list
+- Each attachment: `{"filename": ..., "mime_type": ..., "content": base64}` — handle `message.Message` objects (rfc822) by encoding them back to bytes first
+- Fires `httpx.post()` with `timeout=10.0` and optional token header
+- On success: returns `"OK (HTTP {status_code})"`
+- On failure: logs warning, returns `"FAILED: {reason}"`
 
-**views.py / UiSettingsView.get()**: Inject `mail_cf_field_names` dict into ui_settings response.
+**`send_email()`**: Change return from `int` to `tuple[int, str | None]`. After `n = email.send()`, call `fire_mail_send_webhook(email)` when `n > 0`. Return `(n, webhook_status)`.
 
-### Phase 2: Frontend — UiSettings, Service, Dialog, DocumentDetail
+**`create_mail_send_note()`**: Add `webhook_note: str | None = None` parameter. When provided, append `\n  Webhook → {webhook_note}` to the note text.
 
-**ui-settings.ts**: Add `MAIL_CF_FIELD_NAMES` key and SETTINGS entry with type `'object'` and default `{}`.
+### Phase 3: handlers.py (workflow path)
 
-**document.service.ts / emailDocuments()**: Add optional `fromEmail?`, `cc?`, `bcc?` params; include in request body.
+Unpack `n_messages, webhook_status = send_email(...)`. Pass `webhook_note=webhook_status` to `create_mail_send_note()` call.
 
-**email-document-dialog.component.ts**: Implement `OnInit`. Add `@Input() customFields` and `@Input() customFieldInstances`. Add `emailFrom`, `emailCc`, `emailBcc` fields. Add `ngOnInit()` with 4-guard pre-fill logic. Pass new fields to service call. Reset them after send.
+### Phase 4: views.py (manual send path)
 
-**email-document-dialog.component.html**: Add From, CC, BCC input form fields before the existing ones (From) and after To (CC/BCC).
+Unpack `n_messages, webhook_status = send_email(...)`. Pass `webhook_note=webhook_status` to the two `create_mail_send_note()` calls (success path and exception path, though the exception path won't have a webhook status — pass `None` there).
 
-**document-detail.component.ts / openEmailDocument()**: Pass `this.customFields` and `this.document.custom_fields ?? []` to modal instance.
+### Phase 5: Documentation
 
-### Phase 3: Documentation
-
-**docs/rkc/mail-system.md**: Add section on enhanced manual send dialog, CF pre-fill behavior, and new env vars.
-
-**RKC_CUSTOMIZATIONS.md**: Document the 4 new env vars.
+Update `RKC_CUSTOMIZATIONS.md` with new feature description, 3 new env vars in the table, and version history entry v1.4.0.
+Update `docs/rkc/mail-system.md` with new env var rows and a "Mail Send Webhook" section.
