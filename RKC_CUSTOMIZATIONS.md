@@ -217,7 +217,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
-- **v1.4.0** — Mail send webhook: every outgoing email POSTs full JSON payload (all fields + base64 attachments) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL`; webhook outcome appended as second line of send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
+- **v1.4.0** — Mail send webhook: every outgoing email POSTs full JSON payload (all fields + base64 attachments + `document_id` per attachment) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL`; webhook outcome appended as second line of send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1** — Workflow email notes always attributed to a valid user: `document.owner` or the system `consumer` user for ownerless documents, preventing 500 errors on `GET /api/documents/{id}/`
 - **v1.3.0** — Enhanced manual send email dialog: From/CC/BCC fields, custom field pre-fill from document CF values, recipient domain verification and send feedback (tags+notes) now applied to manual sends
 - **v1.2.9** — Recipient domain verification for workflow emails: DNS MX check (default) with optional SMTP port 25 probe (`dns+smtp`); admin check script at `scripts/check_smtp_port25.py`

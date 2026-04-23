@@ -560,15 +560,16 @@ After every successful email send, Paperless can POST the full email payload to 
   "is_html":     false,
   "attachments": [
     {
-      "filename":  "invoice.pdf",
-      "mime_type": "application/pdf",
-      "content":   "<base64-encoded bytes>"
+      "document_id": 42,
+      "filename":    "invoice.pdf",
+      "mime_type":   "application/pdf",
+      "content":     "<base64-encoded bytes>"
     }
   ]
 }
 ```
 
-All fields are always present. `to`, `cc`, `bcc` are lists (never `null`). `attachments` is a list of objects; `content` is standard base64 (no data-URI prefix). For `message/rfc822` attachments (forwarded emails) the raw RFC 2822 bytes are serialised with `.as_bytes()` before base64-encoding.
+All fields are always present. `to`, `cc`, `bcc` are lists (never `null`). `attachments` is a list of objects; `content` is standard base64 (no data-URI prefix). `document_id` is the Paperless document primary key (integer) for document attachments, or `null` for pre-consumption attachments that do not yet have a database record. For `message/rfc822` attachments (forwarded emails) the raw RFC 2822 bytes are serialised with `.as_bytes()` before base64-encoding.
 
 ### Configuration
 
@@ -604,7 +605,7 @@ PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER=X-Api-Key
 
 ## Version History
 
-- **v1.4.0**: Mail send webhook — `fire_mail_send_webhook()` POSTs full JSON payload (all fields + base64 attachments) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL` after every successful send; outcome appended as second line to send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
+- **v1.4.0**: Mail send webhook — `fire_mail_send_webhook()` POSTs full JSON payload (all fields + base64 attachments + `document_id` per attachment) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL` after every successful send; outcome appended as second line to send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1**: Workflow email notes always attributed to a valid user — `document.owner` or the system `consumer` user for ownerless documents; prevents `GET /api/documents/{id}/` 500 errors in `NotesSerializer`
 - **v1.2.10**: App-only send mode — `client_credentials` token for personal mailbox sends; Sent Items land in the correct mailbox for any user in the tenant; no per-user Exchange delegation
 - **v1.2.9**: Recipient domain verification for workflow emails — DNS MX check (default) with optional SMTP port 25 probe; admin check script at `scripts/check_smtp_port25.py`

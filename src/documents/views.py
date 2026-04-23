@@ -1242,6 +1242,7 @@ class DocumentViewSet(
                         friendly_name=doc.get_public_filename(
                             archive=use_archive_version and doc.has_archive_version,
                         ),
+                        document_id=doc.id,
                     ),
                 )
 

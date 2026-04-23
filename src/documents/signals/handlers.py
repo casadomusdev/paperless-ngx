@@ -1339,6 +1339,7 @@ def run_workflows(
                         path=document.source_path,
                         mime_type=document.mime_type,
                         friendly_name=friendly_name,
+                        document_id=document.id,
                     )
                 elif original_file:
                     # Pre-consumption: no Document object yet, use original filename
@@ -1347,6 +1348,7 @@ def run_workflows(
                         path=original_file,
                         mime_type=document.mime_type,
                         friendly_name=friendly_name,
+                        document_id=None,
                     )
                 if attachment:
                     attachments = [attachment]

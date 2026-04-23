@@ -173,13 +173,20 @@ def create_mail_verify_fail_note(document, failure_summary: str, user=None) -> N
 
 
 # RKC: POST all sent-email data to a configurable webhook endpoint (v1.4.0)
-def fire_mail_send_webhook(email: EmailMessage) -> str | None:
+def fire_mail_send_webhook(
+    email: EmailMessage,
+    doc_id_map: dict[str, int | None] | None = None,
+) -> str | None:
     """Fire a POST request to the configured webhook URL after a successful email send.
 
     Builds a JSON payload with all email fields and base64-encoded attachments,
     then POSTs it with an optional auth header.  Returns a short status string
     on success or failure so callers can include it in document notes.
     Returns None immediately when no webhook URL is configured.
+
+    doc_id_map: optional mapping of attachment filename → Paperless document pk.
+    When provided, each attachment entry in the payload includes a 'document_id'
+    field (integer or null for pre-consumption / non-document attachments).
     """
     import base64
     import httpx
@@ -188,6 +195,8 @@ def fire_mail_send_webhook(email: EmailMessage) -> str | None:
     webhook_url = getattr(settings, "MAIL_SEND_WEBHOOK_URL", "")
     if not webhook_url:
         return None
+
+    _doc_id_map: dict[str, int | None] = doc_id_map or {}
 
     # Build attachments list — handle both raw bytes and parsed RFC-822 Message objects
     attachments_payload = []
@@ -202,6 +211,7 @@ def fire_mail_send_webhook(email: EmailMessage) -> str | None:
             else:
                 att_bytes = b""
             attachments_payload.append({
+                "document_id": _doc_id_map.get(att_filename),
                 "filename": att_filename or "",
                 "mime_type": att_mime or "",
                 "content": base64.b64encode(att_bytes).decode("ascii"),
@@ -211,6 +221,7 @@ def fire_mail_send_webhook(email: EmailMessage) -> str | None:
                 f"Mail send webhook: could not encode attachment '{att_filename}': {exc}",
             )
             attachments_payload.append({
+                "document_id": _doc_id_map.get(att_filename),
                 "filename": att_filename or "",
                 "mime_type": att_mime or "",
                 "content": "",
@@ -250,6 +261,7 @@ class EmailAttachment:
     path: Path
     mime_type: str
     friendly_name: str
+    document_id: int | None = None
 
 
 def send_email(
@@ -355,8 +367,13 @@ def send_email(
                 )
 
     # RKC: Fire mail send webhook and return (n_sent, webhook_status) (v1.4.0)
+    # Build filename → document_id map so the webhook payload can include the
+    # Paperless document pk alongside each attachment.
+    doc_id_map: dict[str, int | None] = {
+        att.friendly_name: att.document_id for att in attachments
+    }
     n_sent = email.send()
-    webhook_status = fire_mail_send_webhook(email) if n_sent > 0 else None
+    webhook_status = fire_mail_send_webhook(email, doc_id_map) if n_sent > 0 else None
     return n_sent, webhook_status
     # /end RKC edit
 
