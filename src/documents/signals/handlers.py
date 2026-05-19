@@ -60,6 +60,9 @@ from documents.models import WorkflowTrigger
 from documents.permissions import get_objects_for_user_owner_aware
 from documents.permissions import set_permissions_for_object
 from documents.templating.workflows import parse_w_workflow_placeholders
+# RKC: UndefinedError import for defensive workflow template error handling (v1.2.x)
+from jinja2 import UndefinedError
+# /end RKC edit
 
 if TYPE_CHECKING:
     from documents.classifier import DocumentClassifier
@@ -1218,12 +1221,27 @@ def run_workflows(
                 document=doc_for_template,
             )
 
-        subject = _render_field(action.email.subject)
-        body = _render_field(action.email.body)
-        to_rendered = _render_field(action.email.to)
-        from_rendered = _render_field(action.email.from_address)
-        cc_rendered = _render_field(action.email.cc)
-        bcc_rendered = _render_field(action.email.bcc)
+        # RKC: Catch Jinja2 UndefinedError from workflow email templates to prevent
+        # HTTP 500. This happens when a template references a custom field that is
+        # not yet set at the time the workflow fires — e.g. when a document is
+        # updated before the send-mail pipeline has patched custom fields. (v1.2.x)
+        try:
+            subject = _render_field(action.email.subject)
+            body = _render_field(action.email.body)
+            to_rendered = _render_field(action.email.to)
+            from_rendered = _render_field(action.email.from_address)
+            cc_rendered = _render_field(action.email.cc)
+            bcc_rendered = _render_field(action.email.bcc)
+        except UndefinedError as e:
+            logger.warning(
+                f"Workflow email template references undefined variable for document "
+                f"'{title}' (action id={action.pk}): {e}. "
+                "Email skipped — custom fields referenced in the template may not be "
+                "set yet. The workflow will fire again on the next document update.",
+                extra={"group": logging_group},
+            )
+            return
+        # /end RKC edit
 
         # Parse comma-separated address lists
         to_list = [addr.strip() for addr in to_rendered.split(",") if addr.strip()] if to_rendered else []

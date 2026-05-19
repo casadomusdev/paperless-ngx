@@ -102,7 +102,18 @@ def main():
         _log(f"Missing required configuration: {', '.join(missing)}", error=True)
         sys.exit(1)
 
-    # ── 3. Read document file ──────────────────────────────────────────────────
+    # ── 3. Skip non-OCR document types ────────────────────────────────────────
+    # Email documents (message/rfc822) are archived as PDF by Paperless but do
+    # not benefit from AI OCR. More importantly, skipping here prevents a race
+    # condition: the PATCH triggered by AI OCR would fire document_updated before
+    # the send-mail pipeline has had a chance to set custom fields (Email Subject
+    # etc.) via its own PATCH, causing Jinja2 UndefinedError in workflow templates.
+    doc_mime = os.getenv("DOCUMENT_MIME_TYPE", "").lower().strip()
+    if doc_mime.startswith("message/"):
+        _log(f"Skipping AI OCR for email document (MIME type: {doc_mime})")
+        sys.exit(0)
+
+    # ── 4. Read document file ──────────────────────────────────────────────────
     if not archive_path or not os.path.exists(archive_path):
         _log(
             f"No archive file at '{archive_path}' — skipping AI OCR "
@@ -115,12 +126,12 @@ def main():
 
     _log(f"Read archive file: {len(file_bytes):,} bytes")
 
-    # ── 4. Determine MIME type from extension ──────────────────────────────────
+    # ── 5. Determine MIME type from extension ──────────────────────────────────
     ext = os.path.splitext(archive_path)[1].lower()
     mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
     _log(f"Detected MIME type: {mime}")
 
-    # ── 5. Send to LiteLLM /v1/ocr ────────────────────────────────────────────
+    # ── 6. Send to LiteLLM /v1/ocr ────────────────────────────────────────────
     b64      = base64.b64encode(file_bytes).decode("utf-8")
     data_url = f"data:{mime};base64,{b64}"
 
