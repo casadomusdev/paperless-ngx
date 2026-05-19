@@ -80,6 +80,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 - **Universal SMTP sending** for all account types (OAuth2 XOAUTH2 + traditional)
 - **Microsoft Graph API** for Outlook accounts (bypasses M365 Security Defaults blocking SMTP)
 - **Multi-mailbox** access via delegated permissions using a single OAuth app
+- **App-only send mode** (`PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND`) — Graph API sends via `client_credentials` token, enabling sending from any licensed personal mailbox without per-user Exchange delegation
 - **Connection pooling** via Celery Beat to eliminate OAuth2 authentication storms
 - **Smart correspondent matching** using RFC 5322 format with email-based three-tier matching
 - **Email metadata capture** into custom fields (UID, From, Sender, Subject, Date)
@@ -93,7 +94,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 
 ### Document Processing
 
-**AI OCR via Post-Consumption Script** — Replaces Tesseract OCR output with higher-quality text from an AI OCR provider (Mistral OCR, Azure Document Intelligence, or any LiteLLM-compatible OCR model) without modifying the paperless-ngx source code. Implemented as a `PAPERLESS_POST_CONSUME_SCRIPT` hook — zero changes to paperless-ngx itself. Sends the archived PDF as a base64 data URL to LiteLLM's `/v1/ocr` endpoint (native endpoint, not the Mistral pass-through, so cost tracking works). The `content` field is overwritten via `PATCH /api/documents/{id}/`; the search index auto-updates. Disabled by default via `AI_OCR_ENABLED`.
+**AI OCR via Post-Consumption Script** — Replaces Tesseract OCR output with higher-quality text from an AI OCR provider (Mistral OCR, Azure Document Intelligence, or any LiteLLM-compatible OCR model) without modifying the paperless-ngx source code. Implemented as a `PAPERLESS_POST_CONSUME_SCRIPT` hook — zero changes to paperless-ngx itself. Sends the archived PDF as a base64 data URL to LiteLLM's `/v1/ocr` endpoint (native endpoint, not the Mistral pass-through, so cost tracking works). The `content` field is overwritten via `PATCH /api/documents/{id}/`; the search index auto-updates. Email documents (`message/rfc822`) are skipped entirely — they do not benefit from OCR and skipping prevents a race condition with the send-mail pipeline. Disabled by default via `AI_OCR_ENABLED`.
 → [Details](docs/rkc/ai-ocr.md)
 
 **Duplicate Document Re-Add** — When a duplicate is detected during consumption, the existing document's `added` date is reset so it surfaces in the inbox again. Uses two-tier deduplication: MD5 checksum for binary-identical files (PDFs, images) and Mail UID custom field lookup for EML documents whose byte representation varies across fetches. Supports optional tagging, informational notes with source context (mail metadata or source type), and trashed document handling (restore-readd-optionally-retrash). Disabled by default.
@@ -101,7 +102,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 
 ### Workflow Enhancements
 
-**Dynamic Workflow Email Templates** — Jinja2 templating for all 6 email fields (subject, body, to, from, cc, bcc) with custom field value placeholders. Includes HTML auto-detection, email validation with error tagging, and a fix for the upstream bug where `to` wasn't templated. New model fields: `from_address`, `cc`, `bcc`, `error_tag`.
+**Dynamic Workflow Email Templates** — Jinja2 templating for all 6 email fields (subject, body, to, from, cc, bcc) with custom field value placeholders. Includes HTML auto-detection, email validation with error tagging, and a fix for the upstream bug where `to` wasn't templated. New model fields: `from_address`, `cc`, `bcc`, `error_tag`. Templates referencing custom fields that are not yet set when the workflow fires log a warning and skip the send instead of propagating an HTTP 500.
 → [Details](docs/rkc/workflow-email.md)
 
 ### Custom Field Enhancements
@@ -190,6 +191,8 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `PAPERLESS_MAIL_SENDER_FIELD` | String | `"Mail Sender"` | Mail Sender custom field name |
 | `PAPERLESS_MAIL_SUBJECT_FIELD` | String | `"Mail Subject"` | Mail Subject custom field name |
 | `PAPERLESS_MAIL_DATE_FIELD` | String | `"Mail Date"` | Mail Date custom field name |
+| `PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND` | Bool | `false` | Use app-only (client_credentials) Graph API send mode for personal mailboxes |
+| `PAPERLESS_OUTLOOK_OAUTH_TENANT_ID` | String | — | Azure AD tenant ID required for app-only send mode |
 | `AI_OCR_ENABLED` | Bool | `false` | Enable AI OCR post-consume replacement |
 | `AI_OCR_URL` | String | — | LiteLLM proxy base URL |
 | `AI_OCR_KEY` | String | — | LiteLLM virtual API key |
@@ -217,9 +220,11 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.4.1** — AI OCR skips email documents (`message/rfc822`) to prevent race condition with send-mail pipeline; workflow email action catches `Jinja2 UndefinedError` so templates referencing unresolved custom fields log a warning and skip instead of propagating HTTP 500
 - **v1.4.0** — Mail send webhook: every outgoing email POSTs full JSON payload (all fields + base64 attachments + `document_id` per attachment) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL`; webhook outcome appended as second line of send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1** — Workflow email notes always attributed to a valid user: `document.owner` or the system `consumer` user for ownerless documents, preventing 500 errors on `GET /api/documents/{id}/`
 - **v1.3.0** — Enhanced manual send email dialog: From/CC/BCC fields, custom field pre-fill from document CF values, recipient domain verification and send feedback (tags+notes) now applied to manual sends
+- **v1.2.10** — App-only (client_credentials) Graph API send mode for personal mailboxes: `PAPERLESS_OUTLOOK_OAUTH_USE_APP_SEND` + `PAPERLESS_OUTLOOK_OAUTH_TENANT_ID`; requires `Mail.Send` APPLICATION permission + admin consent
 - **v1.2.9** — Recipient domain verification for workflow emails: DNS MX check (default) with optional SMTP port 25 probe (`dns+smtp`); admin check script at `scripts/check_smtp_port25.py`
 - **v1.2.8** — Mail send feedback: apply success/failure tags and optional system note on every workflow email send attempt
 

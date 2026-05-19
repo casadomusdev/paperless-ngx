@@ -60,7 +60,7 @@ from documents.models import WorkflowTrigger
 from documents.permissions import get_objects_for_user_owner_aware
 from documents.permissions import set_permissions_for_object
 from documents.templating.workflows import parse_w_workflow_placeholders
-# RKC: UndefinedError import for defensive workflow template error handling (v1.2.x)
+# RKC: UndefinedError import for defensive workflow template error handling (v1.4.1)
 from jinja2 import UndefinedError
 # /end RKC edit
 
@@ -1224,7 +1224,7 @@ def run_workflows(
         # RKC: Catch Jinja2 UndefinedError from workflow email templates to prevent
         # HTTP 500. This happens when a template references a custom field that is
         # not yet set at the time the workflow fires — e.g. when a document is
-        # updated before the send-mail pipeline has patched custom fields. (v1.2.x)
+        # updated before the send-mail pipeline has patched custom fields. (v1.4.1)
         try:
             subject = _render_field(action.email.subject)
             body = _render_field(action.email.body)

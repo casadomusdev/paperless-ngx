@@ -12,19 +12,28 @@ Replaces Tesseract OCR output with higher-quality text from an AI OCR provider
 2. **The post-consumption script fires** — paperless-ngx calls
    `PAPERLESS_POST_CONSUME_SCRIPT` once the document is fully indexed.
 
-3. **The script calls the LiteLLM `/v1/ocr` endpoint** — the document's
+3. **The script checks the document MIME type** — email documents
+   (`message/rfc822` and other `message/*` subtypes) are skipped immediately
+   with exit code 0.  They are archived as PDF by Paperless, but AI OCR adds no
+   value for structured email text.  More importantly, skipping prevents a race
+   condition with the send-mail pipeline: if OCR ran on an email document it
+   would PATCH `document_updated` before `patchCustomFields` (e.g., Email
+   Subject) has been set, causing a Jinja2 `UndefinedError` in any workflow
+   email template that references those custom fields.
+
+4. **The script calls the LiteLLM `/v1/ocr` endpoint** — the document's
    archived PDF is base64-encoded and sent as a `data:application/pdf;base64,…`
    data URL in the request body.
 
-4. **LiteLLM routes the request to the configured provider** — Mistral OCR,
+5. **LiteLLM routes the request to the configured provider** — Mistral OCR,
    Azure Document Intelligence, or another provider with OCR capability. Cost
    tracking works via the native `/v1/ocr` endpoint (unlike the pass-through at
    `/mistral/v1/ocr` which bypasses accounting).
 
-5. **The script PATCHes the `content` field** — the AI's markdown text is
+6. **The script PATCHes the `content` field** — the AI's markdown text is
    written to the document via `PATCH /api/documents/{id}/`.
 
-6. **The search index auto-updates** — the `post_save` signal in
+7. **The search index auto-updates** — the `post_save` signal in
    `documents/signals/handlers.py` fires when the API persists the PATCH,
    so full-text search reflects the new content immediately.
 
@@ -190,8 +199,10 @@ bypassed. Always configure via the model list approach above.
   paperless-ngx Python or TypeScript code
 - **No third-party dependencies**: uses only Python stdlib (`base64`, `json`,
   `os`, `sys`, `urllib`)
-- **Graceful failures**: if the archive path is missing (e.g., for a plain text
-  file without an archive PDF), the script exits with code 1 and logs clearly.
+- **Graceful failures**: if the document MIME type starts with `message/`
+  (email documents), the script exits with code 0 and logs the skip reason.
+  If the archive path is missing for any other document type, the script also
+  exits with code 0 and logs clearly (no error; paperless continues normally).
   If the OCR returns empty content, the script exits with code 0 (no-op),
   preserving Tesseract output.
 - **Large file handling**: the script base64-encodes the whole PDF in memory.
@@ -272,6 +283,11 @@ AI OCR: Document 42 updated — 3 page(s), 2847 chars, model: mistral-ocr-latest
 Errors print to stderr and cause an exit code of 1 (paperless logs but continues):
 ```
 AI OCR: OCR request failed — HTTP 429: {"error": "rate limit exceeded"}
-AI OCR: Archive not found at '' (DOCUMENT_ARCHIVE_PATH may be empty for non-PDF documents)
 AI OCR: Missing required configuration: AI_OCR_URL, PAPERLESS_API_TOKEN
+```
+
+Soft skips print to stdout and exit with code 0 (paperless continues silently):
+```
+AI OCR: Skipping AI OCR for email document (MIME type: message/rfc822)
+AI OCR: No archive file at '' — skipping AI OCR (non-PDF/image document, e.g. .eml upload)
 ```

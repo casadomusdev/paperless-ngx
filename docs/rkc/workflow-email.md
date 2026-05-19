@@ -64,6 +64,16 @@ When email validation fails:
 - If no `error_tag` → warning logged, email is skipped
 - Document processing continues regardless
 
+### Undefined Custom Field Protection
+When a Jinja2 template references a custom field that is not set at the time the workflow fires (e.g., the document was just updated but the external pipeline that sets those fields has not yet completed its own PATCH), `_render_field()` raises a `Jinja2 UndefinedError`.
+
+Rather than allowing this to propagate up through `document_updated.send()` and cause an HTTP 500 on the caller's request, `email_action()` catches `UndefinedError` and:
+- Logs a `WARNING` with the document title, action ID, and the exact variable that was undefined
+- Returns early — the email is skipped for this update event
+- The workflow will re-fire on the next `document_updated` signal (e.g., when the pipeline's own PATCH lands), at which point the custom field will be set and the email will send normally
+
+This protection is implemented in `src/documents/signals/handlers.py` as an `except UndefinedError` block around all six `_render_field()` calls in `email_action()`.
+
 ## Use Cases
 
 - **Invoice forwarding**: Upload document with custom fields "Mail To" and "Mail Subject", workflow sends email automatically
@@ -89,4 +99,5 @@ When email validation fails:
 
 ## Version History
 
+- **v1.4.1**: Undefined custom field protection — `UndefinedError` caught in `email_action()` so templates referencing unset fields log a warning and skip rather than propagating HTTP 500
 - **v1.2.0**: Initial implementation with Jinja2 templating for all 6 fields, HTML auto-detection, validation, error tagging
