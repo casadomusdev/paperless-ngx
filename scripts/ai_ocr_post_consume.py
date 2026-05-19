@@ -105,11 +105,10 @@ def main():
     # ── 3. Read document file ──────────────────────────────────────────────────
     if not archive_path or not os.path.exists(archive_path):
         _log(
-            f"Archive not found at '{archive_path}' "
-            f"(DOCUMENT_ARCHIVE_PATH may be empty for non-PDF documents)",
-            error=True,
+            f"No archive file at '{archive_path}' — skipping AI OCR "
+            f"(non-PDF/image document, e.g. .eml upload)"
         )
-        sys.exit(1)
+        sys.exit(0)
 
     with open(archive_path, "rb") as fh:
         file_bytes = fh.read()
