@@ -527,6 +527,10 @@ SOCIALACCOUNT_AUTO_SIGNUP = __get_boolean("PAPERLESS_SOCIAL_AUTO_SIGNUP")
 SOCIALACCOUNT_PROVIDERS = json.loads(
     os.getenv("PAPERLESS_SOCIALACCOUNT_PROVIDERS", "{}"),
 )
+# RKC: Allow GET requests to directly initiate OIDC/social login without the allauth "Continue"
+# confirmation page — enables one-click SSO from external launchpads and portals
+SOCIALACCOUNT_LOGIN_ON_GET = __get_boolean("PAPERLESS_SOCIALACCOUNT_LOGIN_ON_GET", "true")
+# /end RKC edit
 SOCIAL_ACCOUNT_DEFAULT_GROUPS = __get_list("PAPERLESS_SOCIAL_ACCOUNT_DEFAULT_GROUPS")
 SOCIAL_ACCOUNT_SYNC_GROUPS = __get_boolean("PAPERLESS_SOCIAL_ACCOUNT_SYNC_GROUPS")
 

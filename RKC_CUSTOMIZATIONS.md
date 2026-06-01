@@ -185,6 +185,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `PAPERLESS_SAVED_VIEWS_WARN_ON_UNSAVED_CHANGE_DEFAULT` | Bool | `true` | Unsaved changes warning |
 | `PAPERLESS_SHOW_CUSTOM_FIELD_NAMES_IN_CARDS` | Bool | `false` | Field names in card views |
 | `PAPERLESS_DEBUG_SSO` | Bool | `false` | SSO debug logging |
+| `PAPERLESS_SOCIALACCOUNT_LOGIN_ON_GET` | Bool | `true` | Allow GET to initiate OIDC login directly (skip allauth "Continue" page) |
 | `PAPERLESS_MAIL_CORRESPONDENT_MATCHING_ALGORITHM` | Int | `6` | Mail correspondent matching |
 | `PAPERLESS_MAIL_UID_FIELD` | String | `"Mail UID"` | Mail UID custom field name |
 | `PAPERLESS_MAIL_FROM_FIELD` | String | `"Mail From"` | Mail From custom field name |
@@ -220,6 +221,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.4.2** — `SOCIALACCOUNT_LOGIN_ON_GET = True` (env: `PAPERLESS_SOCIALACCOUNT_LOGIN_ON_GET`, default `true`) — GET requests directly initiate OIDC login without the allauth confirmation page, enabling one-click SSO from external launchpads
 - **v1.4.1** — AI OCR skips email documents (`message/rfc822`) to prevent race condition with send-mail pipeline; workflow email action catches `Jinja2 UndefinedError` so templates referencing unresolved custom fields log a warning and skip instead of propagating HTTP 500
 - **v1.4.0** — Mail send webhook: every outgoing email POSTs full JSON payload (all fields + base64 attachments + `document_id` per attachment) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL`; webhook outcome appended as second line of send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1** — Workflow email notes always attributed to a valid user: `document.owner` or the system `consumer` user for ownerless documents, preventing 500 errors on `GET /api/documents/{id}/`
