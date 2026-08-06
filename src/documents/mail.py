@@ -264,6 +264,51 @@ class EmailAttachment:
     document_id: int | None = None
 
 
+def _build_email_message(
+    subject: str,
+    body: str,
+    to: list[str],
+    attachments: list[EmailAttachment],
+    from_email: str | None,
+    cc: list[str] | None,
+    bcc: list[str] | None,
+    is_html: bool,
+) -> EmailMessage:
+    """Build a Django EmailMessage with attachments from the given parameters."""
+    mail_account = get_sending_mail_account()
+
+    if mail_account:
+        logger.debug(f"Using mail account '{mail_account.name}' for sending email")
+        sender = from_email if from_email else get_from_address(mail_account)
+        email = EmailMessage(
+            subject=subject, body=body, from_email=sender,
+            to=to, cc=cc or [], bcc=bcc or [],
+        )
+        email.connection = MailAccountEmailBackend(mail_account)
+    else:
+        logger.debug("Using environment variable SMTP configuration for sending email")
+        email = EmailMessage(
+            subject=subject, body=body, from_email=from_email,
+            to=to, cc=cc or [], bcc=bcc or [],
+        )
+
+    if is_html:
+        email.content_subtype = "html"
+
+    used_filenames: set[str] = set()
+    with FileLock(settings.MEDIA_LOCK):
+        for attachment in attachments:
+            filename = _get_unique_filename(attachment.friendly_name, used_filenames)
+            used_filenames.add(filename)
+            with attachment.path.open("rb") as f:
+                content = f.read()
+                if attachment.mime_type == "message/rfc822":
+                    content = message_from_bytes(content)
+                email.attach(filename=filename, content=content, mimetype=attachment.mime_type)
+
+    return email
+
+
 def send_email(
     subject: str,
     body: str,
@@ -274,18 +319,16 @@ def send_email(
     cc: list[str] | None = None,
     bcc: list[str] | None = None,
     is_html: bool = False,
+    retries: int = 2,
 ) -> tuple[int, str | None]:
     """
     Send an email with attachments.
 
     RKC: Enhanced to support mail account SMTP authentication (v1.1.0).
-    Supports both OAuth2 XOAUTH2 and traditional password authentication.
-    Falls back to regular SMTP if no mail account is configured.
-
     RKC: Added from_email, cc, bcc, is_html parameters (v1.2.0).
-    - from_email: Override sender address (priority over mail account default)
-    - cc/bcc: Carbon copy / blind carbon copy recipients
-    - is_html: Set content_subtype to 'html' for HTML email bodies
+    RKC: Inline retry with exponential backoff for transient failures (v1.5.0).
+         On each retry a fresh EmailMessage is built (re-reads attachments from
+         disk) because Django's SMTP backend consumes file handles on send.
 
     Args:
         subject: Email subject
@@ -296,86 +339,45 @@ def send_email(
         cc: Optional list of CC email addresses
         bcc: Optional list of BCC email addresses
         is_html: Whether the body contains HTML content
+        retries: Number of immediate retry attempts (default 2; total 3 tries)
 
     Returns:
         tuple[int, str | None] — (n_sent, webhook_status)
-            n_sent: number of emails actually sent (0 or 1)
-            webhook_status: short status string from fire_mail_send_webhook(), or None
-                            if no webhook is configured or the email was not sent
-
-    TODO: re-evaluate this pending https://code.djangoproject.com/ticket/35581 / https://github.com/django/django/pull/18966
     """
-    # RKC: Check for configured sending account (v1.1.0)
-    mail_account = get_sending_mail_account()
-    
-    if mail_account:
-        # Use mail account backend (supports both OAuth2 and traditional SMTP)
-        logger.debug(f"Using mail account '{mail_account.name}' for sending email")
-        # RKC: from_email priority chain (v1.2.0): explicit param → mail account default
-        sender = from_email if from_email else get_from_address(mail_account)
-        
-        email = EmailMessage(
-            subject=subject,
-            body=body,
-            from_email=sender,
-            to=to,
-            cc=cc or [],
-            bcc=bcc or [],
-        )
-        
-        # Set the mail account backend
-        email.connection = MailAccountEmailBackend(mail_account)
-    else:
-        # Use regular SMTP from environment variables (original behavior)
-        logger.debug("Using environment variable SMTP configuration for sending email")
-        email = EmailMessage(
-            subject=subject,
-            body=body,
-            from_email=from_email,
-            to=to,
-            cc=cc or [],
-            bcc=bcc or [],
-        )
-    # /end RKC edit
+    import time as _time
 
-    # RKC: HTML auto-detection support (v1.2.0)
-    if is_html:
-        email.content_subtype = "html"
-    # /end RKC edit
-
-    used_filenames: set[str] = set()
-
-    # Something could be renaming the file concurrently so it can't be attached
-    with FileLock(settings.MEDIA_LOCK):
-        for attachment in attachments:
-            filename = _get_unique_filename(
-                attachment.friendly_name,
-                used_filenames,
-            )
-            used_filenames.add(filename)
-
-            with attachment.path.open("rb") as f:
-                content = f.read()
-                if attachment.mime_type == "message/rfc822":
-                    # See https://forum.djangoproject.com/t/using-emailmessage-with-an-attached-email-file-crashes-due-to-non-ascii/37981
-                    content = message_from_bytes(content)
-
-                email.attach(
-                    filename=filename,
-                    content=content,
-                    mimetype=attachment.mime_type,
-                )
-
-    # RKC: Fire mail send webhook and return (n_sent, webhook_status) (v1.4.0)
-    # Build filename → document_id map so the webhook payload can include the
-    # Paperless document pk alongside each attachment.
     doc_id_map: dict[str, int | None] = {
         att.friendly_name: att.document_id for att in attachments
     }
-    n_sent = email.send()
-    webhook_status = fire_mail_send_webhook(email, doc_id_map) if n_sent > 0 else None
-    return n_sent, webhook_status
-    # /end RKC edit
+
+    last_error: Exception | None = None
+    for attempt in range(1 + retries):
+        try:
+            email = _build_email_message(
+                subject, body, to, attachments,
+                from_email, cc, bcc, is_html,
+            )
+            n_sent = email.send()
+            webhook_status = (
+                fire_mail_send_webhook(email, doc_id_map) if n_sent > 0 else None
+            )
+            return n_sent, webhook_status
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries:
+                delay = 2 ** (attempt + 1)  # 2s, 4s
+                logger.warning(
+                    f"send_email attempt {attempt + 1}/{1 + retries} failed: {exc}. "
+                    f"Retrying in {delay}s..."
+                )
+                _time.sleep(delay)
+            else:
+                logger.error(
+                    f"send_email failed after {1 + retries} attempts: {exc}"
+                )
+    # All retries exhausted — raise the last error so callers can handle it
+    raise last_error  # type: ignore[misc]
+# /end RKC edit
 
 
 def _get_unique_filename(friendly_name: str, used_names: set[str]) -> str:

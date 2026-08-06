@@ -29,6 +29,9 @@ export enum PermissionType {
   CustomField = '%s_customfield',
   Workflow = '%s_workflow',
   ProcessedMail = '%s_processedmail',
+  // RKC: Pending email queue permission (v1.5.0)
+  PendingEmail = '%s_pendingemail',
+  // /end RKC edit
 }
 
 @Injectable({

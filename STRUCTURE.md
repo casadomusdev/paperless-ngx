@@ -39,8 +39,10 @@ paperless-ngx/
 │   ├── documents/                  # Document management app
 │   │   ├── views.py                # RKC: PDF editor, saved views, UI settings
 │   │   ├── consumer.py             # RKC: duplicate re-add, mail metadata
-│   │   ├── models.py               # RKC: workflow email fields
-│   │   ├── mail.py                 # RKC: unified email sending
+│   │   ├── models.py               # RKC: workflow email fields, PendingEmail model
+│   │   ├── mail.py                 # RKC: unified email sending with inline retry
+│   │   ├── email_queue.py          # RKC: email send queue processing with retry (NEW)
+│   │   ├── email_queue_api.py      # RKC: PendingEmail REST API (NEW)
 │   │   ├── serialisers.py          # RKC: workflow email serializers
 │   │   ├── signals/handlers.py     # RKC: SSO, webhooks, email action
 │   │   ├── data_models.py          # RKC: ConsumableDocument metadata fields
@@ -72,7 +74,7 @@ paperless-ngx/
 │   │           ├── dashboard/       # RKC: global views, race condition fix
 │   │           ├── app-frame/       # RKC: sidebar global views
 │   │           ├── manage/
-│   │           │   ├── mail/        # RKC: processed mail UI, sending badges
+│   │           │   ├── mail/        # RKC: processed mail UI, sending badges, email queue dialog
 │   │           │   └── saved-views/ # RKC: global views management
 │   │           ├── admin/settings/  # RKC: date+time format options
 │   │           └── common/

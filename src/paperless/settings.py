@@ -186,6 +186,19 @@ def _parse_beat_schedule() -> dict:
                 "expires": 9.0 * 60.0,
             },
         },
+        # RKC: Process pending email send queue (v1.5.0)
+        {
+            "name": "Process pending email send queue",
+            "env_key": "PAPERLESS_MAIL_QUEUE_CRON",
+            # Default every five minutes (more responsive than mail retrieval)
+            "env_default": "*/5 * * * *",
+            "task": "documents.email_queue.process_pending_emails",
+            "options": {
+                # 1 minute before default schedule sends again
+                "expires": 4.0 * 60.0,
+            },
+        },
+        # /end RKC edit
         {
             "name": "Train the classifier",
             "env_key": "PAPERLESS_TRAIN_TASK_CRON",
@@ -1604,5 +1617,12 @@ MAIL_SEND_WEBHOOK_TOKEN = os.getenv("PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN", "")
 MAIL_SEND_WEBHOOK_TOKEN_HEADER = os.getenv(
     "PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER", "Authorization"
 )
+# /end RKC edit
+
+# RKC: Email send queue retry configuration (v1.5.0)
+# Controls how failed outgoing emails are retried via the PendingEmail queue.
+MAIL_RETRY_MAX_ATTEMPTS = int(os.getenv("PAPERLESS_MAIL_RETRY_MAX_ATTEMPTS", "50"))
+MAIL_RETRY_BASE_SECONDS = int(os.getenv("PAPERLESS_MAIL_RETRY_BASE_SECONDS", "300"))
+MAIL_RETRY_MAX_SECONDS = int(os.getenv("PAPERLESS_MAIL_RETRY_MAX_SECONDS", "86400"))
 # /end RKC edit
 

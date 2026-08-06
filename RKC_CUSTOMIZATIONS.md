@@ -89,6 +89,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 - **Processed mail UI** with server-side filtering, error modals, Mail UID column, select-all-in-database, pagination fix
 - **Correspondent matching algorithm** consistency between mail-created and UI-created correspondents
 - **Mail send webhook** — every outgoing email (workflow and manual) POSTs a full JSON payload (all fields + base64 attachments) to a configurable endpoint; outcome appended as a second line in the send note
+- **Email send queue with retry** (`PendingEmail`) — failed outgoing emails are queued and retried with exponential backoff (5min→24h, up to 50 attempts over ~5 days); templates re-rendered with fresh document context on each retry; inline retry (2s/4s) catches transient blips before queueing; admin UI dialog on Mail Settings page for viewing/managing the queue
 
 → [Details](docs/rkc/mail-system.md) | [MS365 OAuth Setup](MS365_OAUTH_SETUP.md)
 
@@ -215,12 +216,17 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `PAPERLESS_MAIL_SEND_WEBHOOK_URL` | String | `""` | URL to POST full email payload to after every successful send |
 | `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN` | String | `""` | Token value sent in the webhook auth header |
 | `PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER` | String | `"Authorization"` | HTTP header name used to carry the webhook token |
+| `PAPERLESS_MAIL_RETRY_MAX_ATTEMPTS` | Int | `50` | Maximum retry attempts before abandoning a queued email |
+| `PAPERLESS_MAIL_RETRY_BASE_SECONDS` | Int | `300` | Base retry interval in seconds (5 minutes) |
+| `PAPERLESS_MAIL_RETRY_MAX_SECONDS` | Int | `86400` | Maximum retry interval cap in seconds (24 hours) |
+| `PAPERLESS_MAIL_QUEUE_CRON` | Cron | `*/5 * * * *` | How often the pending email queue is checked (default every 5 min) |
 
 
 ---
 
 ## Version History
 
+- **v1.5.0** — Email send queue with retry: failed outgoing emails (workflow and manual) are queued as `PendingEmail` entries and retried with exponential backoff (5min→24h cap, up to50 attempts over~5 days). Templates are re-rendered with fresh document context on each retry. Includes admin UI dialog on the Mail Settings page for viewing/managing the queue. Inline retry (2s/4s) in `send_email()` catches transient blips before queueing. New env vars: `PAPERLESS_MAIL_RETRY_MAX_ATTEMPTS`, `PAPERLESS_MAIL_RETRY_BASE_SECONDS`, `PAPERLESS_MAIL_RETRY_MAX_SECONDS`, `PAPERLESS_MAIL_QUEUE_CRON`
 - **v1.4.2** — `SOCIALACCOUNT_LOGIN_ON_GET = True` (env: `PAPERLESS_SOCIALACCOUNT_LOGIN_ON_GET`, default `true`) — GET requests directly initiate OIDC login without the allauth confirmation page, enabling one-click SSO from external launchpads
 - **v1.4.1** — AI OCR skips email documents (`message/rfc822`) to prevent race condition with send-mail pipeline; workflow email action catches `Jinja2 UndefinedError` so templates referencing unresolved custom fields log a warning and skip instead of propagating HTTP 500
 - **v1.4.0** — Mail send webhook: every outgoing email POSTs full JSON payload (all fields + base64 attachments + `document_id` per attachment) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL`; webhook outcome appended as second line of send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled

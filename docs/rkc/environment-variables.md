@@ -34,6 +34,10 @@ Complete reference of all environment variables introduced by RKC customizations
 | `PAPERLESS_MAIL_SENDER_FIELD` | String | `"Mail Sender"` | Custom field name for sender display name | [Mail System](mail-system.md) |
 | `PAPERLESS_MAIL_SUBJECT_FIELD` | String | `"Mail Subject"` | Custom field name for email subject | [Mail System](mail-system.md) |
 | `PAPERLESS_MAIL_DATE_FIELD` | String | `"Mail Date"` | Custom field name for received date | [Mail System](mail-system.md) |
+| `PAPERLESS_MAIL_RETRY_MAX_ATTEMPTS` | Integer | `50` | Maximum retry attempts before abandoning a queued email | [Mail System](mail-system.md#16-email-send-queue-with-retry-v150) |
+| `PAPERLESS_MAIL_RETRY_BASE_SECONDS` | Integer | `300` | Base retry interval in seconds (5 minutes) | [Mail System](mail-system.md#16-email-send-queue-with-retry-v150) |
+| `PAPERLESS_MAIL_RETRY_MAX_SECONDS` | Integer | `86400` | Maximum retry interval cap in seconds (24 hours) | [Mail System](mail-system.md#16-email-send-queue-with-retry-v150) |
+| `PAPERLESS_MAIL_QUEUE_CRON` | Cron | `*/5 * * * *` | How often the pending email queue is checked (set to `disable` to turn off) | [Mail System](mail-system.md#16-email-send-queue-with-retry-v150) |
 
 ## AI OCR
 

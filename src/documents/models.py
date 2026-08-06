@@ -1628,3 +1628,87 @@ class WorkflowRun(SoftDeleteModel):
 
     def __str__(self):
         return f"WorkflowRun of {self.workflow} at {self.run_at} on {self.document}"
+
+
+# RKC: PendingEmail model for email send queue with retry (v1.5.0)
+# Stores failed outgoing emails for automatic retry with exponential backoff.
+# Processing logic lives in documents/email_queue.py.
+class PendingEmailManager(models.Manager):
+    def pending(self):
+        """Return PendingEmails that are due for a retry attempt right now."""
+        return self.filter(
+            status="PENDING",
+            next_retry_at__lte=timezone.now(),
+        )
+
+
+class PendingEmail(models.Model):
+    STATUS_PENDING = "PENDING"
+    STATUS_SENDING = "SENDING"
+    STATUS_SENT = "SENT"
+    STATUS_ABANDONED = "ABANDONED"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, _("Pending")),
+        (STATUS_SENDING, _("Sending")),
+        (STATUS_SENT, _("Sent")),
+        (STATUS_ABANDONED, _("Abandoned")),
+    ]
+
+    action = models.ForeignKey(
+        WorkflowActionEmail,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name=_("workflow action"),
+    )
+    document = models.ForeignKey(
+        Document,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name=_("document"),
+    )
+
+    subject_template = models.TextField(_("email subject"), default="")
+    body_template = models.TextField(_("email body"), default="")
+    to_template = models.TextField(_("email to"), default="")
+    from_template = models.TextField(_("email from"), blank=True, default="")
+    cc_template = models.TextField(_("email cc"), blank=True, default="")
+    bcc_template = models.TextField(_("email bcc"), blank=True, default="")
+    is_html = models.BooleanField(_("is HTML"), default=False)
+    include_document = models.BooleanField(_("include document"), default=True)
+    rendered_to = models.TextField(_("rendered to"), default="")
+
+    attempts = models.PositiveIntegerField(_("attempts"), default=0)
+    max_attempts = models.PositiveIntegerField(_("max attempts"), default=50)
+    next_retry_at = models.DateTimeField(_("next retry at"))
+    last_error = models.TextField(_("last error"), blank=True, default="")
+
+    status = models.CharField(
+        _("status"), max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING,
+    )
+
+    created_at = models.DateTimeField(_("created at"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("updated at"), auto_now=True)
+
+    objects = PendingEmailManager()
+
+    class Meta:
+        ordering = ["next_retry_at"]
+        verbose_name = _("pending email")
+        verbose_name_plural = _("pending emails")
+        indexes = [
+            models.Index(
+                fields=["status", "next_retry_at"],
+                name="idx_pending_email_status_retry",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"PendingEmail({self.pk}) to={self.rendered_to!r} "
+            f"status={self.status} attempts={self.attempts}"
+        )
+# /end RKC edit

@@ -1393,6 +1393,22 @@ def run_workflows(
                 f"Error occurred sending notification email: {e}",
                 extra={"group": logging_group},
             )
+            # RKC: Queue failed email for automatic retry (v1.5.0)
+            if not use_overrides and isinstance(document, Document):
+                try:
+                    from documents.email_queue import enqueue_failed_email
+                    enqueue_failed_email(
+                        action=action,
+                        document=document,
+                        rendered_to=to_rendered,
+                        error_msg=str(e),
+                    )
+                except Exception as qe:
+                    logger.error(
+                        f"Failed to queue email for retry: {qe}",
+                        extra={"group": logging_group},
+                    )
+            # /end RKC edit
 
         # Apply send-feedback tags and optional note when we have a real Document (not pre-consumption)
         # Tags are mutated in doc_tag_ids (the enclosing-scope list) so that the outer

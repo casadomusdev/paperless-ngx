@@ -32,6 +32,9 @@ import { PageHeaderComponent } from '../../common/page-header/page-header.compon
 import { PermissionsDialogComponent } from '../../common/permissions-dialog/permissions-dialog.component'
 import { ComponentWithPermissions } from '../../with-permissions/with-permissions.component'
 import { ProcessedMailDialogComponent } from './processed-mail-dialog/processed-mail-dialog.component'
+// RKC: Email queue dialog component (v1.5.0)
+import { PendingEmailDialogComponent } from './pending-email-dialog/pending-email-dialog.component'
+// /end RKC edit
 
 @Component({
   selector: 'pngx-mail',
@@ -381,6 +384,15 @@ export class MailComponent
     })
     modal.componentInstance.rule = rule
   }
+
+  // RKC: Open email queue dialog (v1.5.0)
+  viewPendingEmails() {
+    this.modalService.open(PendingEmailDialogComponent, {
+      backdrop: 'static',
+      size: 'xl',
+    })
+  }
+  // /end RKC edit
 
   userCanEdit(obj: ObjectWithPermissions): boolean {
     return this.permissionsService.currentUserHasObjectPermissions(

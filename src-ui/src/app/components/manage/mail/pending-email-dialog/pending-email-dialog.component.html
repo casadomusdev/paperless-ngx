@@ -1,0 +1,155 @@
+<div class="modal-header">
+  <h6 class="modal-title" id="modal-basic-title" i18n>Email Send Queue</h6>
+  <button type="button" class="btn-close" aria-label="Close" (click)="close()"></button>
+</div>
+<div class="modal-body">
+  @if (loading) {
+    <div class="text-center my-5">
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden" i18n>Loading...</span>
+      </div>
+    </div>
+  } @else {
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="text-muted" style="width: 50%; padding-right: 1rem;">
+        @if (filterText?.length) {
+          <ng-container i18n>{collectionSize, plural, =1 {One entry matches filter} other {{{collectionSize}} entries match filter}}</ng-container>
+          <ng-container i18n>&nbsp;(of {totalUnfilteredCount, plural, =1 {1 total} other {{{totalUnfilteredCount}} total}})</ng-container>
+        } @else {
+          <ng-container i18n>{collectionSize, plural, =1 {One pending email} other {{{collectionSize}} pending emails}}</ng-container>
+        }
+      </div>
+      <div class="input-group input-group-sm flex-fill w-auto flex-nowrap" style="width: 50%; padding-left: 1rem;">
+        <span class="input-group-text text-muted" i18n>Filter by</span>
+        <div ngbDropdown>
+          <button type="button" class="btn btn-sm btn-outline-primary" style="border-radius: 0;" ngbDropdownToggle>{{filterTargetName}}</button>
+          <div class="dropdown-menu shadow" ngbDropdownMenu>
+            @for (target of filterTargets; track target.id) {
+              <button type="button" ngbDropdownItem [class.active]="filterTargetID === target.id" (click)="filterTargetID = target.id">{{target.name}}</button>
+            }
+          </div>
+        </div>
+        @if (filterText?.length) {
+          <button type="button" class="btn btn-link btn-sm px-2 position-absolute top-0 end-0 z-10" (click)="resetFilter()">
+            <i-bs width="1em" height="1em" name="x"></i-bs>
+          </button>
+        }
+        <input #filterInput class="form-control form-control-sm" type="text"
+          (keyup)="filterInputKeyup($event)"
+          [(ngModel)]="filterText">
+      </div>
+    </div>
+
+    @if (selectedIds.size > 0 && !selectAllInDatabase) {
+      <div class="alert alert-info py-2 mb-3">
+        <strong>{{selectedIds.size}}</strong>&nbsp;<ng-container i18n>items selected.</ng-container>
+      </div>
+    }
+    @if (selectAllInDatabase) {
+      <div class="alert alert-primary py-2 mb-3">
+        <ng-container i18n>All</ng-container>&nbsp;<strong>{{collectionSize}}</strong>&nbsp;<ng-container i18n>items are selected</ng-container>.
+        <a href="javascript:void(0)" (click)="clearSelection()" class="alert-link ms-2" i18n>Clear selection</a>
+      </div>
+    }
+    @if (pendingEmails.length === 0 && !filterText?.length) {
+      <div class="alert alert-success" i18n>No pending emails in queue.</div>
+    } @else if (pendingEmails.length === 0 && filterText?.length) {
+      <div class="alert alert-warning" i18n>No entries match the current filter.</div>
+    }
+
+    @if (pendingEmails.length > 0) {
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle">
+        <thead>
+          <tr>
+            <th scope="col" style="width: 40px;">
+              <div class="form-check m-0 ms-2 me-n2">
+                <input type="checkbox" class="form-check-input" id="all-objects" [(ngModel)]="toggleAllEnabled" [disabled]="pendingEmails.length === 0" (click)="toggleAll(); .stopPropagation();">
+                <label class="form-check-label" for="all-objects"></label>
+              </div>
+            </th>
+            <th scope="col" i18n>Subject</th>
+            <th scope="col" i18n>Recipients</th>
+            <th scope="col" i18n>Status</th>
+            <th scope="col" i18n>Attempts</th>
+            <th scope="col" i18n>Next Retry</th>
+            <th scope="col" i18n>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (pe of pendingEmails; track pe.id) {
+            <tr>
+              <td>
+                <div class="form-check m-0 ms-2 me-n2">
+                  <input type="checkbox" class="form-check-input" [id]="pe.id" [checked]="selectedIds.has(pe.id)" (click)="toggleSelected(pe); .stopPropagation();">
+                  <label class="form-check-label" [for]="pe.id"></label>
+                </div>
+              </td>
+              <td>{{ pe.subject_template || '(no subject)' }}</td>
+              <td>{{ pe.rendered_to }}</td>
+              <td>
+                @switch (pe.status) {
+                  @case ('PENDING') {
+                    <span class="badge bg-warning text-dark">PENDING</span>
+                  }
+                  @case ('SENDING') {
+                    <span class="badge bg-info">SENDING</span>
+                  }
+                  @case ('ABANDONED') {
+                    <span class="badge bg-danger">ABANDONED</span>
+                  }
+                  @default {
+                    <span class="badge bg-secondary">{{ pe.status }}</span>
+                  }
+                }
+              </td>
+              <td>{{ pe.attempts }} / {{ pe.max_attempts }}</td>
+              <td>{{ pe.next_retry_at | customDate:'short' }}</td>
+              <td>
+                @if (pe.last_error) {
+                  <ng-template #errorPopover>
+                    <pre class="small">{{ pe.last_error }}</pre>
+                  </ng-template>
+                  <span
+                    class="text-danger"
+                    style="cursor: pointer; text-decoration: underline dotted;"
+                    triggers="mouseenter:mouseleave"
+                    [ngbPopover]="errorPopover">
+                    {{ pe.last_error | slice:0:30 }}
+                  </span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    }
+
+    <div class="btn-toolbar">
+      <button type="button" class="btn btn-outline-secondary me-2" (click)="clearSelection()" [disabled]="selectedCount === 0">
+        <ng-container i18n>Clear</ng-container>
+        @if (selectedCount > 0) {
+          <span class="badge bg-secondary ms-1">{{selectedCount}}</span>
+        }
+      </button>
+      <button type="button" class="btn btn-outline-danger me-2" (click)="deleteSelected()" [disabled]="selectedCount === 0">
+        <i-bs name="trash" width="1em" height="1em"></i-bs>
+        @if (selectedCount > 0) {
+          <ng-container i18n>Delete</ng-container> <span class="badge bg-danger ms-1">{{selectedCount}}</span>
+        } @else {
+          <ng-container i18n>Delete selected</ng-container>
+        }
+      </button>
+      <div class="ms-auto">
+        <ngb-pagination
+          [collectionSize]="collectionSize"
+          [(page)]="page"
+          [pageSize]="50"
+          [maxSize]="5"
+          (pageChange)="loadPendingEmails()">
+        </ngb-pagination>
+      </div>
+    </div>
+  }
+</div>

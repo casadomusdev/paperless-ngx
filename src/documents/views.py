@@ -1296,6 +1296,7 @@ class DocumentViewSet(
         except Exception as e:
             # RKC: Apply send failure feedback — tags + note (v1.3.0)
             logger.warning(f"An error occurred emailing documents: {e!s}")
+            to_str = ", ".join(addresses)
             for doc in documents:
                 if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
                     doc.tags.add(settings.MAIL_SEND_FAILURE_TAG_ID)
@@ -1303,11 +1304,26 @@ class DocumentViewSet(
                     doc.tags.remove(settings.MAIL_SEND_SUCCESS_TAG_ID)
                 if settings.MAIL_SEND_ADD_NOTE:
                     from documents.mail import create_mail_send_note
-                    create_mail_send_note(doc, ", ".join(addresses), False, str(e), user=request.user)
+                    create_mail_send_note(doc, to_str, False, str(e), user=request.user)
+                # RKC: Queue failed manual send for automatic retry (v1.5.0)
+                try:
+                    from documents.email_queue import enqueue_failed_email
+                    enqueue_failed_email(
+                        action=None,
+                        document=doc,
+                        rendered_to=to_str,
+                        error_msg=str(e),
+                    )
+                except Exception as qe:
+                    logger.error(f"Failed to queue manual email for retry: {qe}")
+                # /end RKC edit
             # /end RKC edit
-            return HttpResponseServerError(
-                "Error emailing documents, check logs for more detail.",
+            # RKC: Return 202 instead of 500 — email is queued for retry (v1.5.0)
+            return Response(
+                {"message": "Email send failed, queued for retry"},
+                status=status.HTTP_202_ACCEPTED,
             )
+            # /end RKC edit
 
 
 @extend_schema_view(

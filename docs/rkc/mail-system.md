@@ -233,9 +233,15 @@ Changed "No rules enabled for account..." to clarify that send-only accounts don
 - `src/paperless_mail/filters.py` — Server-side filtering for processed mail
 - `src/paperless_mail/views.py` — Enhanced bulk_delete
 - `src/paperless_mail/tasks.py` — Enhanced log messaging
-- `src/documents/mail.py` — Unified email sending backend integration
+- `src/documents/mail.py` — Unified email sending backend integration, inline retry with `_build_email_message()` helper
 - `src/documents/data_models.py` — ConsumableDocument metadata fields
 - `src/documents/consumer.py` — Mail metadata custom field attachment
+- `src/documents/models.py` — `PendingEmail` model with `PendingEmailManager` (v1.5.0)
+- `src/documents/email_queue.py` — Email send queue processing: `enqueue_failed_email()`, `process_pending_emails()`, re-render/retry/abandon (v1.5.0, NEW)
+- `src/documents/email_queue_api.py` — `PendingEmailSerializer`, `PendingEmailFilterSet`, `PendingEmailViewSet` (v1.5.0, NEW)
+- `src/documents/migrations/1076_pendingemail.py` — PendingEmail model migration (v1.5.0)
+- `src/documents/signals/handlers.py` — `email_action()` queues failed emails via `enqueue_failed_email()` (v1.5.0)
+- `src/documents/views.py` — `email_documents()` queues failed sends, returns 202 (v1.5.0)
 
 ### Backend — Graph API
 - `src/paperless_mail/mail_graph.py` — Graph API sending backend (NEW)
@@ -257,6 +263,12 @@ Changed "No rules enabled for account..." to clarify that send-only accounts don
 - `src-ui/src/app/services/rest/processed-mail.service.ts` — bulk_delete_filtered
 - `src-ui/src/styles.scss` — Tooltip dark mode fix
 - `src-ui/src/app/components/common/edit-dialog/correspondent-edit-dialog/` — Settings-based matching default
+- `src-ui/src/app/data/pending-email.ts` — `PendingEmail` TypeScript interface (v1.5.0, NEW)
+- `src-ui/src/app/services/rest/pending-email.service.ts` — `PendingEmailService` with `bulk_delete` / `bulk_delete_filtered` (v1.5.0, NEW)
+- `src-ui/src/app/components/manage/mail/pending-email-dialog/` — Email queue dialog component (ts + html + scss) (v1.5.0, NEW)
+- `src-ui/src/app/components/manage/mail/mail.component.ts` — `viewPendingEmails()` method (v1.5.0)
+- `src-ui/src/app/components/manage/mail/mail.component.html` — "Email Queue" button (v1.5.0)
+- `src-ui/src/app/services/permissions.service.ts` — `PendingEmail` added to `PermissionType` enum (v1.5.0)
 
 ### Documentation
 - `MS365_OAUTH_SETUP.md` — Microsoft 365 OAuth setup guide
@@ -603,8 +615,112 @@ PAPERLESS_MAIL_SEND_WEBHOOK_TOKEN_HEADER=X-Api-Key
 
 ---
 
+## 16. Email Send Queue with Retry (v1.5.0)
+
+### Problem Addressed
+
+Transient failures (OAuth token refresh errors, Graph API timeouts, network blips) caused outgoing emails to fail permanently with no retry. A single transient failure meant the email was lost — recorded as a failure note on the document and never retried.
+
+### Solution
+
+A persistent email queue (`PendingEmail` model) catches send failures and retries them with exponential backoff. The system has two layers of resilience:
+
+1. **Inline retry** in `send_email()`: 2 immediate retries with 2s/4s backoff for the most transient blips (token refresh race conditions, momentary network hiccups)
+2. **Persistent queue** via `PendingEmail`: if inline retries fail, the email is captured with its full template context and retried by a Celery Beat task every 5 minutes
+
+### Behaviour
+
+**Workflow emails** (`email_action()`):
+- Immediate send attempt with inline retries
+- On failure: `PendingEmail` created with raw Jinja2 template strings from the workflow action
+- Immediate failure tag and note still applied (existing v1.2.8 behaviour)
+- Queue processor re-renders templates with the document's latest context on each retry
+- On eventual success: success tag applied, failure tag removed, success note created
+
+**Manual sends** (`email_documents()`):
+- Immediate send attempt with inline retries
+- On failure: `PendingEmail` created with rendered email addresses (no templates)
+- Returns HTTP 202 "Email send failed, queued for retry" instead of 500
+- Queue processor retries with the stored addresses
+
+**Template re-rendering**: On each retry, workflow email templates are re-rendered with the document's current state. This means if a custom field that was missing gets set by another pipeline between retries, the retry will succeed. Attachments are rebuilt from the document's `source_path` on each attempt — file content is never stored in the database.
+
+### Retry Backoff
+
+| Attempt | Wait Before | Cumulative |
+|---------|-------------|------------|
+| 1 | 5 min | 5 min |
+| 2 | 10 min | 15 min |
+| 3 | 20 min | 35 min |
+| 4 | 40 min | ~1h |
+| 5 | 80 min | ~2.5h |
+| 6 | ~2.7h | ~5h |
+| 7 | ~5.3h | ~10h |
+| 8 | ~10.7h | ~21h |
+| 9 | 24h (cap) | ~45h |
+| ... | 24h | ... |
+| 50 | 24h | ~5 days |
+
+Formula: `min(base_seconds * 2^attempts, max_seconds)`
+
+### Abandoned Emails
+
+After `max_attempts` (default 50) the email is marked `ABANDONED`:
+- Permanent failure tag applied
+- Permanent failure note created on the document
+- Logged at ERROR level
+
+Admins can view and manage abandoned emails via the Email Queue dialog on the Mail Settings page.
+
+### Admin UI
+
+The Email Queue dialog is accessible from the Mail Settings page via the "Email Queue" button (between the accounts and rules sections). Features:
+- Table with columns: Subject, Recipients, Status, Attempts, Next Retry, Error, Created
+- Status badges: PENDING (yellow), SENDING (blue), ABANDONED (red)
+- Server-side text filtering across error, subject, recipients, status fields
+- Checkbox selection with select-all-in-page and select-all-in-database
+- Delete selected / delete all filtered
+- Error column shows first 30 chars with hover popover for full text
+- Pagination (50 per page)
+- Permission: admin/superuser only (`IsAdminUser`)
+
+### Configuration
+
+```bash
+# Defaults — no configuration needed for basic operation
+PAPERLESS_MAIL_RETRY_MAX_ATTEMPTS=50      # Max retry attempts before abandoning
+PAPERLESS_MAIL_RETRY_BASE_SECONDS=300     # Base retry interval (5 minutes)
+PAPERLESS_MAIL_RETRY_MAX_SECONDS=86400    # Max retry interval cap (24 hours)
+PAPERLESS_MAIL_QUEUE_CRON="*/5 * * * *"   # Queue check frequency (every 5 min)
+
+# Disable the queue (emails still get inline retries but are not queued)
+PAPERLESS_MAIL_QUEUE_CRON=disable
+```
+
+### Implementation
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Model | `src/documents/models.py` | `PendingEmail` model with `PendingEmailManager` |
+| Queue processing | `src/documents/email_queue.py` | `enqueue_failed_email()`, `process_pending_emails()`, re-render/retry/abandon logic |
+| REST API | `src/documents/email_queue_api.py` | `PendingEmailSerializer`, `PendingEmailFilterSet`, `PendingEmailViewSet` |
+| Inline retry | `src/documents/mail.py` | `_build_email_message()` helper, `send_email(retries=2)` retry loop |
+| Workflow integration | `src/documents/signals/handlers.py` | `email_action()` except block calls `enqueue_failed_email()` |
+| Manual send integration | `src/documents/views.py` | `email_documents()` except block queues and returns 202 |
+| Settings | `src/paperless/settings.py` | `MAIL_RETRY_*` env vars, `PAPERLESS_MAIL_QUEUE_CRON` beat schedule |
+| URL routing | `src/paperless/urls.py` | `PendingEmailViewSet` registered at `api/pending_email/` |
+| Migration | `src/documents/migrations/1076_pendingemail.py` | Creates PendingEmail model and index |
+| Frontend data | `src-ui/src/app/data/pending-email.ts` | TypeScript interface |
+| Frontend service | `src-ui/src/app/services/rest/pending-email.service.ts` | Angular service |
+| Frontend dialog | `src-ui/src/app/components/manage/mail/pending-email-dialog/` | Dialog component (ts + html + scss) |
+| Frontend integration | `src-ui/src/app/components/manage/mail/mail.component.ts` | `viewPendingEmails()` method + button |
+| Permissions | `src-ui/src/app/services/permissions.service.ts` | `PendingEmail` added to `PermissionType` enum |
+
+---
+
 ## Version History
 
+- **v1.5.0**: Email send queue with retry — `PendingEmail` model stores failed outgoing emails; `process_pending_emails()` Celery Beat task retries with exponential backoff (5min→24h, up to 50 attempts); templates re-rendered with fresh document context on each retry; inline retry (2×2s/4s) in `send_email()` catches transient blips; admin UI dialog on Mail Settings page; `IsAdminUser` permission
 - **v1.4.0**: Mail send webhook — `fire_mail_send_webhook()` POSTs full JSON payload (all fields + base64 attachments + `document_id` per attachment) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL` after every successful send; outcome appended as second line to send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1**: Workflow email notes always attributed to a valid user — `document.owner` or the system `consumer` user for ownerless documents; prevents `GET /api/documents/{id}/` 500 errors in `NotesSerializer`
 - **v1.2.10**: App-only send mode — `client_credentials` token for personal mailbox sends; Sent Items land in the correct mailbox for any user in the tenant; no per-user Exchange delegation
