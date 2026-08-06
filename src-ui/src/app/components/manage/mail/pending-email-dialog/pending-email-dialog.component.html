@@ -64,7 +64,7 @@
           <tr>
             <th scope="col" style="width: 40px;">
               <div class="form-check m-0 ms-2 me-n2">
-                <input type="checkbox" class="form-check-input" id="all-objects" [(ngModel)]="toggleAllEnabled" [disabled]="pendingEmails.length === 0" (click)="toggleAll(); .stopPropagation();">
+                <input type="checkbox" class="form-check-input" id="all-objects" [(ngModel)]="toggleAllEnabled" [disabled]="pendingEmails.length === 0" (click)="toggleAll($event); $event.stopPropagation();">
                 <label class="form-check-label" for="all-objects"></label>
               </div>
             </th>
@@ -81,7 +81,7 @@
             <tr>
               <td>
                 <div class="form-check m-0 ms-2 me-n2">
-                  <input type="checkbox" class="form-check-input" [id]="pe.id" [checked]="selectedIds.has(pe.id)" (click)="toggleSelected(pe); .stopPropagation();">
+                  <input type="checkbox" class="form-check-input" [id]="pe.id" [checked]="selectedIds.has(pe.id)" (click)="toggleSelected(pe); $event.stopPropagation();">
                   <label class="form-check-label" [for]="pe.id"></label>
                 </div>
               </td>
