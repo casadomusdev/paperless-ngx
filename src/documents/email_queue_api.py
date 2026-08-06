@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from documents.email_queue import PendingEmail
-from documents.serialisers import StandardPagination
+from paperless.views import StandardPagination
 
 
 class PendingEmailSerializer(serializers.ModelSerializer):
