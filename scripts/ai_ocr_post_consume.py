@@ -55,7 +55,7 @@ import urllib.request
 
 # Add the scripts directory to the path so we can import the quality helper.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ai_ocr_quality import check_quality, rasterize_pdf
+from ai_ocr_quality import check_quality, is_table_only, rasterize_pdf
 
 
 _SCRIPT_START = time.monotonic()
@@ -273,7 +273,46 @@ def main():
         )
         sys.exit(0)
 
-    # ── 6. Quality check + rasterization fallback ─────────────────────────────
+    # ── 6. Table-only detection + rasterization ───────────────────────────────
+    # If Mistral classified the entire page as table blocks (no text blocks),
+    # it likely made a wrong segmentation decision — e.g., a horizontal line
+    # caused it to ignore the header content above the table.
+    if rasterize_mode != "never" and mime == "application/pdf" and is_table_only(ocr_result):
+        _log("Table-only blocks detected — Mistral may have missed header content")
+        _log("Rasterizing PDF to force full-page text extraction...")
+        rasterized_path = rasterize_pdf(archive_path)
+        if rasterized_path:
+            try:
+                with open(rasterized_path, "rb") as fh:
+                    raster_bytes = fh.read()
+                _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
+                raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
+                raster_url = f"data:application/pdf;base64,{raster_b64}"
+
+                ocr_result_2 = _ocr_request(
+                    ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
+                )
+                content_2, page_count_2 = _extract_text(ocr_result_2)
+
+                if content_2 and len(content_2) > len(content):
+                    _log(
+                        f"Rasterized result has more content "
+                        f"({len(content_2)} vs {len(content)} chars) — using it"
+                    )
+                    content = content_2
+                    page_count = page_count_2
+                    ocr_result = ocr_result_2
+                else:
+                    _log("Rasterized result not better — keeping original")
+            except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                _log(f"Table-only rasterize retry failed: {exc}", error=True)
+            finally:
+                if rasterized_path:
+                    shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
+        else:
+            _log("Rasterization failed — keeping original content", error=True)
+
+    # ── 7. Garbage quality check + rasterization fallback ─────────────────────
     raw_content = content  # preserve for debug/comparison
     is_usable, garbage_pct = check_quality(content, degrade_pct)
 

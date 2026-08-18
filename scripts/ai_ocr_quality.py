@@ -97,6 +97,33 @@ def check_quality(content: str, threshold_pct: float = 30.0):
     return is_usable, garbage_pct
 
 
+def is_table_only(ocr_result: dict) -> bool:
+    """Check if Mistral classified the entire document as tables only.
+
+    When Mistral returns only 'table' blocks (no 'text' blocks), it often
+    means the model made an incorrect page-segmentation decision — e.g.,
+    treating a horizontal line as a table boundary and ignoring the header
+    content above it.
+
+    Returns True if ALL blocks across ALL pages are type 'table' with no
+    'text' blocks present.
+    """
+    pages = ocr_result.get("pages", [])
+    if not pages:
+        return False
+
+    has_any_block = False
+    has_text_block = False
+
+    for page in pages:
+        for block in page.get("blocks", []):
+            has_any_block = True
+            if block.get("type") != "table":
+                has_text_block = True
+
+    return has_any_block and not has_text_block
+
+
 def rasterize_pdf(pdf_path: str, dpi: int = 300) -> str | None:
     """Convert a PDF to a rasterized (pixel-based) PDF via PNG intermediates.
 
