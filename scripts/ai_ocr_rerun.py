@@ -81,7 +81,8 @@ def main():
         sys.exit(1)
 
     # ── Download the archived PDF via the API ──────────────────────────────────
-    # Using ?original=false returns the Tesseract-processed archive PDF.
+    # Try archive first (?original=false), fall back to original (?original=true)
+    # if no archive exists (e.g., OCR never ran or archive was lost).
     download_url = f"{paperless_url}/api/documents/{doc_id}/download/?original=false"
     _print(f"Downloading archived PDF from {download_url} …")
     dl_req = urllib.request.Request(download_url, headers=headers)
@@ -89,8 +90,23 @@ def main():
         with urllib.request.urlopen(dl_req, timeout=120) as resp:
             pdf_bytes = resp.read()
     except urllib.error.HTTPError as exc:
-        _print(f"Error: download returned HTTP {exc.code}.", error=True)
-        sys.exit(1)
+        if exc.code == 404:
+            _print("Archive not found (404) — falling back to original file…")
+            download_url = f"{paperless_url}/api/documents/{doc_id}/download/?original=true"
+            _print(f"Downloading original from {download_url} …")
+            dl_req = urllib.request.Request(download_url, headers=headers)
+            try:
+                with urllib.request.urlopen(dl_req, timeout=120) as resp:
+                    pdf_bytes = resp.read()
+            except urllib.error.HTTPError as exc2:
+                _print(f"Error: original download returned HTTP {exc2.code}.", error=True)
+                sys.exit(1)
+            except urllib.error.URLError as exc2:
+                _print(f"Error: original download failed — {exc2.reason}", error=True)
+                sys.exit(1)
+        else:
+            _print(f"Error: download returned HTTP {exc.code}.", error=True)
+            sys.exit(1)
     except urllib.error.URLError as exc:
         _print(f"Error: download failed — {exc.reason}", error=True)
         sys.exit(1)
