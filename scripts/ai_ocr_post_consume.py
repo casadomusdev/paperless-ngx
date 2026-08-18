@@ -292,71 +292,77 @@ def main():
     # If Mistral classified the entire page as table blocks (no text blocks),
     # it likely made a wrong segmentation decision — e.g., a horizontal line
     # caused it to ignore the header content above the table.
-    if rasterize_mode != "never" and mime == "application/pdf" and is_table_only(ocr_result):
+    if is_table_only(ocr_result):
         _log("Table-only blocks detected — Mistral may have missed header content")
-        _log("Rasterizing PDF to force full-page text extraction...")
-        rasterized_path = rasterize_pdf(archive_path)
-        if rasterized_path:
+
+        # ── Step A: Try fallback model on original PDF first (no rasterization) ──
+        if fallback_model:
+            _log(f"Trying fallback model {fallback_model} on original PDF...")
             try:
-                with open(rasterized_path, "rb") as fh:
-                    raster_bytes = fh.read()
-                _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
-                raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
-                raster_url = f"data:application/pdf;base64,{raster_b64}"
-
-                ocr_result_2 = _ocr_request(
-                    ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
+                ocr_fb = _ocr_request(
+                    ai_ocr_url, ai_ocr_key, fallback_model, data_url
                 )
-                content_2, page_count_2 = _extract_text(ocr_result_2)
-                _log(f"Rasterized result: {page_count_2} page(s), {len(content_2)} chars (original: {len(content)} chars)")
-
-                if content_2 and len(content_2) >= len(content) * 0.5:
-                    _log(
-                        f"Using rasterized result "
-                        f"({len(content_2)} vs {len(content)} chars)"
-                    )
-                    content = content_2
-                    page_count = page_count_2
-                    ocr_result = ocr_result_2
-                elif fallback_model:
-                    _log(
-                        f"Rasterized result too short or empty "
-                        f"({len(content_2)} vs {len(content)} chars) — "
-                        f"trying fallback model {fallback_model}..."
-                    )
-                    try:
-                        ocr_result_3 = _ocr_request(
-                            ai_ocr_url, ai_ocr_key, fallback_model, raster_url
-                        )
-                        content_3, page_count_3 = _extract_text(ocr_result_3)
-                        _log(
-                            f"Fallback result: {page_count_3} page(s), "
-                            f"{len(content_3)} chars"
-                        )
-                        if content_3 and len(content_3) >= len(content) * 0.5:
-                            _log(
-                                f"Using fallback result "
-                                f"({len(content_3)} vs {len(content)} chars)"
-                            )
-                            content = content_3
-                            page_count = page_count_3
-                            ocr_result = ocr_result_3
-                        else:
-                            _log("Fallback result too short — keeping original")
-                    except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
-                        _log(f"Fallback model failed: {exc} — keeping original", error=True)
+                content_fb, page_fb = _extract_text(ocr_fb)
+                _log(f"Fallback result: {page_fb} page(s), {len(content_fb)} chars (original: {len(content)} chars)")
+                if content_fb and len(content_fb) >= len(content) * 0.5 and not is_table_only(ocr_fb):
+                    _log(f"Using fallback result ({len(content_fb)} vs {len(content)} chars)")
+                    content = content_fb
+                    page_count = page_fb
+                    ocr_result = ocr_fb
                 else:
-                    _log(
-                        f"Rasterized result too short or empty "
-                        f"({len(content_2)} vs {len(content)} chars) — keeping original"
-                    )
+                    _log("Fallback on original still table-only or too short — will try rasterization")
             except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
-                _log(f"Table-only rasterize retry failed: {exc}", error=True)
-            finally:
-                if rasterized_path:
-                    shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
-        else:
-            _log("Rasterization failed — keeping original content", error=True)
+                _log(f"Fallback model on original failed: {exc}", error=True)
+
+        # ── Step B: Rasterize + retry (primary model, then fallback if needed) ───
+        if is_table_only(ocr_result) and rasterize_mode != "never" and mime == "application/pdf":
+            _log("Rasterizing PDF to force full-page text extraction...")
+            rasterized_path = rasterize_pdf(archive_path)
+            if rasterized_path:
+                try:
+                    with open(rasterized_path, "rb") as fh:
+                        raster_bytes = fh.read()
+                    _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
+                    raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
+                    raster_url = f"data:application/pdf;base64,{raster_b64}"
+
+                    ocr_result_2 = _ocr_request(
+                        ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
+                    )
+                    content_2, page_count_2 = _extract_text(ocr_result_2)
+                    _log(f"Rasterized result: {page_count_2} page(s), {len(content_2)} chars (original: {len(content)} chars)")
+
+                    if content_2 and len(content_2) >= len(content) * 0.5:
+                        _log(f"Using rasterized result ({len(content_2)} vs {len(content)} chars)")
+                        content = content_2
+                        page_count = page_count_2
+                        ocr_result = ocr_result_2
+                    elif fallback_model:
+                        _log(f"Rasterized result too short — trying fallback model on rasterized PDF...")
+                        try:
+                            ocr_result_3 = _ocr_request(
+                                ai_ocr_url, ai_ocr_key, fallback_model, raster_url
+                            )
+                            content_3, page_count_3 = _extract_text(ocr_result_3)
+                            _log(f"Fallback rasterized result: {page_count_3} page(s), {len(content_3)} chars")
+                            if content_3 and len(content_3) >= len(content) * 0.5:
+                                _log(f"Using fallback rasterized result ({len(content_3)} vs {len(content)} chars)")
+                                content = content_3
+                                page_count = page_count_3
+                                ocr_result = ocr_result_3
+                            else:
+                                _log("Fallback rasterized result too short — keeping original")
+                        except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                            _log(f"Fallback on rasterized failed: {exc} — keeping original", error=True)
+                    else:
+                        _log(f"Rasterized result too short ({len(content_2)} vs {len(content)} chars) — keeping original")
+                except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                    _log(f"Table-only rasterize retry failed: {exc}", error=True)
+                finally:
+                    if rasterized_path:
+                        shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
+            else:
+                _log("Rasterization failed — keeping original content", error=True)
 
     # ── 7. Garbage quality check + rasterization fallback ─────────────────────
     raw_content = content  # preserve for debug/comparison
