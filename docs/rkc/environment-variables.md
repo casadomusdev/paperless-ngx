@@ -52,6 +52,10 @@ Complete reference of all environment variables introduced by RKC customizations
 | `AI_OCR_RETRY_DELAY` | Integer | `5` | Base retry delay in seconds; doubles each attempt (5s → 10s → 20s) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_RASTERIZE` | String | `auto` | Rasterization mode: `auto`, `always`, or `never` | [AI OCR](ai-ocr.md) |
 | `AI_OCR_DEGRADATION_THRESHOLD` | Integer | `30` | Garbage-line percentage above which a rasterized retry is triggered | [AI OCR](ai-ocr.md) |
+| `AI_OCR_QUALITY_MODEL` | String | _(none)_ | Cheap LLM model for quality scoring (disabled if empty) | [AI OCR](ai-ocr.md) |
+| `AI_OCR_QUALITY_KEY` | String | _(none)_ | API key for quality model (falls back to `AI_OCR_KEY`) | [AI OCR](ai-ocr.md) |
+| `AI_OCR_QUALITY_URL` | String | _(none)_ | LiteLLM URL for quality model (falls back to `AI_OCR_URL`) | [AI OCR](ai-ocr.md) |
+| `AI_OCR_QUALITY_THRESHOLD` | Integer | `70` | Minimum quality score (0-100) to accept without rasterizing | [AI OCR](ai-ocr.md) |
 | `PAPERLESS_URL` | String | `http://localhost:8000` | Internal paperless URL (used by OCR script) | [AI OCR](ai-ocr.md) |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless superuser API token for OCR script | [AI OCR](ai-ocr.md) |
 

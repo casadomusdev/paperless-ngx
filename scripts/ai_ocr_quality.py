@@ -124,6 +124,67 @@ def is_table_only(ocr_result: dict) -> bool:
     return has_any_block and not has_text_block
 
 
+def llm_quality_score(content: str, api_url: str, api_key: str,
+                      model: str, sample_chars: int = 2000) -> int | None:
+    """Ask a cheap LLM to rate OCR text quality (0-100).
+
+    Samples the first and last portion of the content (skipping the middle)
+    to keep token costs minimal while catching both header and tail issues.
+
+    Returns the score as an integer, or None on failure or invalid response.
+    """
+    import json as _json
+    import urllib.error as _urllib_error
+    import urllib.request as _urllib_request
+
+    # Sample: first half + last half (skip the middle for long documents)
+    if len(content) > sample_chars:
+        half = sample_chars // 2
+        sample = content[:half] + "\n[...]\n" + content[-half:]
+    else:
+        sample = content
+
+    prompt = (
+        "Rate the quality of this OCR text on a scale of 0 to 100.\n\n"
+        "Examples:\n"
+        "- 95: Clean real words, complete sentences, proper formatting\n"
+        "- 70: Mostly readable but some garbled words or missing characters\n"
+        "- 40: Many garbled words, repetitive patterns, incomplete text\n"
+        "- 10: Mostly garbage characters, not real words\n\n"
+        "Return ONLY the number, nothing else.\n\n"
+        f"{sample}"
+    )
+
+    payload = _json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 8,
+        "temperature": 0.0,
+    }).encode("utf-8")
+
+    req = _urllib_request.Request(
+        f"{api_url}/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+
+    try:
+        with _urllib_request.urlopen(req, timeout=15) as resp:
+            result = _json.loads(resp.read())
+        text = result["choices"][0]["message"]["content"].strip()
+        digits = "".join(c for c in text if c.isdigit())
+        score = int(digits) if digits else None
+        if score is not None and 0 <= score <= 100:
+            return score
+        return None
+    except Exception:
+        return None
+
+
 def rasterize_pdf(pdf_path: str, dpi: int = 300) -> str | None:
     """Convert a PDF to a rasterized (pixel-based) PDF via PNG intermediates.
 

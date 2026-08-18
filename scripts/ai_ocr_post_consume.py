@@ -28,6 +28,13 @@ Configuration (set in your Docker Compose environment / .env):
                              "never"  — never rasterize (old behavior)
   AI_OCR_DEGRADATION_THRESHOLD - Garbage-line percentage above which a rasterized retry is
                              triggered in "auto" mode (default: 30)
+  AI_OCR_QUALITY_MODEL    - (optional) Cheap LLM model for quality evaluation. When set,
+                             the basic OCR output is scored and rasterized if below threshold.
+                             Example: "mistral-small-latest". Disabled if empty.
+  AI_OCR_QUALITY_KEY      - (optional) API key for the quality model. Falls back to AI_OCR_KEY.
+  AI_OCR_QUALITY_URL      - (optional) LiteLLM URL for quality model. Falls back to AI_OCR_URL.
+  AI_OCR_QUALITY_THRESHOLD - Minimum quality score (0-100) to accept (default: 70).
+                             Below this, rasterization is triggered.
   PAPERLESS_URL            - Internal paperless URL, e.g. "http://webserver:8000"
   PAPERLESS_API_TOKEN      - Paperless superuser API token
 
@@ -55,7 +62,7 @@ import urllib.request
 
 # Add the scripts directory to the path so we can import the quality helper.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ai_ocr_quality import check_quality, is_table_only, rasterize_pdf
+from ai_ocr_quality import check_quality, is_table_only, llm_quality_score, rasterize_pdf
 
 
 _SCRIPT_START = time.monotonic()
@@ -172,6 +179,10 @@ def main():
     retry_base    = int(os.getenv("AI_OCR_RETRY_DELAY", "5"))
     rasterize_mode = os.getenv("AI_OCR_RASTERIZE", "auto").lower().strip()
     degrade_pct    = float(os.getenv("AI_OCR_DEGRADATION_THRESHOLD", "30"))
+    quality_model  = os.getenv("AI_OCR_QUALITY_MODEL", "").strip()
+    quality_key    = os.getenv("AI_OCR_QUALITY_KEY", "").strip() or ai_ocr_key
+    quality_url    = os.getenv("AI_OCR_QUALITY_URL", "").strip() or ai_ocr_url
+    quality_thresh = int(os.getenv("AI_OCR_QUALITY_THRESHOLD", "70"))
     tag_id_str    = os.getenv("AI_OCR_TAG_ID", "").strip()
     ai_ocr_tag_id = int(tag_id_str) if tag_id_str.isdigit() else None
 
@@ -402,7 +413,55 @@ def main():
         _log("Content is empty after quality processing — leaving Tesseract output intact", error=True)
         sys.exit(0)
 
-    # ── 7. Debug mode ──────────────────────────────────────────────────────────
+    # ── 8. LLM quality check (optional) ────────────────────────────────────────
+    # Only fires when deterministic checks passed clean, the feature is enabled,
+    # and we haven't already rasterized (no point checking twice).
+    if (quality_model and rasterize_mode != "never"
+            and mime == "application/pdf" and garbage_pct == 0
+            and not is_table_only(ocr_result)):
+        _log(f"LLM quality check — model={quality_model}, threshold={quality_thresh}...")
+        score = llm_quality_score(content, quality_url, quality_key, quality_model)
+        if score is not None:
+            _log(f"LLM quality score: {score}/100 (threshold: {quality_thresh})")
+            if score < quality_thresh:
+                _log(f"Score {score} < {quality_thresh} — rasterizing for retry...")
+                basic_len = len(content)
+                rasterized_path = rasterize_pdf(archive_path)
+                if rasterized_path:
+                    try:
+                        with open(rasterized_path, "rb") as fh:
+                            raster_bytes = fh.read()
+                        _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
+                        raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
+                        raster_url = f"data:application/pdf;base64,{raster_b64}"
+
+                        ocr_result_2 = _ocr_request(
+                            ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
+                        )
+                        content_2, page_count_2 = _extract_text(ocr_result_2)
+
+                        # Sanity: use rasterized result if non-empty and at least
+                        # half the length of the basic result
+                        if content_2 and len(content_2) >= basic_len * 0.5:
+                            _log(
+                                f"Using rasterized result "
+                                f"({len(content_2)} vs {basic_len} chars)"
+                            )
+                            content = content_2
+                            page_count = page_count_2
+                        else:
+                            _log("Rasterized result too short or empty — keeping original")
+                    except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                        _log(f"LLM-triggered rasterize failed: {exc}", error=True)
+                    finally:
+                        if rasterized_path:
+                            shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
+                else:
+                    _log("Rasterization failed — keeping original", error=True)
+        else:
+            _log("LLM quality check returned invalid response — skipping")
+
+    # ── 9. Debug mode ──────────────────────────────────────────────────────────
     if debug_mode:
         _log("DEBUG MODE — OCR output follows (document NOT updated):")
         separator = "─" * 72

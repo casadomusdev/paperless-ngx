@@ -267,7 +267,40 @@ Rasterization is most effective for PDFs with:
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `AI_OCR_RASTERIZE` | `auto` | `"auto"` — try PDF first, rasterize on quality failure. `"always"` — always rasterize before OCR (best quality, higher cost). `"never"` — disable rasterization entirely. |
+| `AI_OCR_QUALITY_MODEL` | _(empty)_ | Cheap LLM model for quality evaluation (e.g. `mistral-small-latest`). Empty = disabled. |
+| `AI_OCR_QUALITY_KEY` | _(empty)_ | API key for the quality model. Falls back to `AI_OCR_KEY`. |
+| `AI_OCR_QUALITY_URL` | _(empty)_ | LiteLLM URL for quality model. Falls back to `AI_OCR_URL`. |
+| `AI_OCR_QUALITY_THRESHOLD` | `70` | Minimum quality score (0-100). Below this, rasterization is triggered. |
 | `AI_OCR_DEGRADATION_THRESHOLD` | `30` | Percentage of garbage lines that triggers retry. Increase for stricter detection, decrease to retry more aggressively. |
+
+### LLM Quality Check (optional)
+
+When `AI_OCR_QUALITY_MODEL` is set, the script sends a sample of the OCR output
+to a cheap LLM and asks it to rate text quality on a 0-100 scale.  This catches
+subtle quality issues that the deterministic checks miss — garbled text, poor OCR
+accuracy, or content that looks structurally fine but is actually low quality.
+
+The check only runs when:
+- The deterministic checks (table-only, garbage pattern) passed clean
+- The document is a PDF (can rasterize)
+- Rasterization is not disabled
+
+The LLM receives a ~2000-char sample (first half + last half of the content)
+and returns a single number.  Cost is minimal (~500 input tokens, ~2 output tokens).
+
+**Docker Compose example:**
+```yaml
+services:
+  webserver: &paperless
+    environment:
+      AI_OCR_QUALITY_MODEL: "mistral-small-latest"
+      AI_OCR_QUALITY_KEY: "sk-your-quality-key"
+      AI_OCR_QUALITY_THRESHOLD: "70"
+```
+
+If the score is below the threshold, the PDF is rasterized and re-OCRed.  The
+rasterized result is used if it's non-empty and at least half the length of the
+basic result (sanity check).
 
 ### Log Output for Quality Issues
 
