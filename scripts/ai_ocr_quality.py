@@ -56,6 +56,8 @@ def check_quality(content: str, threshold_pct: float = 30.0):
             garbage[i] = True
 
     # ── Find the first run of 3+ consecutive garbage lines ────────────────────
+    # Empty / whitespace-only lines are treated as neutral — they don't break
+    # a garbage run.  This catches patterns like "K\n\nK\n\nK\n\n...".
     run_start = None
     run_len = 0
     degradation_idx = None  # index of the first garbage line in the run
@@ -67,13 +69,16 @@ def check_quality(content: str, threshold_pct: float = 30.0):
             run_len += 1
             if run_len >= 3 and degradation_idx is None:
                 degradation_idx = run_start
+        elif not lines[i].strip():
+            # Empty / whitespace-only line — neutral, don't break the run
+            pass
         else:
-            # Short run (<3) — reset, not degradation
+            # Non-empty, non-garbage line — breaks the run
             if run_len < 3:
                 run_start = None
                 run_len = 0
             else:
-                # We found a valid run and hit a non-garbage line — stop scanning
+                # We found a valid run and hit real content — stop scanning
                 break
 
     # Handle case where the run extends to end of content
@@ -85,8 +90,9 @@ def check_quality(content: str, threshold_pct: float = 30.0):
         return True, content, 0.0
 
     # ── Calculate garbage percentage ──────────────────────────────────────────
-    # Count all garbage lines from the degradation point to end of content
-    garbage_count = sum(1 for g in garbage[degradation_idx:] if g)
+    # Count ALL lines from the degradation point to end of content — not just
+    # explicit garbage lines but also the empty lines interleaved between them.
+    garbage_count = total_lines - degradation_idx
     garbage_pct = (garbage_count / total_lines) * 100
 
     # ── Strip the garbage tail ────────────────────────────────────────────────
