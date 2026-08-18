@@ -48,6 +48,8 @@ Complete reference of all environment variables introduced by RKC customizations
 | `AI_OCR_KEY` | String | — | LiteLLM virtual API key | [AI OCR](ai-ocr.md) |
 | `AI_OCR_MODEL` | String | `mistral-ocr-latest` | OCR model name as configured in LiteLLM | [AI OCR](ai-ocr.md) |
 | `AI_OCR_TAG_ID` | Integer | None | Tag ID to apply to the document on successful OCR | [AI OCR](ai-ocr.md) |
+| `AI_OCR_RASTERIZE_FALLBACK` | Boolean | `true` | Retry with rasterized PDF when OCR quality check detects degradation | [AI OCR](ai-ocr.md) |
+| `AI_OCR_DEGRADATION_THRESHOLD` | Integer | `30` | Garbage-line percentage above which a rasterized retry is triggered | [AI OCR](ai-ocr.md) |
 | `PAPERLESS_URL` | String | `http://localhost:8000` | Internal paperless URL (used by OCR script) | [AI OCR](ai-ocr.md) |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless superuser API token for OCR script | [AI OCR](ai-ocr.md) |
 

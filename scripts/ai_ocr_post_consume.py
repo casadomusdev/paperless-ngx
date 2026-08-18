@@ -19,6 +19,10 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_DEBUG             - Set to "true" to print OCR output to stdout and skip the PATCH
   AI_OCR_LOG_FILE          - (optional) Path to a log file; all log lines are appended there
                              with a wallclock datetime prefix, e.g. "/logs/ai_ocr.log"
+  AI_OCR_RASTERIZE_FALLBACK - "true" to retry with a rasterized PDF when quality check fails
+                             (default: true)
+  AI_OCR_DEGRADATION_THRESHOLD - Garbage-line percentage above which a rasterized retry is
+                             triggered (default: 30)
   PAPERLESS_URL            - Internal paperless URL, e.g. "http://webserver:8000"
   PAPERLESS_API_TOKEN      - Paperless superuser API token
 
@@ -35,32 +39,33 @@ import base64
 import datetime
 import json
 import os
+import shutil
 import sys
 import time
 import traceback
 import urllib.error
 import urllib.request
 
+# Add the scripts directory to the path so we can import the quality helper.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ai_ocr_quality import check_quality, rasterize_pdf
+
 
 _SCRIPT_START = time.monotonic()
 
 # ── Optional file logging ──────────────────────────────────────────────────────
-# When AI_OCR_LOG_FILE is set, every _log() call is also appended to that file
-# with a wallclock datetime prefix. The file is opened once here so output is
-# captured even if the script crashes before main() runs.
 _log_file_path = os.getenv("AI_OCR_LOG_FILE", "").strip()
 _log_fh = None
 if _log_file_path:
     try:
         os.makedirs(os.path.dirname(_log_file_path) or ".", exist_ok=True)
-        _log_fh = open(_log_file_path, "a", encoding="utf-8", buffering=1)  # line-buffered
+        _log_fh = open(_log_file_path, "a", encoding="utf-8", buffering=1)
     except OSError as _e:
         print(f"AI OCR: WARNING — cannot open log file '{_log_file_path}': {_e}", file=sys.stderr, flush=True)
 
 
 def _log(msg: str, error: bool = False):
-    """Timestamped log helper. Flushes immediately so logs appear real-time in Celery output.
-    When AI_OCR_LOG_FILE is set, also appends to that file with a wallclock prefix."""
+    """Timestamped log helper. Flushes immediately so logs appear real-time in Celery output."""
     elapsed = time.monotonic() - _SCRIPT_START
     line = f"AI OCR [{elapsed:6.1f}s]: {msg}"
     if error:
@@ -70,6 +75,49 @@ def _log(msg: str, error: bool = False):
     if _log_fh is not None:
         ts = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         _log_fh.write(f"{ts} {line}\n")
+
+
+def _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, data_url, timeout=300):
+    """Send an OCR request to LiteLLM and return the parsed JSON response."""
+    ocr_payload = {
+        "model": ai_ocr_model,
+        "document": {"type": "document_url", "document_url": data_url},
+    }
+    if "mistral" in ai_ocr_model.lower():
+        ocr_payload["extract_header"] = True
+        ocr_payload["extract_footer"] = True
+
+    req = urllib.request.Request(
+        f"{ai_ocr_url}/v1/ocr",
+        data=json.dumps(ocr_payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {ai_ocr_key}",
+        },
+        method="POST",
+    )
+    _log(f"Sending OCR request to {ai_ocr_url}/v1/ocr (timeout={timeout}s)...")
+    t0 = time.monotonic()
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        result = json.loads(resp.read())
+    _log(f"OCR request completed in {time.monotonic() - t0:.1f}s — HTTP {resp.status}")
+    return result
+
+
+def _extract_text(ocr_result):
+    """Extract text from OCR response, merging header/markdown/footer per page."""
+    pages = ocr_result.get("pages", [])
+
+    def _page_text(p):
+        parts = []
+        for field in ("header", "markdown", "footer"):
+            val = (p.get(field) or "").strip()
+            if val:
+                parts.append(val)
+        return "\n\n".join(parts)
+
+    content = "\n\n".join(_page_text(p) for p in pages).strip()
+    return content, len(pages)
 
 
 def main():
@@ -86,28 +134,22 @@ def main():
     document_id   = os.getenv("DOCUMENT_ID", "")
     archive_path  = os.getenv("DOCUMENT_ARCHIVE_PATH", "")
     debug_mode    = os.getenv("AI_OCR_DEBUG", "false").lower() == "true"
-
+    rasterize_fb  = os.getenv("AI_OCR_RASTERIZE_FALLBACK", "true").lower() == "true"
+    degrade_pct   = float(os.getenv("AI_OCR_DEGRADATION_THRESHOLD", "30"))
     tag_id_str    = os.getenv("AI_OCR_TAG_ID", "").strip()
     ai_ocr_tag_id = int(tag_id_str) if tag_id_str.isdigit() else None
 
     _log(f"Starting — doc={document_id}, model={ai_ocr_model}, archive={archive_path}")
 
     missing = [k for k, v in {
-        "AI_OCR_URL": ai_ocr_url,
-        "AI_OCR_KEY": ai_ocr_key,
-        "PAPERLESS_API_TOKEN": paperless_tok,
-        "DOCUMENT_ID": document_id,
+        "AI_OCR_URL": ai_ocr_url, "AI_OCR_KEY": ai_ocr_key,
+        "PAPERLESS_API_TOKEN": paperless_tok, "DOCUMENT_ID": document_id,
     }.items() if not v]
     if missing:
         _log(f"Missing required configuration: {', '.join(missing)}", error=True)
         sys.exit(1)
 
     # ── 3. Skip non-OCR document types ────────────────────────────────────────
-    # Email documents (message/rfc822) are archived as PDF by Paperless but do
-    # not benefit from AI OCR. More importantly, skipping here prevents a race
-    # condition: the PATCH triggered by AI OCR would fire document_updated before
-    # the send-mail pipeline has had a chance to set custom fields (Email Subject
-    # etc.) via its own PATCH, causing Jinja2 UndefinedError in workflow templates.
     doc_mime = os.getenv("DOCUMENT_MIME_TYPE", "").lower().strip()
     if doc_mime.startswith("message/"):
         _log(f"Skipping AI OCR for email document (MIME type: {doc_mime})")
@@ -115,124 +157,116 @@ def main():
 
     # ── 4. Read document file ──────────────────────────────────────────────────
     if not archive_path or not os.path.exists(archive_path):
-        _log(
-            f"No archive file at '{archive_path}' — skipping AI OCR "
-            f"(non-PDF/image document, e.g. .eml upload)"
-        )
+        _log(f"No archive file at '{archive_path}' — skipping AI OCR")
         sys.exit(0)
 
     with open(archive_path, "rb") as fh:
         file_bytes = fh.read()
-
     _log(f"Read archive file: {len(file_bytes):,} bytes")
 
-    # ── 5. Determine MIME type from extension ──────────────────────────────────
     ext = os.path.splitext(archive_path)[1].lower()
     mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
-    _log(f"Detected MIME type: {mime}")
 
-    # ── 6. Send to LiteLLM /v1/ocr ────────────────────────────────────────────
-    b64      = base64.b64encode(file_bytes).decode("utf-8")
+    # ── 5. First OCR attempt ───────────────────────────────────────────────────
+    b64 = base64.b64encode(file_bytes).decode("utf-8")
     data_url = f"data:{mime};base64,{b64}"
 
-    ocr_payload = {
-        "model": ai_ocr_model,
-        "document": {
-            "type": "document_url",
-            "document_url": data_url,
-        },
-    }
-
-    # ── 5a. Provider-specific extra params ─────────────────────────────────────
-    if "mistral" in ai_ocr_model.lower():
-        ocr_payload["extract_header"] = True
-        ocr_payload["extract_footer"] = True
-        _log("Mistral model detected — adding extract_header=true, extract_footer=true")
-
-    ocr_req = urllib.request.Request(
-        f"{ai_ocr_url}/v1/ocr",
-        data=json.dumps(ocr_payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {ai_ocr_key}",
-        },
-        method="POST",
-    )
-
-    _log(f"Sending OCR request to {ai_ocr_url}/v1/ocr (timeout=300s)...")
-    t_ocr = time.monotonic()
-
     try:
-        with urllib.request.urlopen(ocr_req, timeout=300) as resp:
-            ocr_status = resp.status
-            ocr_result = json.loads(resp.read())
-        _log(f"OCR request completed in {time.monotonic() - t_ocr:.1f}s — HTTP {ocr_status}")
+        ocr_result = _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, data_url)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        _log(
-            f"OCR request failed after {time.monotonic() - t_ocr:.1f}s — "
-            f"HTTP {exc.code}: {body[:500]}",
-            error=True,
-        )
-        _log(traceback.format_exc(), error=True)
+        _log(f"OCR request failed — HTTP {exc.code}: {body[:500]}", error=True)
         sys.exit(1)
-    except urllib.error.URLError as exc:
-        _log(
-            f"OCR request failed after {time.monotonic() - t_ocr:.1f}s — "
-            f"URLError: {exc.reason}",
-            error=True,
-        )
-        _log(traceback.format_exc(), error=True)
-        sys.exit(1)
-    except Exception as exc:
-        _log(
-            f"OCR request failed after {time.monotonic() - t_ocr:.1f}s — "
-            f"Unexpected: {exc}",
-            error=True,
-        )
-        _log(traceback.format_exc(), error=True)
+    except (urllib.error.URLError, Exception) as exc:
+        _log(f"OCR request failed — {exc}", error=True)
         sys.exit(1)
 
-    # ── 6. Extract text from pages ─────────────────────────────────────────────
-    # When extract_header/extract_footer are set (Mistral), those fields are
-    # returned separately from `markdown` and must be merged explicitly.
-    pages = ocr_result.get("pages", [])
-
-    def _page_text(p: dict) -> str:
-        parts = []
-        for field in ("header", "markdown", "footer"):
-            val = (p.get(field) or "").strip()
-            if val:
-                parts.append(val)
-        return "\n\n".join(parts)
-
-    content = "\n\n".join(_page_text(p) for p in pages).strip()
-
-    _log(f"Extracted {len(pages)} page(s), {len(content)} chars of text")
+    content, page_count = _extract_text(ocr_result)
+    _log(f"Extracted {page_count} page(s), {len(content)} chars of text")
 
     if not content:
-        _log(
-            "No text content returned — leaving Tesseract output intact",
-            error=True,
-        )
-        sys.exit(0)  # Not fatal; Tesseract result remains
+        _log("No text content returned — leaving Tesseract output intact", error=True)
+        sys.exit(0)
 
-    # ── 6a. Debug mode — print OCR output and exit without patching ────────────
+    # ── 6. Quality check + rasterization fallback ─────────────────────────────
+    is_usable, cleaned, garbage_pct = check_quality(content, degrade_pct)
+
+    if not is_usable and garbage_pct > 0:
+        _log(
+            f"Quality check FAILED — {garbage_pct:.0f}% garbage lines detected "
+            f"(threshold: {degrade_pct:.0f}%)", error=True
+        )
+
+        if rasterize_fb and mime == "application/pdf":
+            _log("Rasterization fallback enabled — converting PDF to pixel-based format...")
+            rasterized_path = None
+            try:
+                rasterized_path = rasterize_pdf(archive_path)
+                if rasterized_path:
+                    with open(rasterized_path, "rb") as fh:
+                        raster_bytes = fh.read()
+                    _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
+                    raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
+                    raster_url = f"data:application/pdf;base64,{raster_b64}"
+
+                    ocr_result_2 = _ocr_request(
+                        ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
+                    )
+                    content_2, page_count_2 = _extract_text(ocr_result_2)
+                    _log(f"Rasterized retry: {page_count_2} page(s), {len(content_2)} chars")
+
+                    _, cleaned_2, garbage_pct_2 = check_quality(content_2, degrade_pct)
+
+                    if content_2 and (garbage_pct_2 == 0 or garbage_pct_2 < garbage_pct):
+                        _log(
+                            f"Rasterized result is better "
+                            f"(garbage: {garbage_pct_2:.0f}% vs {garbage_pct:.0f}%) — using it"
+                        )
+                        content = content_2 if garbage_pct_2 == 0 else cleaned_2
+                        page_count = page_count_2
+                    else:
+                        _log(f"Rasterized result not better — using cleaned original")
+                        content = cleaned
+                else:
+                    _log("Rasterization failed — using cleaned original content", error=True)
+                    content = cleaned
+            except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                _log(f"Rasterized retry failed: {exc} — using cleaned original", error=True)
+                content = cleaned
+            finally:
+                if rasterized_path:
+                    shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
+        else:
+            if mime != "application/pdf":
+                _log("Non-PDF document — cannot rasterize, using cleaned content")
+            else:
+                _log("Rasterization fallback disabled — using cleaned content")
+            content = cleaned
+
+    elif garbage_pct > 0:
+        _log(f"Minor garbage detected ({garbage_pct:.0f}%) — stripped garbage tail")
+        content = cleaned
+    else:
+        _log("Quality check passed — content is clean")
+
+    if not content:
+        _log("Content is empty after quality processing — leaving Tesseract output intact", error=True)
+        sys.exit(0)
+
+    # ── 7. Debug mode ──────────────────────────────────────────────────────────
     if debug_mode:
         _log("DEBUG MODE — OCR output follows (document NOT updated):")
         separator = "─" * 72
         print(separator, flush=True)
         print(content, flush=True)
         print(separator, flush=True)
-        _log(f"DEBUG MODE done — {len(pages)} page(s), {len(content)} chars")
+        _log(f"DEBUG MODE done — {page_count} page(s), {len(content)} chars")
         sys.exit(0)
 
-    # ── 7. Build PATCH payload ─────────────────────────────────────────────────
+    # ── 8. Build PATCH payload ─────────────────────────────────────────────────
     patch_payload: dict = {"content": content}
 
     if ai_ocr_tag_id is not None:
-        # Fetch current document tags so we can merge without clobbering existing ones.
-        # PATCH with a list field replaces the whole list, so we must include all tags.
         _log(f"Fetching current tags for document {document_id} (tag_id={ai_ocr_tag_id})...")
         t_get = time.monotonic()
         get_req = urllib.request.Request(
@@ -242,22 +276,20 @@ def main():
         )
         try:
             with urllib.request.urlopen(get_req, timeout=30) as resp:
-                get_status = resp.status
                 doc_data = json.loads(resp.read())
-            _log(f"GET completed in {time.monotonic() - t_get:.1f}s — HTTP {get_status}")
+            _log(f"GET completed in {time.monotonic() - t_get:.1f}s — HTTP {resp.status}")
             current_tags: list = doc_data.get("tags", [])
             if ai_ocr_tag_id not in current_tags:
                 current_tags.append(ai_ocr_tag_id)
             patch_payload["tags"] = current_tags
         except (urllib.error.URLError, urllib.error.HTTPError) as exc:
             _log(
-                f"Could not fetch document tags after {time.monotonic() - t_get:.1f}s — "
-                f"{exc}. Tag {ai_ocr_tag_id} not added, content update proceeds.",
+                f"Could not fetch document tags — {exc}. "
+                f"Tag {ai_ocr_tag_id} not added, content update proceeds.",
                 error=True,
             )
-            _log(traceback.format_exc(), error=True)
 
-    # ── 8. PATCH document content (and optionally tags) via paperless API ──────
+    # ── 9. PATCH document content ──────────────────────────────────────────────
     _log(
         f"Sending PATCH to {paperless_url}/api/documents/{document_id}/ "
         f"(content={len(content)} chars, fields={list(patch_payload.keys())}, timeout=60s)..."
@@ -276,41 +308,22 @@ def main():
 
     try:
         with urllib.request.urlopen(patch_req, timeout=60) as resp:
-            patch_status = resp.status
-            resp.read()  # consume response body
-        _log(f"PATCH completed in {time.monotonic() - t_patch:.1f}s — HTTP {patch_status}")
+            resp.read()
+        _log(f"PATCH completed in {time.monotonic() - t_patch:.1f}s — HTTP {resp.status}")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        _log(
-            f"PATCH failed after {time.monotonic() - t_patch:.1f}s — "
-            f"HTTP {exc.code}: {body[:500]}",
-            error=True,
-        )
-        _log(traceback.format_exc(), error=True)
+        _log(f"PATCH failed — HTTP {exc.code}: {body[:500]}", error=True)
         sys.exit(1)
-    except urllib.error.URLError as exc:
-        _log(
-            f"PATCH failed after {time.monotonic() - t_patch:.1f}s — "
-            f"URLError: {exc.reason}",
-            error=True,
-        )
-        _log(traceback.format_exc(), error=True)
-        sys.exit(1)
-    except Exception as exc:
-        _log(
-            f"PATCH failed after {time.monotonic() - t_patch:.1f}s — "
-            f"Unexpected: {exc}",
-            error=True,
-        )
-        _log(traceback.format_exc(), error=True)
+    except (urllib.error.URLError, Exception) as exc:
+        _log(f"PATCH failed — {exc}", error=True)
         sys.exit(1)
 
-    # ── 9. Done ────────────────────────────────────────────────────────────────
+    # ── 10. Done ───────────────────────────────────────────────────────────────
     total = time.monotonic() - _SCRIPT_START
     tag_info = f", tag: {ai_ocr_tag_id}" if ai_ocr_tag_id is not None else ""
     _log(
         f"Document {document_id} updated successfully — "
-        f"{len(pages)} page(s), {len(content)} chars, model: {ai_ocr_model}{tag_info}, "
+        f"{page_count} page(s), {len(content)} chars, model: {ai_ocr_model}{tag_info}, "
         f"total time: {total:.1f}s"
     )
 
