@@ -31,6 +31,10 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_FALLBACK_MODEL   - (optional) Fallback OCR model for table-only failures.
                              When primary model returns only table blocks, tries this
                              model on the rasterized PDF. Example: "mistral-ocr-latest"
+  AI_OCR_STATS_LOG        - (optional) Path to a JSON-lines stats log file. Each OCR
+                             run appends one JSON object with metrics (model, path,
+                             rasterized, garbage_pct, content_len, time_s, etc.).
+                             Example: "/logs/ai_ocr_stats.jsonl"
   AI_OCR_QUALITY_MODEL    - (optional) Cheap LLM model for quality evaluation. When set,
                              the basic OCR output is scored and rasterized if below threshold.
                              Example: "mistral-small-latest". Disabled if empty.
@@ -79,6 +83,41 @@ if _log_file_path:
         _log_fh = open(_log_file_path, "a", encoding="utf-8", buffering=1)
     except OSError as _e:
         print(f"AI OCR: WARNING — cannot open log file '{_log_file_path}': {_e}", flush=True)
+
+# ── Optional stats logging (JSON-lines) ───────────────────────────────────────
+_stats_log_path = os.getenv("AI_OCR_STATS_LOG", "").strip()
+_stats_fh = None
+if _stats_log_path:
+    try:
+        os.makedirs(os.path.dirname(_stats_log_path) or ".", exist_ok=True)
+        _stats_fh = open(_stats_log_path, "a", encoding="utf-8", buffering=1)
+    except OSError as _e:
+        print(f"AI OCR: WARNING — cannot open stats log '{_stats_log_path}': {_e}", flush=True)
+
+
+def _record_stats(doc_id, model, fallback, path, rasterized, table_only,
+                  garbage_pct, content_len, pages, time_s):
+    """Append one JSON line to the stats log."""
+    if _stats_fh is None:
+        return
+    entry = {
+        "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+        "doc_id": int(doc_id) if doc_id else None,
+        "model": model,
+        "fallback": fallback or None,
+        "path": path,
+        "rasterized": rasterized,
+        "table_only": table_only,
+        "garbage_pct": round(garbage_pct, 1),
+        "content_len": content_len,
+        "pages": pages,
+        "time_s": round(time_s, 2),
+    }
+    try:
+        _stats_fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        _stats_fh.flush()
+    except OSError:
+        pass
 
 
 def _log(msg: str, error: bool = False):
@@ -239,6 +278,8 @@ def main():
     content = ""
     page_count = 0
     ocr_result: dict = {}
+    ocr_path = "primary"  # tracks which path produced the final result
+    rasterized = False
 
     for attempt in range(1, total_attempts + 1):
         if attempt > 1:
@@ -321,6 +362,7 @@ def main():
                 content = content_fb
                 page_count = page_fb
                 ocr_result = ocr_fb
+                ocr_path = "fallback_original"
                 is_usable, garbage_pct = check_quality(content, degrade_pct)
                 table_only = False
                 has_issues = False
@@ -355,6 +397,8 @@ def main():
                     content = content_r
                     page_count = page_r
                     ocr_result = ocr_r
+                    ocr_path = "rasterized"
+                    rasterized = True
                 elif fallback_model:
                     # Try fallback model on rasterized
                     _log("Rasterized result not better — trying fallback on rasterized PDF...")
@@ -372,6 +416,8 @@ def main():
                             content = content_fb2
                             page_count = page_fb2
                             ocr_result = ocr_fb2
+                            ocr_path = "fallback_rasterized"
+                            rasterized = True
                         else:
                             _log("Fallback rasterized not better — keeping original")
                     except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
@@ -578,11 +624,13 @@ def main():
         _log(f"PATCH failed — {exc}", error=True)
         sys.exit(1)
 
-    # ── 10. Cleanup + done ─────────────────────────────────────────────────────
+    # ── 10. Cleanup + stats + done ─────────────────────────────────────────────
     if rasterized_tmpdir:
         shutil.rmtree(rasterized_tmpdir, ignore_errors=True)
 
     total = time.monotonic() - _SCRIPT_START
+    _record_stats(document_id, ai_ocr_model, fallback_model, ocr_path,
+                  rasterized, table_only, garbage_pct, len(content), page_count, total)
     tag_info = f", tag: {ai_ocr_tag_id}" if ai_ocr_tag_id is not None else ""
     _log(
         f"Document {document_id} updated successfully — "
