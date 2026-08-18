@@ -305,16 +305,16 @@ def main():
                 )
                 content_2, page_count_2 = _extract_text(ocr_result_2)
 
-                if content_2 and len(content_2) > len(content):
+                if content_2:
                     _log(
-                        f"Rasterized result has more content "
-                        f"({len(content_2)} vs {len(content)} chars) — using it"
+                        f"Using rasterized result "
+                        f"({len(content_2)} vs {len(content)} chars)"
                     )
                     content = content_2
                     page_count = page_count_2
                     ocr_result = ocr_result_2
                 else:
-                    _log("Rasterized result not better — keeping original")
+                    _log("Rasterized result empty — keeping original")
             except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
                 _log(f"Table-only rasterize retry failed: {exc}", error=True)
             finally:
