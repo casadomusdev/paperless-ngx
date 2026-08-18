@@ -355,8 +355,8 @@ def main():
             # Use fallback if it's meaningfully better
             fb_better = (content_fb
                          and len(content_fb) >= len(content) * 0.5
-                         and garbage_fb < garbage_pct
-                         and not table_fb)
+                         and not table_fb
+                         and (garbage_fb < garbage_pct or (table_only and not table_fb)))
             if fb_better:
                 _log(f"Using fallback result ({len(content_fb)} vs {len(content)} chars)")
                 content = content_fb
