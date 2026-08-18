@@ -279,6 +279,7 @@ def main():
     page_count = 0
     ocr_result: dict = {}
     ocr_path = "primary"  # tracks which path produced the final result
+    final_model = ai_ocr_model  # tracks which model actually produced the result
     rasterized = False
 
     for attempt in range(1, total_attempts + 1):
@@ -362,6 +363,7 @@ def main():
                 content = content_fb
                 page_count = page_fb
                 ocr_result = ocr_fb
+                final_model = fallback_model
                 ocr_path = "fallback_original"
                 is_usable, garbage_pct = check_quality(content, degrade_pct)
                 table_only = False
@@ -416,6 +418,7 @@ def main():
                             content = content_fb2
                             page_count = page_fb2
                             ocr_result = ocr_fb2
+                            final_model = fallback_model
                             ocr_path = "fallback_rasterized"
                             rasterized = True
                         else:
@@ -629,12 +632,12 @@ def main():
         shutil.rmtree(rasterized_tmpdir, ignore_errors=True)
 
     total = time.monotonic() - _SCRIPT_START
-    _record_stats(document_id, ai_ocr_model, fallback_model, ocr_path,
+    _record_stats(document_id, final_model, fallback_model, ocr_path,
                   rasterized, table_only, garbage_pct, len(content), page_count, total)
     tag_info = f", tag: {ai_ocr_tag_id}" if ai_ocr_tag_id is not None else ""
     _log(
         f"Document {document_id} updated successfully — "
-        f"{page_count} page(s), {len(content)} chars, model: {ai_ocr_model}{tag_info}, "
+        f"{page_count} page(s), {len(content)} chars, model: {final_model}{tag_info}, "
         f"total time: {total:.1f}s"
     )
 
