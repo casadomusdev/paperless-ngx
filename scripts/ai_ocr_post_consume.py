@@ -28,6 +28,9 @@ Configuration (set in your Docker Compose environment / .env):
                              "never"  — never rasterize (old behavior)
   AI_OCR_DEGRADATION_THRESHOLD - Garbage-line percentage above which a rasterized retry is
                              triggered in "auto" mode (default: 30)
+  AI_OCR_FALLBACK_MODEL   - (optional) Fallback OCR model for table-only failures.
+                             When primary model returns only table blocks, tries this
+                             model on the rasterized PDF. Example: "mistral-ocr-latest"
   AI_OCR_QUALITY_MODEL    - (optional) Cheap LLM model for quality evaluation. When set,
                              the basic OCR output is scored and rasterized if below threshold.
                              Example: "mistral-small-latest". Disabled if empty.
@@ -177,9 +180,10 @@ def main():
     debug_mode    = os.getenv("AI_OCR_DEBUG", "false").lower() == "true"
     max_retries   = int(os.getenv("AI_OCR_MAX_RETRIES", "3"))
     retry_base    = int(os.getenv("AI_OCR_RETRY_DELAY", "5"))
-    rasterize_mode = os.getenv("AI_OCR_RASTERIZE", "auto").lower().strip()
-    degrade_pct    = float(os.getenv("AI_OCR_DEGRADATION_THRESHOLD", "30"))
-    quality_model  = os.getenv("AI_OCR_QUALITY_MODEL", "").strip()
+    rasterize_mode  = os.getenv("AI_OCR_RASTERIZE", "auto").lower().strip()
+    degrade_pct     = float(os.getenv("AI_OCR_DEGRADATION_THRESHOLD", "30"))
+    fallback_model  = os.getenv("AI_OCR_FALLBACK_MODEL", "").strip()
+    quality_model   = os.getenv("AI_OCR_QUALITY_MODEL", "").strip()
     quality_key    = os.getenv("AI_OCR_QUALITY_KEY", "").strip() or ai_ocr_key
     quality_url    = os.getenv("AI_OCR_QUALITY_URL", "").strip() or ai_ocr_url
     quality_thresh = int(os.getenv("AI_OCR_QUALITY_THRESHOLD", "70"))
@@ -314,6 +318,33 @@ def main():
                     content = content_2
                     page_count = page_count_2
                     ocr_result = ocr_result_2
+                elif fallback_model:
+                    _log(
+                        f"Rasterized result too short or empty "
+                        f"({len(content_2)} vs {len(content)} chars) — "
+                        f"trying fallback model {fallback_model}..."
+                    )
+                    try:
+                        ocr_result_3 = _ocr_request(
+                            ai_ocr_url, ai_ocr_key, fallback_model, raster_url
+                        )
+                        content_3, page_count_3 = _extract_text(ocr_result_3)
+                        _log(
+                            f"Fallback result: {page_count_3} page(s), "
+                            f"{len(content_3)} chars"
+                        )
+                        if content_3 and len(content_3) >= len(content) * 0.5:
+                            _log(
+                                f"Using fallback result "
+                                f"({len(content_3)} vs {len(content)} chars)"
+                            )
+                            content = content_3
+                            page_count = page_count_3
+                            ocr_result = ocr_result_3
+                        else:
+                            _log("Fallback result too short — keeping original")
+                    except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                        _log(f"Fallback model failed: {exc} — keeping original", error=True)
                 else:
                     _log(
                         f"Rasterized result too short or empty "

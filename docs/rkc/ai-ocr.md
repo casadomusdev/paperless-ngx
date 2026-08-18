@@ -267,6 +267,7 @@ Rasterization is most effective for PDFs with:
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `AI_OCR_RASTERIZE` | `auto` | `"auto"` — try PDF first, rasterize on quality failure. `"always"` — always rasterize before OCR (best quality, higher cost). `"never"` — disable rasterization entirely. |
+| `AI_OCR_FALLBACK_MODEL` | _(empty)_ | Fallback OCR model for table-only failures. When the primary model returns only table blocks and rasterization doesn't help, tries this model on the rasterized PDF. Example: `mistral-ocr-latest`. |
 | `AI_OCR_QUALITY_MODEL` | _(empty)_ | Cheap LLM model for quality evaluation (e.g. `mistral-small-latest`). Empty = disabled. |
 | `AI_OCR_QUALITY_KEY` | _(empty)_ | API key for the quality model. Falls back to `AI_OCR_KEY`. |
 | `AI_OCR_QUALITY_URL` | _(empty)_ | LiteLLM URL for quality model. Falls back to `AI_OCR_URL`. |
