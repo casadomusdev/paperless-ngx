@@ -192,6 +192,7 @@ variables:
 | `DOCUMENT_CORRESPONDENT`     | Assigned correspondent (if any)                |
 | `DOCUMENT_TAGS`              | Comma separated list of tags applied (if any)  |
 | `DOCUMENT_ORIGINAL_FILENAME` | Filename of original document                  |
+| `DOCUMENT_MIME_TYPE`         | MIME type of the document (e.g. `application/pdf`) |
 | `TASK_ID`                    | Task UUID used to import the document (if any) |
 
 The script can be in any language, A simple shell script example:

@@ -402,6 +402,9 @@ class ConsumerPlugin(
             ",".join(document.tags.all().values_list("name", flat=True)),
         )
         script_env["DOCUMENT_ORIGINAL_FILENAME"] = str(document.original_filename)
+        # RKC: Pass document MIME type so post-consume scripts can filter by type (v1.2.5)
+        script_env["DOCUMENT_MIME_TYPE"] = document.mime_type or ""
+        # /end RKC edit
         script_env["TASK_ID"] = self.task_id or ""
 
         try:

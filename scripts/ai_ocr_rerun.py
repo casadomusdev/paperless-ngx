@@ -28,18 +28,16 @@ if _log_file_path:
         os.makedirs(os.path.dirname(_log_file_path) or ".", exist_ok=True)
         _log_fh = open(_log_file_path, "a", encoding="utf-8", buffering=1)
     except OSError as _e:
-        print(f"ai_ocr_rerun: WARNING — cannot open log file '{_log_file_path}': {_e}", file=sys.stderr, flush=True)
+        print(f"ai_ocr_rerun: WARNING — cannot open log file '{_log_file_path}': {_e}", flush=True)
 
 
 def _print(msg: str, error: bool = False):
-    """Print helper that also appends to AI_OCR_LOG_FILE when set."""
-    if error:
-        print(msg, file=sys.stderr, flush=True)
-    else:
-        print(msg, flush=True)
+    """Print helper that also appends to AI_OCR_LOG_FILE when set.
+    All output goes to stdout for unified logging in paperless consumer log."""
+    print(msg, flush=True)
     if _log_fh is not None:
         ts = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        _log_fh.write(f"{ts} {msg}\n")
+        _log_fh.write(f"{ts} {'ERROR ' if error else ''}{msg}\n")
 
 
 def main():

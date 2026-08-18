@@ -95,7 +95,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 
 ### Document Processing
 
-**AI OCR via Post-Consumption Script** — Replaces Tesseract OCR output with higher-quality text from an AI OCR provider (Mistral OCR, Azure Document Intelligence, or any LiteLLM-compatible OCR model) without modifying the paperless-ngx source code. Implemented as a `PAPERLESS_POST_CONSUME_SCRIPT` hook — zero changes to paperless-ngx itself. Sends the archived PDF as a base64 data URL to LiteLLM's `/v1/ocr` endpoint (native endpoint, not the Mistral pass-through, so cost tracking works). The `content` field is overwritten via `PATCH /api/documents/{id}/`; the search index auto-updates. Email documents (`message/rfc822`) are skipped entirely — they do not benefit from OCR and skipping prevents a race condition with the send-mail pipeline. Disabled by default via `AI_OCR_ENABLED`.
+**AI OCR via Post-Consumption Script** — Replaces Tesseract OCR output with higher-quality text from an AI OCR provider (Mistral OCR, Azure Document Intelligence, or any LiteLLM-compatible OCR model) without modifying the paperless-ngx source code. Implemented as a `PAPERLESS_POST_CONSUME_SCRIPT` hook — zero changes to paperless-ngx itself. Sends the archived PDF as a base64 data URL to LiteLLM's `/v1/ocr` endpoint (native endpoint, not the Mistral pass-through, so cost tracking works). The `content` field is overwritten via `PATCH /api/documents/{id}/`; the search index auto-updates. Email documents (`message/rfc822`) are skipped entirely via `DOCUMENT_MIME_TYPE` — they do not benefit from OCR and skipping prevents a race condition with the send-mail pipeline. Includes automatic retry with exponential backoff (configurable via `AI_OCR_MAX_RETRIES` / `AI_OCR_RETRY_DELAY`) for transient failures and empty responses. OCR quality detection with rasterization fallback for degraded output. Disabled by default via `AI_OCR_ENABLED`.
 → [Details](docs/rkc/ai-ocr.md)
 
 **Duplicate Document Re-Add** — When a duplicate is detected during consumption, the existing document's `added` date is reset so it surfaces in the inbox again. Uses two-tier deduplication: MD5 checksum for binary-identical files (PDFs, images) and Mail UID custom field lookup for EML documents whose byte representation varies across fetches. Supports optional tagging, informational notes with source context (mail metadata or source type), and trashed document handling (restore-readd-optionally-retrash). Disabled by default.
@@ -200,6 +200,10 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `AI_OCR_KEY` | String | — | LiteLLM virtual API key |
 | `AI_OCR_MODEL` | String | `mistral-ocr-latest` | OCR model name |
 | `AI_OCR_TAG_ID` | Int | None | Tag ID to apply on successful AI OCR |
+| `AI_OCR_MAX_RETRIES` | Int | `3` | Max retries on transient OCR failures (empty content, HTTP 429/5xx) |
+| `AI_OCR_RETRY_DELAY` | Int | `5` | Base retry delay in seconds; doubles each attempt |
+| `AI_OCR_RASTERIZE_FALLBACK` | Bool | `true` | Rasterize PDF and retry when quality check detects degraded output |
+| `AI_OCR_DEGRADATION_THRESHOLD` | Int | `30` | Garbage-line percentage above which rasterized retry triggers |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless API token for AI OCR script |
 | `PAPERLESS_CONSUMER_READD_DOCUMENTS` | Bool | `false` | Enable duplicate re-add |
 | `PAPERLESS_CONSUMER_READD_TAG_ID` | Int | None | Tag ID for re-added documents |
@@ -226,6 +230,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.5.1** — AI OCR retry with exponential backoff, response debugging, and MIME type fix: automatic retry (default 3 attempts, 5s→10s→20s backoff) for transient failures — empty content, HTTP 429/5xx, connection errors. Response summary dump on empty content for debugging what the OCR API actually returned. All script output unified to stdout for clean paperless log integration. `DOCUMENT_MIME_TYPE` env var now passed to post-consume scripts so email-skip logic actually works. New env vars: `AI_OCR_MAX_RETRIES`, `AI_OCR_RETRY_DELAY`
 - **v1.5.0** — Email send queue with retry: failed outgoing emails (workflow and manual) are queued as `PendingEmail` entries and retried with exponential backoff (5min→24h cap, up to50 attempts over~5 days). Templates are re-rendered with fresh document context on each retry. Includes admin UI dialog on the Mail Settings page for viewing/managing the queue. Inline retry (2s/4s) in `send_email()` catches transient blips before queueing. New env vars: `PAPERLESS_MAIL_RETRY_MAX_ATTEMPTS`, `PAPERLESS_MAIL_RETRY_BASE_SECONDS`, `PAPERLESS_MAIL_RETRY_MAX_SECONDS`, `PAPERLESS_MAIL_QUEUE_CRON`
 - **v1.4.2** — `SOCIALACCOUNT_LOGIN_ON_GET = True` (env: `PAPERLESS_SOCIALACCOUNT_LOGIN_ON_GET`, default `true`) — GET requests directly initiate OIDC login without the allauth confirmation page, enabling one-click SSO from external launchpads
 - **v1.4.1** — AI OCR skips email documents (`message/rfc822`) to prevent race condition with send-mail pipeline; workflow email action catches `Jinja2 UndefinedError` so templates referencing unresolved custom fields log a warning and skip instead of propagating HTTP 500

@@ -75,6 +75,8 @@ is a no-op when `AI_OCR_ENABLED` is absent or not `"true"`.
 | `AI_OCR_TAG_ID`  | _(none)_                | Tag ID to apply to the document on successful OCR. Requires a GET to fetch existing tags before the PATCH, so existing tags are preserved. No tag is added if unset. |
 | `AI_OCR_DEBUG`    | `false`                 | Set to `"true"` to print the extracted OCR text to stdout and skip writing to the document. Useful for inspecting OCR quality without modifying any data. |
 | `AI_OCR_LOG_FILE` | _(none)_                | Absolute path to a log file inside the container, e.g. `/logs/ai_ocr.log`. When set, every log line is appended to this file with a wallclock datetime prefix. Opt-in — no log file is written when unset. |
+| `AI_OCR_MAX_RETRIES` | `3`                 | Maximum retry attempts on transient failures (empty content, HTTP 429/5xx, connection errors). Set to `0` to disable retries. |
+| `AI_OCR_RETRY_DELAY` | `5`                 | Base retry delay in seconds. Doubles each attempt (5s → 10s → 20s). Respects `Retry-After` header on HTTP 429. |
 | `AI_OCR_RASTERIZE_FALLBACK` | `true`         | Enable automatic rasterization retry when the quality check detects degraded output (e.g., repeated garbage lines). Set to `"false"` to disable. |
 | `AI_OCR_DEGRADATION_THRESHOLD` | `30`         | Percentage of garbage lines that triggers a rasterized retry. If the garbage percentage is below this threshold, only the garbage tail is stripped without retrying. |
 | `PAPERLESS_URL`   | `http://localhost:8000` | Internal paperless URL |
@@ -342,19 +344,60 @@ Each line in the file has a wallclock datetime prefix followed by the normal
 
 ## Log Output
 
-When everything works you will see in the consumer log:
+All script messages appear in the paperless consumer log under a single `stdout:`
+section at INFO level. Errors are distinguished by content, not log level.
+
+When everything works:
 ```
-AI OCR: Document 42 updated — 3 page(s), 2847 chars, model: mistral-ocr-latest
+AI OCR [  0.0s]: Starting — doc=42, model=mistral-ocr-latest, archive=...
+AI OCR [  0.1s]: Read archive file: 1,204,832 bytes
+AI OCR [ 13.4s]: OCR completed in 13.3s — 4 page(s), 2847 chars
+AI OCR [ 13.4s]: Quality check passed — content is clean
+AI OCR [ 13.5s]: PATCH completed in 0.1s — HTTP 200
+AI OCR [ 13.5s]: Document 42 updated successfully — 4 page(s), 2847 chars
 ```
 
-Errors print to stderr and cause an exit code of 1 (paperless logs but continues):
+When retries are triggered (empty content or transient HTTP errors):
 ```
-AI OCR: OCR request failed — HTTP 429: {"error": "rate limit exceeded"}
-AI OCR: Missing required configuration: AI_OCR_URL, PAPERLESS_API_TOKEN
+AI OCR [  1.1s]: OCR completed in 1.1s — 1 page(s), 0 chars
+AI OCR [  1.1s]: Empty content returned — response summary:
+AI OCR [  1.1s]: top-level keys: [], pages: 1
+AI OCR [  1.1s]:   page[0]: keys=['index', 'markdown']
+AI OCR [  1.1s]:     index: 0
+AI OCR [  1.1s]:     markdown: ''
+AI OCR [  1.1s]: Attempt 1/4 — empty content. Retrying in 5s...
+AI OCR [  6.2s]: Attempt 2/4 — retrying OCR request...
+AI OCR [  7.5s]: OCR completed in 1.2s — 4 page(s), 3945 chars
 ```
 
-Soft skips print to stdout and exit with code 0 (paperless continues silently):
+Soft skips (exit 0, paperless continues silently):
 ```
-AI OCR: Skipping AI OCR for email document (MIME type: message/rfc822)
-AI OCR: No archive file at '' — skipping AI OCR (non-PDF/image document, e.g. .eml upload)
+AI OCR [  0.0s]: Skipping AI OCR for email document (MIME type: message/rfc822)
+AI OCR [  0.0s]: No archive file at '' — skipping AI OCR
 ```
+
+### Finding Errors in the Paperless Log
+
+All AI OCR messages appear under the `stdout:` section of the paperless consumer
+log. To find problems:
+
+```bash
+# All AI OCR activity
+grep "AI OCR" /path/to/paperless.log
+
+# Only failures and retries
+grep "AI OCR.*\(empty content\|failed\|Retrying\|attempts returned\)" /path/to/paperless.log
+
+# Response dumps (what the OCR API actually returned)
+grep "AI OCR.*\(response summary\|page\[\|top-level keys\)" /path/to/paperless.log
+
+# If AI_OCR_LOG_FILE is set (e.g. /logs/ai_ocr.log)
+grep "ERROR" /logs/ai_ocr.log
+
+# Watch in real time
+docker exec paperless-celery tail -f /logs/ai_ocr.log | grep -E "ERROR|failed|empty|Retrying"
+```
+
+The response summary after `Empty content returned — response summary:` shows
+exactly what the OCR API sent back — page keys, field values, and whether
+`markdown` was empty, null, or missing.

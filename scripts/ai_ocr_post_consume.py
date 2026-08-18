@@ -19,6 +19,9 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_DEBUG             - Set to "true" to print OCR output to stdout and skip the PATCH
   AI_OCR_LOG_FILE          - (optional) Path to a log file; all log lines are appended there
                              with a wallclock datetime prefix, e.g. "/logs/ai_ocr.log"
+  AI_OCR_MAX_RETRIES       - (optional) Max retries on transient failures (default: 3)
+  AI_OCR_RETRY_DELAY       - (optional) Base retry delay in seconds; doubles each attempt
+                             (default: 5 → 5s, 10s, 20s)
   AI_OCR_RASTERIZE_FALLBACK - "true" to retry with a rasterized PDF when quality check fails
                              (default: true)
   AI_OCR_DEGRADATION_THRESHOLD - Garbage-line percentage above which a rasterized retry is
@@ -30,6 +33,7 @@ Injected by paperless-ngx automatically:
 
   DOCUMENT_ID              - Database ID of the consumed document
   DOCUMENT_ARCHIVE_PATH    - Filesystem path to the archived (OCRed) PDF
+  DOCUMENT_MIME_TYPE       - MIME type of the document (e.g. "application/pdf")
 
 Usage with paperless-ngx:
   PAPERLESS_POST_CONSUME_SCRIPT=/usr/src/paperless/scripts/ai_ocr_post_consume.py
@@ -61,20 +65,19 @@ if _log_file_path:
         os.makedirs(os.path.dirname(_log_file_path) or ".", exist_ok=True)
         _log_fh = open(_log_file_path, "a", encoding="utf-8", buffering=1)
     except OSError as _e:
-        print(f"AI OCR: WARNING — cannot open log file '{_log_file_path}': {_e}", file=sys.stderr, flush=True)
+        print(f"AI OCR: WARNING — cannot open log file '{_log_file_path}': {_e}", flush=True)
 
 
 def _log(msg: str, error: bool = False):
-    """Timestamped log helper. Flushes immediately so logs appear real-time in Celery output."""
+    """Timestamped log helper. All output goes to stdout so it lands in a single
+    'stdout:' section of the paperless consumer log. The error flag only affects
+    the AI_OCR_LOG_FILE where error lines are prefixed with 'ERROR'."""
     elapsed = time.monotonic() - _SCRIPT_START
     line = f"AI OCR [{elapsed:6.1f}s]: {msg}"
-    if error:
-        print(line, file=sys.stderr, flush=True)
-    else:
-        print(line, flush=True)
+    print(line, flush=True)
     if _log_fh is not None:
         ts = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        _log_fh.write(f"{ts} {line}\n")
+        _log_fh.write(f"{ts} {'ERROR ' if error else ''}{line}\n")
 
 
 def _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, data_url, timeout=300):
@@ -120,6 +123,34 @@ def _extract_text(ocr_result):
     return content, len(pages)
 
 
+def _response_summary(raw: dict) -> list[str]:
+    """Debug-safe summary of an OCR response — excludes base64 image data."""
+    pages = raw.get("pages", [])
+    lines = [f"top-level keys: {sorted(k for k in raw if k != 'pages')}, pages: {len(pages)}"]
+    for i, p in enumerate(pages[:5]):
+        keys = sorted(p.keys())
+        lines.append(f"  page[{i}]: keys={keys}")
+        for k in keys:
+            if k == "images":
+                lines.append(f"    images: {len(p[k])} item(s)")
+                continue
+            v = p[k]
+            vs = str(v) if v is not None else "null"
+            trunc = f"{vs[:150]}...({len(vs)} chars)" if len(vs) > 150 else vs
+            lines.append(f"    {k}: {trunc!r}")
+    return lines
+
+
+def _retry_delay(attempt: int, base: int, exc: object = None) -> int:
+    """Calculate delay for retry attempt (1-indexed). Respects Retry-After on 429."""
+    delay = base * (2 ** (attempt - 1))
+    if exc is not None and getattr(exc, "code", 0) == 429:
+        ra = getattr(getattr(exc, "headers", {}), "get", lambda *_: "")("Retry-After", "")
+        if str(ra).isdigit():
+            delay = max(int(ra), delay)
+    return delay
+
+
 def main():
     # ── 1. Feature gate ────────────────────────────────────────────────────────
     if os.getenv("AI_OCR_ENABLED", "false").lower() != "true":
@@ -134,11 +165,14 @@ def main():
     document_id   = os.getenv("DOCUMENT_ID", "")
     archive_path  = os.getenv("DOCUMENT_ARCHIVE_PATH", "")
     debug_mode    = os.getenv("AI_OCR_DEBUG", "false").lower() == "true"
+    max_retries   = int(os.getenv("AI_OCR_MAX_RETRIES", "3"))
+    retry_base    = int(os.getenv("AI_OCR_RETRY_DELAY", "5"))
     rasterize_fb  = os.getenv("AI_OCR_RASTERIZE_FALLBACK", "true").lower() == "true"
     degrade_pct   = float(os.getenv("AI_OCR_DEGRADATION_THRESHOLD", "30"))
     tag_id_str    = os.getenv("AI_OCR_TAG_ID", "").strip()
     ai_ocr_tag_id = int(tag_id_str) if tag_id_str.isdigit() else None
 
+    total_attempts = 1 + max_retries
     _log(f"Starting — doc={document_id}, model={ai_ocr_model}, archive={archive_path}")
 
     missing = [k for k, v in {
@@ -167,25 +201,60 @@ def main():
     ext = os.path.splitext(archive_path)[1].lower()
     mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
 
-    # ── 5. First OCR attempt ───────────────────────────────────────────────────
+    # ── 5. OCR with retry ─────────────────────────────────────────────────────
     b64 = base64.b64encode(file_bytes).decode("utf-8")
     data_url = f"data:{mime};base64,{b64}"
 
-    try:
-        ocr_result = _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, data_url)
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        _log(f"OCR request failed — HTTP {exc.code}: {body[:500]}", error=True)
-        sys.exit(1)
-    except (urllib.error.URLError, Exception) as exc:
-        _log(f"OCR request failed — {exc}", error=True)
-        sys.exit(1)
+    content = ""
+    page_count = 0
+    ocr_result: dict = {}
 
-    content, page_count = _extract_text(ocr_result)
-    _log(f"Extracted {page_count} page(s), {len(content)} chars of text")
+    for attempt in range(1, total_attempts + 1):
+        if attempt > 1:
+            _log(f"Attempt {attempt}/{total_attempts} — retrying OCR request...")
+
+        try:
+            ocr_result = _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, data_url)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            _log(f"OCR request failed — HTTP {exc.code}: {body[:500]}", error=True)
+            if exc.code in (429, 500, 502, 503, 504) and attempt < total_attempts:
+                delay = _retry_delay(attempt, retry_base, exc)
+                _log(f"Attempt {attempt}/{total_attempts} — HTTP {exc.code}. Retrying in {delay}s...")
+                time.sleep(delay)
+                continue
+            sys.exit(1)
+        except (urllib.error.URLError, Exception) as exc:
+            _log(f"OCR request failed — {exc}", error=True)
+            if attempt < total_attempts:
+                delay = _retry_delay(attempt, retry_base)
+                _log(f"Attempt {attempt}/{total_attempts} — {type(exc).__name__}. Retrying in {delay}s...")
+                time.sleep(delay)
+                continue
+            sys.exit(1)
+
+        content, page_count = _extract_text(ocr_result)
+        _log(f"Extracted {page_count} page(s), {len(content)} chars of text")
+
+        if content:
+            break
+
+        # Empty content — dump response structure for debugging
+        _log("Empty content returned — response summary:", error=True)
+        for line in _response_summary(ocr_result):
+            _log(line, error=True)
+
+        if attempt < total_attempts:
+            delay = _retry_delay(attempt, retry_base)
+            _log(f"Attempt {attempt}/{total_attempts} — empty content. Retrying in {delay}s...")
+            time.sleep(delay)
 
     if not content:
-        _log("No text content returned — leaving Tesseract output intact", error=True)
+        _log(
+            f"All {total_attempts} attempts returned empty content — "
+            f"leaving Tesseract output intact",
+            error=True,
+        )
         sys.exit(0)
 
     # ── 6. Quality check + rasterization fallback ─────────────────────────────
@@ -329,4 +398,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:
+        _log(f"Unhandled exception:\n{traceback.format_exc()}", error=True)
+        sys.exit(1)
