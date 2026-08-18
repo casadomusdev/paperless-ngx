@@ -290,8 +290,8 @@ def main():
     # caused it to ignore the header content above the table.
     if rasterize_mode != "never" and mime == "application/pdf" and is_table_only(ocr_result):
         _log("Table-only blocks detected — Mistral may have missed header content")
-        _log("Rasterizing PDF at 600 DPI to force full-page text extraction...")
-        rasterized_path = rasterize_pdf(archive_path, dpi=600)
+        _log("Rasterizing PDF to force full-page text extraction...")
+        rasterized_path = rasterize_pdf(archive_path)
         if rasterized_path:
             try:
                 with open(rasterized_path, "rb") as fh:
