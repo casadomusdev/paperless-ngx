@@ -288,94 +288,105 @@ def main():
         )
         sys.exit(0)
 
-    # ── 6. Table-only detection + rasterization ───────────────────────────────
-    # If Mistral classified the entire page as table blocks (no text blocks),
-    # it likely made a wrong segmentation decision — e.g., a horizontal line
-    # caused it to ignore the header content above the table.
-    if is_table_only(ocr_result):
-        _log("Table-only blocks detected — Mistral may have missed header content")
-
-        # ── Step A: Try fallback model on original PDF first (no rasterization) ──
-        if fallback_model:
-            _log(f"Trying fallback model {fallback_model} on original PDF...")
-            try:
-                ocr_fb = _ocr_request(
-                    ai_ocr_url, ai_ocr_key, fallback_model, data_url
-                )
-                content_fb, page_fb = _extract_text(ocr_fb)
-                _log(f"Fallback result: {page_fb} page(s), {len(content_fb)} chars (original: {len(content)} chars)")
-                if content_fb and len(content_fb) >= len(content) * 0.5 and not is_table_only(ocr_fb):
-                    _log(f"Using fallback result ({len(content_fb)} vs {len(content)} chars)")
-                    content = content_fb
-                    page_count = page_fb
-                    ocr_result = ocr_fb
-                else:
-                    _log("Fallback on original still table-only or too short — will try rasterization")
-            except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
-                _log(f"Fallback model on original failed: {exc}", error=True)
-
-        # ── Step B: Rasterize + retry (primary model, then fallback if needed) ───
-        if is_table_only(ocr_result) and rasterize_mode != "never" and mime == "application/pdf":
-            _log("Rasterizing PDF to force full-page text extraction...")
-            rasterized_path = rasterize_pdf(archive_path)
-            if rasterized_path:
-                try:
-                    with open(rasterized_path, "rb") as fh:
-                        raster_bytes = fh.read()
-                    _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
-                    raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
-                    raster_url = f"data:application/pdf;base64,{raster_b64}"
-
-                    ocr_result_2 = _ocr_request(
-                        ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
-                    )
-                    content_2, page_count_2 = _extract_text(ocr_result_2)
-                    _log(f"Rasterized result: {page_count_2} page(s), {len(content_2)} chars (original: {len(content)} chars)")
-
-                    if content_2 and len(content_2) >= len(content) * 0.5:
-                        _log(f"Using rasterized result ({len(content_2)} vs {len(content)} chars)")
-                        content = content_2
-                        page_count = page_count_2
-                        ocr_result = ocr_result_2
-                    elif fallback_model:
-                        _log(f"Rasterized result too short — trying fallback model on rasterized PDF...")
-                        try:
-                            ocr_result_3 = _ocr_request(
-                                ai_ocr_url, ai_ocr_key, fallback_model, raster_url
-                            )
-                            content_3, page_count_3 = _extract_text(ocr_result_3)
-                            _log(f"Fallback rasterized result: {page_count_3} page(s), {len(content_3)} chars")
-                            if content_3 and len(content_3) >= len(content) * 0.5:
-                                _log(f"Using fallback rasterized result ({len(content_3)} vs {len(content)} chars)")
-                                content = content_3
-                                page_count = page_count_3
-                                ocr_result = ocr_result_3
-                            else:
-                                _log("Fallback rasterized result too short — keeping original")
-                        except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
-                            _log(f"Fallback on rasterized failed: {exc} — keeping original", error=True)
-                    else:
-                        _log(f"Rasterized result too short ({len(content_2)} vs {len(content)} chars) — keeping original")
-                except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
-                    _log(f"Table-only rasterize retry failed: {exc}", error=True)
-                finally:
-                    if rasterized_path:
-                        shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
-            else:
-                _log("Rasterization failed — keeping original content", error=True)
-
-    # ── 7. Garbage quality check + rasterization fallback ─────────────────────
+    # ── 6. Quality assessment ──────────────────────────────────────────────────
     raw_content = content  # preserve for debug/comparison
     is_usable, garbage_pct = check_quality(content, degrade_pct)
+    table_only = is_table_only(ocr_result)
+    has_issues = (not is_usable and garbage_pct > 0) or table_only
 
-    # Log quality check details — always, not just in debug mode
+    if table_only:
+        _log("Table-only blocks detected — Mistral may have missed header content")
     if garbage_pct > 0:
-        _log(
-            f"Quality check detail — {len(raw_content)} chars, "
-            f"{garbage_pct:.0f}% garbage (usable={is_usable})"
-        )
+        _log(f"Quality check detail — {len(raw_content)} chars, "
+             f"{garbage_pct:.0f}% garbage (usable={is_usable})")
 
-    if debug_mode:
+    # ── 7. Fallback model on ORIGINAL PDF (before any rasterization) ──────────
+    if has_issues and fallback_model:
+        _log(f"Trying fallback model {fallback_model} on original PDF...")
+        try:
+            ocr_fb = _ocr_request(ai_ocr_url, ai_ocr_key, fallback_model, data_url)
+            content_fb, page_fb = _extract_text(ocr_fb)
+            _, garbage_fb = check_quality(content_fb, degrade_pct)
+            table_fb = is_table_only(ocr_fb)
+            _log(f"Fallback result: {page_fb} page(s), {len(content_fb)} chars, "
+                 f"garbage={garbage_fb:.0f}%, table-only={table_fb}")
+
+            # Use fallback if it's meaningfully better
+            fb_better = (content_fb
+                         and len(content_fb) >= len(content) * 0.5
+                         and garbage_fb < garbage_pct
+                         and not table_fb)
+            if fb_better:
+                _log(f"Using fallback result ({len(content_fb)} vs {len(content)} chars)")
+                content = content_fb
+                page_count = page_fb
+                ocr_result = ocr_fb
+                is_usable, garbage_pct = check_quality(content, degrade_pct)
+                table_only = False
+                has_issues = False
+            else:
+                _log("Fallback on original not better — will try rasterization")
+        except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+            _log(f"Fallback model on original failed: {exc}", error=True)
+
+    # ── 8. Rasterization (if still has issues) ────────────────────────────────
+    if has_issues and rasterize_mode != "never" and mime == "application/pdf":
+        _log("Rasterizing PDF to force full-page text extraction...")
+        rasterized_path = rasterize_pdf(archive_path)
+        if rasterized_path:
+            try:
+                with open(rasterized_path, "rb") as fh:
+                    raster_bytes = fh.read()
+                _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
+                raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
+                raster_url = f"data:application/pdf;base64,{raster_b64}"
+
+                # Try primary model on rasterized
+                ocr_r = _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url)
+                content_r, page_r = _extract_text(ocr_r)
+                _, garbage_r = check_quality(content_r, degrade_pct)
+                _log(f"Rasterized result: {page_r} page(s), {len(content_r)} chars, garbage={garbage_r:.0f}%")
+
+                use_rasterized = (content_r
+                                  and len(content_r) >= len(content) * 0.5
+                                  and (garbage_r < garbage_pct or table_only))
+                if use_rasterized:
+                    _log(f"Using rasterized result ({len(content_r)} vs {len(content)} chars)")
+                    content = content_r
+                    page_count = page_r
+                    ocr_result = ocr_r
+                elif fallback_model:
+                    # Try fallback model on rasterized
+                    _log("Rasterized result not better — trying fallback on rasterized PDF...")
+                    try:
+                        ocr_fb2 = _ocr_request(ai_ocr_url, ai_ocr_key, fallback_model, raster_url)
+                        content_fb2, page_fb2 = _extract_text(ocr_fb2)
+                        _, garbage_fb2 = check_quality(content_fb2, degrade_pct)
+                        _log(f"Fallback rasterized: {page_fb2} page(s), {len(content_fb2)} chars, garbage={garbage_fb2:.0f}%")
+
+                        fb2_better = (content_fb2
+                                      and len(content_fb2) >= len(content) * 0.5
+                                      and (garbage_fb2 < garbage_pct or table_only))
+                        if fb2_better:
+                            _log(f"Using fallback rasterized result ({len(content_fb2)} vs {len(content)} chars)")
+                            content = content_fb2
+                            page_count = page_fb2
+                            ocr_result = ocr_fb2
+                        else:
+                            _log("Fallback rasterized not better — keeping original")
+                    except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                        _log(f"Fallback on rasterized failed: {exc} — keeping original", error=True)
+                else:
+                    _log(f"Rasterized result not better ({len(content_r)} vs {len(content)} chars) — keeping original")
+            except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
+                _log(f"Rasterization retry failed: {exc}", error=True)
+            finally:
+                if rasterized_path:
+                    shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
+        else:
+            _log("Rasterization failed — keeping original content", error=True)
+
+    # ── 9. Debug mode ──────────────────────────────────────────────────────────
         separator = "─" * 72
 
         _log("DEBUG MODE — raw Mistral response (images stripped):")
