@@ -229,14 +229,17 @@ this pattern.
 
 After receiving OCR content, the script scans for **garbage lines** — lines that
 are ≤2 characters and entirely alphabetic (catches `"K"`, `"k"`, `"a"`, `"OK"`,
-etc.).  If 3+ consecutive garbage lines are found, the script calculates what
-percentage of total lines are garbage.
+etc.).  If 3+ consecutive garbage lines are found (empty lines between them are
+ignored), the script calculates what percentage of total lines are garbage.
 
 | Garbage % | Outcome |
 |-----------|---------|
 | 0% | Content is clean — use as-is |
-| Below threshold (default 30%) | Strip the garbage tail, use the clean portion |
-| Above threshold | Trigger rasterization fallback (if enabled) |
+| Below threshold (default 30%) | Minor garbage — use content as-is |
+| Above threshold | Significant degradation — trigger rasterization fallback |
+
+The check is **detection-only** — it never strips or modifies content.  When
+degradation is detected, the only remedy is rasterization.
 
 ### How Rasterization Works
 

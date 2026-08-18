@@ -259,15 +259,13 @@ def main():
 
     # ── 6. Quality check + rasterization fallback ─────────────────────────────
     raw_content = content  # preserve for debug/comparison
-    is_usable, cleaned, garbage_pct = check_quality(content, degrade_pct)
+    is_usable, garbage_pct = check_quality(content, degrade_pct)
 
     # Log quality check details — always, not just in debug mode
     if garbage_pct > 0:
-        stripped_chars = len(raw_content) - len(cleaned)
         _log(
-            f"Quality check detail — raw: {len(raw_content)} chars, "
-            f"cleaned: {len(cleaned)} chars, stripped: {stripped_chars} chars "
-            f"({garbage_pct:.0f}% garbage, usable={is_usable})"
+            f"Quality check detail — {len(raw_content)} chars, "
+            f"{garbage_pct:.0f}% garbage (usable={is_usable})"
         )
 
     if debug_mode:
@@ -304,37 +302,32 @@ def main():
                     content_2, page_count_2 = _extract_text(ocr_result_2)
                     _log(f"Rasterized retry: {page_count_2} page(s), {len(content_2)} chars")
 
-                    _, cleaned_2, garbage_pct_2 = check_quality(content_2, degrade_pct)
+                    _, garbage_pct_2 = check_quality(content_2, degrade_pct)
 
                     if content_2 and (garbage_pct_2 == 0 or garbage_pct_2 < garbage_pct):
                         _log(
                             f"Rasterized result is better "
                             f"(garbage: {garbage_pct_2:.0f}% vs {garbage_pct:.0f}%) — using it"
                         )
-                        content = content_2 if garbage_pct_2 == 0 else cleaned_2
+                        content = content_2
                         page_count = page_count_2
                     else:
-                        _log(f"Rasterized result not better — using cleaned original")
-                        content = cleaned
+                        _log("Rasterized result not better — using original")
                 else:
-                    _log("Rasterization failed — using cleaned original content", error=True)
-                    content = cleaned
+                    _log("Rasterization failed — using original content", error=True)
             except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
-                _log(f"Rasterized retry failed: {exc} — using cleaned original", error=True)
-                content = cleaned
+                _log(f"Rasterized retry failed: {exc} — using original", error=True)
             finally:
                 if rasterized_path:
                     shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
         else:
             if mime != "application/pdf":
-                _log("Non-PDF document — cannot rasterize, using cleaned content")
+                _log("Non-PDF document — cannot rasterize")
             else:
-                _log("Rasterization fallback disabled — using cleaned content")
-            content = cleaned
+                _log("Rasterization fallback disabled")
 
     elif garbage_pct > 0:
-        _log(f"Minor garbage detected ({garbage_pct:.0f}%) — stripped garbage tail")
-        content = cleaned
+        _log(f"Minor garbage detected ({garbage_pct:.0f}%) — using content as-is")
     else:
         _log("Quality check passed — content is clean")
 

@@ -26,25 +26,23 @@ import tempfile
 def check_quality(content: str, threshold_pct: float = 30.0):
     """Check OCR content for garbage/degradation patterns.
 
-    Returns a 3-tuple (is_usable, cleaned_content, garbage_pct):
+    Detection-only — never modifies or strips content.  When degradation is
+    detected above the threshold, the caller should rasterize and retry.
 
-    - is_usable (bool): True if the content is good enough to use as-is
-      (either clean, or after stripping a minor garbage tail).  False means
-      the content has significant degradation and a rasterized retry should
-      be attempted.
+    Returns a 2-tuple (is_usable, garbage_pct):
 
-    - cleaned_content (str): The original content with any trailing garbage
-      lines removed.  If no garbage was found, this equals the input.
+    - is_usable (bool): True if no significant degradation was found.
+      False means a rasterized retry should be attempted.
 
-    - garbage_pct (float): Percentage of total lines that were garbage.
+    - garbage_pct (float): Percentage of total lines that look like garbage.
     """
     if not content or not content.strip():
-        return False, content, 100.0
+        return False, 100.0
 
     lines = content.split("\n")
     total_lines = len(lines)
     if total_lines == 0:
-        return False, content, 100.0
+        return False, 100.0
 
     # ── Detect "garbage lines" ────────────────────────────────────────────────
     # A garbage line is very short (≤2 non-whitespace chars) and entirely
@@ -87,7 +85,7 @@ def check_quality(content: str, threshold_pct: float = 30.0):
 
     # ── No garbage found ──────────────────────────────────────────────────────
     if degradation_idx is None:
-        return True, content, 0.0
+        return True, 0.0
 
     # ── Calculate garbage percentage ──────────────────────────────────────────
     # Count ALL lines from the degradation point to end of content — not just
@@ -95,11 +93,8 @@ def check_quality(content: str, threshold_pct: float = 30.0):
     garbage_count = total_lines - degradation_idx
     garbage_pct = (garbage_count / total_lines) * 100
 
-    # ── Strip the garbage tail ────────────────────────────────────────────────
-    cleaned = "\n".join(lines[:degradation_idx]).strip()
     is_usable = garbage_pct < threshold_pct
-
-    return is_usable, cleaned, garbage_pct
+    return is_usable, garbage_pct
 
 
 def rasterize_pdf(pdf_path: str, dpi: int = 300) -> str | None:
