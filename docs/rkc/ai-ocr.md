@@ -77,7 +77,7 @@ is a no-op when `AI_OCR_ENABLED` is absent or not `"true"`.
 | `AI_OCR_LOG_FILE` | _(none)_                | Absolute path to a log file inside the container, e.g. `/logs/ai_ocr.log`. When set, every log line is appended to this file with a wallclock datetime prefix. Opt-in — no log file is written when unset. |
 | `AI_OCR_MAX_RETRIES` | `3`                 | Maximum retry attempts on transient failures (empty content, HTTP 429/5xx, connection errors). Set to `0` to disable retries. |
 | `AI_OCR_RETRY_DELAY` | `5`                 | Base retry delay in seconds. Doubles each attempt (5s → 10s → 20s). Respects `Retry-After` header on HTTP 429. |
-| `AI_OCR_RASTERIZE_FALLBACK` | `true`         | Enable automatic rasterization retry when the quality check detects degraded output (e.g., repeated garbage lines). Set to `"false"` to disable. |
+| `AI_OCR_RASTERIZE`   | `auto`          | Rasterization mode: `"auto"` (try PDF first, rasterize on quality failure), `"always"` (always rasterize before OCR), `"never"` (no rasterization) |
 | `AI_OCR_DEGRADATION_THRESHOLD` | `30`         | Percentage of garbage lines that triggers a rasterized retry. If the garbage percentage is below this threshold, only the garbage tail is stripped without retrying. |
 | `PAPERLESS_URL`   | `http://localhost:8000` | Internal paperless URL |
 
@@ -266,7 +266,7 @@ Rasterization is most effective for PDFs with:
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `AI_OCR_RASTERIZE_FALLBACK` | `true` | Set to `"false"` to disable rasterization retry entirely |
+| `AI_OCR_RASTERIZE` | `auto` | `"auto"` — try PDF first, rasterize on quality failure. `"always"` — always rasterize before OCR (best quality, higher cost). `"never"` — disable rasterization entirely. |
 | `AI_OCR_DEGRADATION_THRESHOLD` | `30` | Percentage of garbage lines that triggers retry. Increase for stricter detection, decrease to retry more aggressively. |
 
 ### Log Output for Quality Issues

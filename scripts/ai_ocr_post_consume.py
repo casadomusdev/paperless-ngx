@@ -22,10 +22,12 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_MAX_RETRIES       - (optional) Max retries on transient failures (default: 3)
   AI_OCR_RETRY_DELAY       - (optional) Base retry delay in seconds; doubles each attempt
                              (default: 5 → 5s, 10s, 20s)
-  AI_OCR_RASTERIZE_FALLBACK - "true" to retry with a rasterized PDF when quality check fails
-                             (default: true)
+  AI_OCR_RASTERIZE       - Rasterization mode (default: "auto"):
+                             "auto"   — try PDF first, rasterize if quality check fails
+                             "always" — always rasterize before OCR (skip PDF attempt)
+                             "never"  — never rasterize (old behavior)
   AI_OCR_DEGRADATION_THRESHOLD - Garbage-line percentage above which a rasterized retry is
-                             triggered (default: 30)
+                             triggered in "auto" mode (default: 30)
   PAPERLESS_URL            - Internal paperless URL, e.g. "http://webserver:8000"
   PAPERLESS_API_TOKEN      - Paperless superuser API token
 
@@ -167,8 +169,8 @@ def main():
     debug_mode    = os.getenv("AI_OCR_DEBUG", "false").lower() == "true"
     max_retries   = int(os.getenv("AI_OCR_MAX_RETRIES", "3"))
     retry_base    = int(os.getenv("AI_OCR_RETRY_DELAY", "5"))
-    rasterize_fb  = os.getenv("AI_OCR_RASTERIZE_FALLBACK", "true").lower() == "true"
-    degrade_pct   = float(os.getenv("AI_OCR_DEGRADATION_THRESHOLD", "30"))
+    rasterize_mode = os.getenv("AI_OCR_RASTERIZE", "auto").lower().strip()
+    degrade_pct    = float(os.getenv("AI_OCR_DEGRADATION_THRESHOLD", "30"))
     tag_id_str    = os.getenv("AI_OCR_TAG_ID", "").strip()
     ai_ocr_tag_id = int(tag_id_str) if tag_id_str.isdigit() else None
 
@@ -201,7 +203,20 @@ def main():
     ext = os.path.splitext(archive_path)[1].lower()
     mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
 
-    # ── 5. OCR with retry ─────────────────────────────────────────────────────
+    # ── 5. Rasterize upfront if "always" mode ────────────────────────────────
+    rasterized_tmpdir = None
+    if rasterize_mode == "always" and mime == "application/pdf":
+        _log("Rasterize mode=always — converting PDF to pixel-based format before OCR...")
+        rasterized_path = rasterize_pdf(archive_path)
+        if rasterized_path:
+            rasterized_tmpdir = os.path.dirname(rasterized_path)
+            with open(rasterized_path, "rb") as fh:
+                file_bytes = fh.read()
+            _log(f"Rasterized PDF: {len(file_bytes):,} bytes")
+        else:
+            _log("Rasterization failed — falling back to original PDF", error=True)
+
+    # ── 6. OCR with retry ─────────────────────────────────────────────────────
     b64 = base64.b64encode(file_bytes).decode("utf-8")
     data_url = f"data:{mime};base64,{b64}"
 
@@ -284,8 +299,8 @@ def main():
             f"(threshold: {degrade_pct:.0f}%)", error=True
         )
 
-        if rasterize_fb and mime == "application/pdf":
-            _log("Rasterization fallback enabled — converting PDF to pixel-based format...")
+        if rasterize_mode != "never" and mime == "application/pdf":
+            _log("Rasterization fallback — converting PDF to pixel-based format...")
             rasterized_path = None
             try:
                 rasterized_path = rasterize_pdf(archive_path)
@@ -324,7 +339,7 @@ def main():
             if mime != "application/pdf":
                 _log("Non-PDF document — cannot rasterize")
             else:
-                _log("Rasterization fallback disabled")
+                _log("Rasterization disabled (mode=never)")
 
     elif garbage_pct > 0:
         _log(f"Minor garbage detected ({garbage_pct:.0f}%) — using content as-is")
@@ -400,7 +415,10 @@ def main():
         _log(f"PATCH failed — {exc}", error=True)
         sys.exit(1)
 
-    # ── 10. Done ───────────────────────────────────────────────────────────────
+    # ── 10. Cleanup + done ─────────────────────────────────────────────────────
+    if rasterized_tmpdir:
+        shutil.rmtree(rasterized_tmpdir, ignore_errors=True)
+
     total = time.monotonic() - _SCRIPT_START
     tag_info = f", tag: {ai_ocr_tag_id}" if ai_ocr_tag_id is not None else ""
     _log(

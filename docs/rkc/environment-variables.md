@@ -50,7 +50,7 @@ Complete reference of all environment variables introduced by RKC customizations
 | `AI_OCR_TAG_ID` | Integer | None | Tag ID to apply to the document on successful OCR | [AI OCR](ai-ocr.md) |
 | `AI_OCR_MAX_RETRIES` | Integer | `3` | Maximum retry attempts on transient failures (empty content, HTTP 429/5xx) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_RETRY_DELAY` | Integer | `5` | Base retry delay in seconds; doubles each attempt (5s → 10s → 20s) | [AI OCR](ai-ocr.md) |
-| `AI_OCR_RASTERIZE_FALLBACK` | Boolean | `true` | Retry with rasterized PDF when OCR quality check detects degradation | [AI OCR](ai-ocr.md) |
+| `AI_OCR_RASTERIZE` | String | `auto` | Rasterization mode: `auto`, `always`, or `never` | [AI OCR](ai-ocr.md) |
 | `AI_OCR_DEGRADATION_THRESHOLD` | Integer | `30` | Garbage-line percentage above which a rasterized retry is triggered | [AI OCR](ai-ocr.md) |
 | `PAPERLESS_URL` | String | `http://localhost:8000` | Internal paperless URL (used by OCR script) | [AI OCR](ai-ocr.md) |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless superuser API token for OCR script | [AI OCR](ai-ocr.md) |
