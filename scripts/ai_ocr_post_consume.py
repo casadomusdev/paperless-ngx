@@ -304,6 +304,7 @@ def main():
                     ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
                 )
                 content_2, page_count_2 = _extract_text(ocr_result_2)
+                _log(f"Rasterized result: {page_count_2} page(s), {len(content_2)} chars (original: {len(content)} chars)")
 
                 if content_2:
                     _log(
