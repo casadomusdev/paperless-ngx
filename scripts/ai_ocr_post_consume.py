@@ -258,7 +258,27 @@ def main():
         sys.exit(0)
 
     # ── 6. Quality check + rasterization fallback ─────────────────────────────
+    raw_content = content  # preserve for debug/comparison
     is_usable, cleaned, garbage_pct = check_quality(content, degrade_pct)
+
+    # Log quality check details — always, not just in debug mode
+    if garbage_pct > 0:
+        stripped_chars = len(raw_content) - len(cleaned)
+        _log(
+            f"Quality check detail — raw: {len(raw_content)} chars, "
+            f"cleaned: {len(cleaned)} chars, stripped: {stripped_chars} chars "
+            f"({garbage_pct:.0f}% garbage, usable={is_usable})"
+        )
+
+    if debug_mode:
+        _log("DEBUG MODE — raw OCR output BEFORE quality check:")
+        separator = "─" * 72
+        print(separator, flush=True)
+        print(raw_content, flush=True)
+        print(separator, flush=True)
+        _log(f"DEBUG MODE — raw: {page_count} page(s), {len(raw_content)} chars")
+        for line in _response_summary(ocr_result):
+            _log(f"  {line}")
 
     if not is_usable and garbage_pct > 0:
         _log(
