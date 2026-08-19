@@ -15,6 +15,7 @@ paperless-ngx/
 ├── docs/                           # Documentation
 │   ├── rkc/                        # RKC customization detail docs
 │   │   ├── ai-ocr.md
+│   │   ├── orphaned-files-recovery.md
 │   │   ├── pdf-editor-restriction.md
 │   │   ├── global-saved-views.md
 │   │   ├── ui-defaults.md
@@ -106,8 +107,9 @@ RKC_CUSTOMIZATIONS.md (232 lines)
   ├── Maintenance Notes
   └── Links to detailed docs ↓
 
-docs/rkc/ (11 files)
+docs/rkc/ (12 files)
   ├── ai-ocr.md                     — Processing: AI OCR post-consumption hook
+  ├── orphaned-files-recovery.md    — Troubleshooting: recovering missing/moved files
   ├── pdf-editor-restriction.md     — Security: PDF editor access control
   ├── global-saved-views.md         — Collaborative: shared views system
   ├── ui-defaults.md                — Defaults: theme, language, appearance

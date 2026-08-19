@@ -312,6 +312,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | [`docs/rkc/sso-debug.md`](docs/rkc/sso-debug.md) | SSO debug logging, UiSettings auto-creation for SSO users |
 | [`docs/rkc/custom-field-filters.md`](docs/rkc/custom-field-filters.md) | Filter buttons on document detail page + card views, field name display |
 | [`docs/rkc/ai-ocr.md`](docs/rkc/ai-ocr.md) | AI OCR post-consumption hook — LiteLLM `/v1/ocr`, Mistral/Azure providers, cost tracking, Docker Compose setup |
+| [`docs/rkc/orphaned-files-recovery.md`](docs/rkc/orphaned-files-recovery.md) | Troubleshooting: recovering documents with missing/moved files |
 | [`docs/rkc/duplicate-readd.md`](docs/rkc/duplicate-readd.md) | Duplicate document re-add with tagging, notes, trash handling |
 | [`docs/rkc/mail-system.md`](docs/rkc/mail-system.md) | Universal SMTP, Graph API, multi-mailbox, OAuth2, connection pooling, smart correspondents, metadata, processed mail UI |
 | [`docs/rkc/workflow-email.md`](docs/rkc/workflow-email.md) | Dynamic workflow email templates with Jinja2, HTML auto-detection, error tagging |
