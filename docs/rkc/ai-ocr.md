@@ -318,6 +318,76 @@ AI OCR [ 28.2s]: Rasterized result is better (garbage: 0% vs 45%) — using it
 
 ---
 
+## Re-running AI OCR on Existing Documents
+
+The `ai_ocr_rerun.py` script re-processes a document that already exists in
+paperless.  It downloads the archived PDF (or falls back to the original if
+no archive exists), runs the AI OCR pipeline, and updates the document.
+
+### Regular mode — update the document
+
+```bash
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_rerun.py 19713
+```
+
+Output:
+```
+Fetching document 19713 from https://inbox.filderbau.casabot.de …
+Downloading archived PDF from https://inbox.filderbau.casabot.de/api/documents/19713/download/?original=false …
+Downloaded 230,194 bytes.
+Running AI OCR on document 19713 (tmp: /tmp/tmpXXXXXX.pdf) …
+AI OCR [   0.0s]: Starting — doc=19713, model=mistral-ocr-latest, archive=/tmp/tmpXXXXXX.pdf
+AI OCR [   0.9s]: Extracted 1 page(s), 3025 chars of text
+AI OCR [   0.9s]: Quality check passed — content is clean
+AI OCR [   1.2s]: Document 19713 updated successfully — 1 page(s), 3025 chars, model: mistral-ocr-latest, total time: 1.2s
+```
+
+### Debug mode — inspect without modifying
+
+Add `AI_OCR_DEBUG=true` to see the full Mistral response (images stripped)
+and extracted text **without updating the document**:
+
+```bash
+docker exec -e AI_OCR_DEBUG=true -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_rerun.py 19713
+```
+
+Output includes the raw Mistral response JSON and extracted text:
+```
+AI OCR [   0.9s]: DEBUG MODE — raw Mistral response (images stripped):
+────────────────────────────────────────────────────────────────────────
+{
+  "pages": [
+    {
+      "index": 0,
+      "markdown": "... full markdown content ...",
+      "images": [],
+      "blocks": [...]
+    }
+  ],
+  "model": "mistral-ocr-latest"
+}
+────────────────────────────────────────────────────────────────────────
+AI OCR [   0.9s]: DEBUG MODE — extracted text (1 page(s), 3025 chars):
+────────────────────────────────────────────────────────────────────────
+[extracted text here]
+────────────────────────────────────────────────────────────────────────
+AI OCR [   0.9s]: DEBUG MODE done — 1 page(s), 3025 chars
+```
+
+### Batch re-run
+
+```bash
+# Re-run AI OCR on multiple documents
+for doc_id in 19699 19713 19711; do
+  docker exec -it casabot-filderbau-paperless \
+    python3 /usr/src/paperless/scripts/ai_ocr_rerun.py $doc_id
+done
+```
+
+---
+
 ## Obtaining a Paperless API Token
 
 1. Go to **Settings → Users** in the paperless-ngx UI
