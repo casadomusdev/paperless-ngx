@@ -244,6 +244,37 @@ def main():
     doc_mime = os.getenv("DOCUMENT_MIME_TYPE", "").lower().strip()
     if doc_mime.startswith("message/"):
         _log(f"Skipping AI OCR for email document (MIME type: {doc_mime})")
+        if ai_ocr_tag_id is not None:
+            _log(f"Applying OCR-finished tag {ai_ocr_tag_id} to skipped email document {document_id}...")
+            tag_patch: dict = {}
+            get_req = urllib.request.Request(
+                f"{paperless_url}/api/documents/{document_id}/",
+                headers={"Authorization": f"Token {paperless_tok}"},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(get_req, timeout=30) as resp:
+                    doc_data = json.loads(resp.read())
+                current_tags: list = doc_data.get("tags", [])
+                if ai_ocr_tag_id not in current_tags:
+                    current_tags.append(ai_ocr_tag_id)
+                    tag_patch["tags"] = current_tags
+                    patch_req = urllib.request.Request(
+                        f"{paperless_url}/api/documents/{document_id}/",
+                        data=json.dumps(tag_patch).encode("utf-8"),
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Token {paperless_tok}",
+                        },
+                        method="PATCH",
+                    )
+                    with urllib.request.urlopen(patch_req, timeout=30) as resp:
+                        resp.read()
+                    _log(f"Tag {ai_ocr_tag_id} applied to email document {document_id}")
+                else:
+                    _log(f"Tag {ai_ocr_tag_id} already present on document {document_id}")
+            except (urllib.error.URLError, urllib.error.HTTPError) as exc:
+                _log(f"Could not apply tag to skipped email document — {exc}", error=True)
         sys.exit(0)
 
     # ── 4. Read document file ──────────────────────────────────────────────────
