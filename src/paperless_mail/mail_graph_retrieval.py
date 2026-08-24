@@ -294,43 +294,53 @@ class OutlookGraphMailRetriever:
         """
         Build OData $filter query from MailRule criteria.
         
+        Microsoft Graph API requires that when $filter and $orderby are used
+        together, properties in $orderby must appear in $filter BEFORE any
+        properties not in $orderby (otherwise the API returns 400 InefficientFilter).
+        Since we always $orderby=receivedDateTime, the receivedDateTime filter
+        must come first.
+        
         Args:
             rule: MailRule with filter criteria
             
         Returns:
             OData filter string
         """
-        filters = []
+        # RKC: Split into orderby-prefixed filters and other filters.
+        # receivedDateTime must come first because $orderby=receivedDateTime.
+        orderby_filters = []
+        other_filters = []
+        
+        # Maximum age filter — must be first (matches $orderby property)
+        if rule.maximum_age > 0:
+            from datetime import date, timedelta
+            max_date = date.today() - timedelta(days=rule.maximum_age)
+            orderby_filters.append(f"receivedDateTime ge {max_date.isoformat()}T00:00:00Z")
         
         # Filter by sender
         if rule.filter_from:
-            filters.append(f"from/emailAddress/address eq '{rule.filter_from}'")
+            other_filters.append(f"from/emailAddress/address eq '{rule.filter_from}'")
         
         # Filter by recipient
         if rule.filter_to:
             # Note: toRecipients is a collection, need to use 'any' operator
-            filters.append(
+            other_filters.append(
                 f"toRecipients/any(r:r/emailAddress/address eq '{rule.filter_to}')"
             )
         
         # Filter by subject
         if rule.filter_subject:
             # Use 'contains' for partial matching (like IMAP)
-            filters.append(f"contains(subject, '{rule.filter_subject}')")
+            other_filters.append(f"contains(subject, '{rule.filter_subject}')")
         
         # Filter by body
         if rule.filter_body:
-            filters.append(f"contains(body/content, '{rule.filter_body}')")
+            other_filters.append(f"contains(body/content, '{rule.filter_body}')")
         
-        # Maximum age filter
-        if rule.maximum_age > 0:
-            from datetime import date, timedelta
-            max_date = date.today() - timedelta(days=rule.maximum_age)
-            filters.append(f"receivedDateTime ge {max_date.isoformat()}T00:00:00Z")
-        
-        # Combine all filters with 'and'
-        if filters:
-            return ' and '.join(filters)
+        # Combine: orderby filters first, then other filters
+        all_filters = orderby_filters + other_filters
+        if all_filters:
+            return ' and '.join(all_filters)
         return ''
     
     def fetch_messages(self, rule: MailRule) -> list[GraphMailMessage]:
