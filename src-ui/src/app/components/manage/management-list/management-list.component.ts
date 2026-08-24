@@ -95,6 +95,10 @@ export abstract class ManagementListComponent<T extends MatchingModel>
   public selectedObjects: Set<number> = new Set()
   public togggleAll: boolean = false
 
+  // RKC: Store all matching IDs from API response for "select all across pages" feature
+  public allObjectIds: number[] = []
+  // /end RKC edit
+
   ngOnInit(): void {
     this.reloadData()
 
@@ -168,6 +172,9 @@ export abstract class ManagementListComponent<T extends MatchingModel>
           this.unfilteredData = c.results
           this.data = this.filterData(c.results)
           this.collectionSize = c.count
+          // RKC: Capture all matching IDs for "select all across pages" feature
+          this.allObjectIds = c.all ?? []
+          // /end RKC edit
         }),
         delay(100)
       )
@@ -320,6 +327,19 @@ export abstract class ManagementListComponent<T extends MatchingModel>
       ? this.selectedObjects.delete(object.id)
       : this.selectedObjects.add(object.id)
   }
+
+  // RKC: Select all matching items across all pages (not just current page)
+  selectAll() {
+    this.selectedObjects = new Set(this.allObjectIds)
+  }
+
+  get isAllSelected(): boolean {
+    return (
+      this.allObjectIds.length > 0 &&
+      this.selectedObjects.size === this.allObjectIds.length
+    )
+  }
+  // /end RKC edit
 
   setPermissions() {
     let modal = this.modalService.open(PermissionsDialogComponent, {

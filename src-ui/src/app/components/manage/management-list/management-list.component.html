@@ -74,6 +74,20 @@
       <ngb-pagination class="ms-auto" [pageSize]="25" [collectionSize]="collectionSize" [(page)]="page" [maxSize]="5" (pageChange)="reloadData()" size="sm" aria-label="Pagination"></ngb-pagination>
     }
   </div>
+  <!-- RKC: "Select all across pages" link when items are selected but not all -->
+  @if (selectedObjects.size > 0 && collectionSize > selectedObjects.size) {
+    <div class="mb-3">
+      <span class="text-muted small" i18n>All {{selectedObjects.size}} on this page selected.</span>
+      <a href="javascript:void(0)" class="small ms-1" (click)="selectAll()" i18n>Select all {{collectionSize}} {{typeNamePlural}}</a>
+    </div>
+  }
+  @if (isAllSelected) {
+    <div class="mb-3">
+      <span class="text-muted small" i18n>All {{collectionSize}} {{typeNamePlural}} selected.</span>
+      <a href="javascript:void(0)" class="small ms-1" (click)="clearSelection()" i18n>Clear selection</a>
+    </div>
+  }
+  <!-- /end RKC edit -->
 }
 
 <ng-template #objectRow let-object="object" let-depth="depth">

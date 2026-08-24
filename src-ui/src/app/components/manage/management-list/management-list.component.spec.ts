@@ -368,4 +368,34 @@ describe('ManagementListComponent', () => {
     ).getSelectableIDs.call({}, [{ id: 1 }, { id: 5 }] as any)
     expect(ids).toEqual([1, 5])
   })
+
+  // RKC: Tests for "select all across pages" feature
+  it('should populate allObjectIds from API response', () => {
+    expect(component.allObjectIds).toEqual(tags.map((t) => t.id))
+  })
+
+  it('should support select all across pages', () => {
+    expect(component.selectedObjects.size).toEqual(0)
+    component.selectAll()
+    expect(component.selectedObjects.size).toEqual(tags.length)
+    expect(component.isAllSelected).toBeTruthy()
+  })
+
+  it('should report isAllSelected correctly', () => {
+    expect(component.isAllSelected).toBeFalsy()
+    component.toggleSelected(tags[0])
+    expect(component.isAllSelected).toBeFalsy()
+    component.selectAll()
+    expect(component.isAllSelected).toBeTruthy()
+    component.clearSelection()
+    expect(component.isAllSelected).toBeFalsy()
+  })
+
+  it('should clear allObjectIds on reload', () => {
+    component.selectAll()
+    expect(component.allObjectIds.length).toEqual(tags.length)
+    component.reloadData()
+    expect(component.allObjectIds).toEqual(tags.map((t) => t.id))
+  })
+  // /end RKC edit
 })

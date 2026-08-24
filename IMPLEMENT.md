@@ -2,6 +2,27 @@
 
 ## GOAL
 
+Add "Select all across pages" functionality to the management lists (Correspondents, Tags, Document Types, Storage Paths). Currently, the checkbox in the table header only selects items on the current page. The new feature adds a Gmail-style "Select all N items" link in the footer when items are selected, allowing bulk operations on all matching items regardless of pagination.
+
+## ANALYSIS
+
+The backend API (`StandardPagination`) already returns all matching IDs in every paginated response via the `all` field. The frontend `Results<T>` interface already has `all: number[]`. This means we can implement "select all" with zero additional API calls.
+
+The document list already has a "Select all" feature via `DocumentListViewService.selectAll()`. We follow a similar pattern in the shared `ManagementListComponent` base class, which all management lists inherit from.
+
+## IMPLEMENTATION PLAN
+
+### Modified Files
+
+1. `src-ui/src/app/components/manage/management-list/management-list.component.ts` — Add `allObjectIds` property, `selectAll()` method, `isAllSelected` getter, capture `c.all` in `reloadData()`
+2. `src-ui/src/app/components/manage/management-list/management-list.component.html` — Add "Select all" link in footer area
+3. `src-ui/src/app/components/manage/management-list/management-list.component.spec.ts` — Add tests for new functionality
+4. `RKC_CUSTOMIZATIONS.md` — Version entry
+
+---
+
+## Previous Task
+
 Make the email sending system resilient to transient failures (OAuth token refresh failures, Graph API timeouts, etc.) by implementing a persistent email queue with exponential backoff retry. Failed emails must be queued and retried automatically until they succeed or are abandoned after configurable max attempts. No emails should be silently lost.
 
 ## ANALYSIS

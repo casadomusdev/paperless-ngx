@@ -1,6 +1,16 @@
 # TODO.md
 
-## All Phases Complete
+## Current Task: Select All Across Pages
+
+- [x] Add `allObjectIds` property to ManagementListComponent
+- [x] Capture `c.all` from API response in `reloadData()`
+- [x] Add `selectAll()` method
+- [x] Add `isAllSelected` getter
+- [x] Add "Select all" link in HTML template footer
+- [x] Add unit tests
+- [x] TypeScript type check passed
+
+## Previous Task: Email Queue (Complete)
 
 - [x] Phase 1: PendingEmail Model (models.py + migration 1076)
 - [x] Phase 2: Queue Processing Core (email_queue.py)
