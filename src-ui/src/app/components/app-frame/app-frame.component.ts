@@ -256,14 +256,14 @@ export class AppFrameComponent
   }
 
   onDrop(event: CdkDragDrop<SavedView[]>) {
-    const sidebarViews = this.savedViewService.sidebarViews().concat([])
-    moveItemInArray(sidebarViews, event.previousIndex, event.currentIndex)
+    // RKC: Use userSidebarViews (personal views only) to match the @for template loop
+    // The drag event indices are personal-only indices, so we must operate on the same array
+    // Previously this used savedViewService.sidebarViews() which includes global views,
+    // causing index mismatch when global views exist — views would snap back after drop
+    const userViews = this.userSidebarViews.concat([])
+    moveItemInArray(userViews, event.previousIndex, event.currentIndex)
 
-    // RKC: Filter to only save personal views (owner !== null) to user settings
-    // Global views should not be included in user's sort order
-    const personalViewsOnly = sidebarViews.filter(v => v.owner !== null)
-    
-    this.settingsService.updateSidebarViewsSort(personalViewsOnly).subscribe({
+    this.settingsService.updateSidebarViewsSort(userViews).subscribe({
       next: () => {
         this.toastService.showInfo($localize`Sidebar views updated`)
         // RKC: Reload settings to pick up updated sidebar_views_sort_order from user settings

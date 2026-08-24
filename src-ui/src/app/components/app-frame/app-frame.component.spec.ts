@@ -39,6 +39,8 @@ import { DocumentDetailComponent } from '../document-detail/document-detail.comp
 import { AppFrameComponent } from './app-frame.component'
 import { GlobalSearchComponent } from './global-search/global-search.component'
 
+// RKC: Added owner fields to test global vs personal view separation
+// owner: null = global view, owner: number = personal view
 const saved_views = [
   {
     name: 'Saved View 0',
@@ -48,6 +50,7 @@ const saved_views = [
     sort_field: 'name',
     sort_reverse: true,
     filter_rules: [],
+    owner: null,
   },
   {
     name: 'Saved View 1',
@@ -57,6 +60,7 @@ const saved_views = [
     sort_field: 'name',
     sort_reverse: true,
     filter_rules: [],
+    owner: 1,
   },
   {
     name: 'Saved View 2',
@@ -66,6 +70,7 @@ const saved_views = [
     sort_field: 'name',
     sort_reverse: true,
     filter_rules: [],
+    owner: 1,
   },
   {
     name: 'Saved View 3',
@@ -75,6 +80,7 @@ const saved_views = [
     sort_field: 'name',
     sort_reverse: true,
     filter_rules: [],
+    owner: 1,
   },
 ]
 const document = { id: 2, title: 'Hello world' }
@@ -125,7 +131,8 @@ describe('AppFrameComponent', () => {
                 count: saved_views.length,
                 results: saved_views,
               }),
-            sidebarViews: saved_views.filter((v) => v.show_in_sidebar),
+            // RKC: sidebarViews is a computed signal (function), not a plain array
+            sidebarViews: () => saved_views.filter((v) => v.show_in_sidebar),
             getDocumentCount: (view: SavedView) => 5,
             maybeRefreshDocumentCounts: () => {},
           },
@@ -311,6 +318,9 @@ describe('AppFrameComponent', () => {
     expect(settingsService.globalDropzoneEnabled).toBeTruthy()
   })
 
+  // RKC: onDrop now operates on userSidebarViews (personal views only)
+  // With test data: view 0 is global (owner=null), views 2+3 are personal (owner=1)
+  // userSidebarViews = [view 2, view 3]; after moveItemInArray(0,1) → [view 3, view 2]
   it('should update saved view sorting on drag + drop, show info', () => {
     const settingsSpy = jest.spyOn(settingsService, 'updateSidebarViewsSort')
     const toastSpy = jest.spyOn(toastService, 'showInfo')
@@ -319,9 +329,8 @@ describe('AppFrameComponent', () => {
       SavedView[]
     >)
     expect(settingsSpy).toHaveBeenCalledWith([
-      saved_views[2],
-      saved_views[0],
       saved_views[3],
+      saved_views[2],
     ])
     expect(toastSpy).toHaveBeenCalled()
   })
