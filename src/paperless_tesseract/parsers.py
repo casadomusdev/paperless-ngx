@@ -403,6 +403,10 @@ class RasterisedDocumentParser(DocumentParser):
 
             shutil.copy2(document_path, archive_path)
             self.archive_path = archive_path
+            self.log.info(
+                "Original copied as archive for encrypted/signed PDF — "
+                "archive version will be available.",
+            )
             # /end RKC edit
         except SubprocessOutputError as e:
             if "Ghostscript PDF/A rendering" in str(e):
