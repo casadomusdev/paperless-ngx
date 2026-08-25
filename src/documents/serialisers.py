@@ -534,6 +534,9 @@ class TagSerializerVersion1(MatchingModelSerializer, OwnedObjectSerializer):
             "matching_algorithm",
             "is_insensitive",
             "is_inbox_tag",
+            # RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0)
+            "is_hidden",
+            # /end RKC edit
             "document_count",
             "owner",
             "permissions",
@@ -604,6 +607,9 @@ class TagSerializer(MatchingModelSerializer, OwnedObjectSerializer):
             "matching_algorithm",
             "is_insensitive",
             "is_inbox_tag",
+            # RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0)
+            "is_hidden",
+            # /end RKC edit
             "document_count",
             "owner",
             "permissions",

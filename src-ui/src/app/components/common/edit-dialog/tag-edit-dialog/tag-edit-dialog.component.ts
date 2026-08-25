@@ -60,6 +60,9 @@ export class TagEditDialogComponent extends EditDialogComponent<Tag> {
       name: new FormControl(''),
       color: new FormControl(randomColor()),
       is_inbox_tag: new FormControl(false),
+      // RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0)
+      is_hidden: new FormControl(false),
+      // /end RKC edit
       parent: new FormControl(null),
       matching_algorithm: new FormControl(DEFAULT_MATCHING_ALGORITHM),
       match: new FormControl(''),

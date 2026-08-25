@@ -54,6 +54,11 @@ export class TagComponent {
   @Input()
   showParents: boolean = false
 
+  // RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0)
+  @Input()
+  hideIfHidden: boolean = false
+  // /end RKC edit
+
   public get loading(): boolean {
     return this.tagService.loading
   }

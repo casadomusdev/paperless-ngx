@@ -56,7 +56,9 @@
                     }
                     @case (DisplayField.TAGS) {
                       @for (tagID of doc.tags; track tagID) {
-                        <pngx-tag [tagID]="tagID" class="ms-1 fs-6" (click)="clickTag(tagID, $event)" [clickable]="true" linkTitle="Filter by tag" i18n-title></pngx-tag>
+                        <!-- RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0) -->
+                        <pngx-tag [tagID]="tagID" class="ms-1 fs-6" (click)="clickTag(tagID, $event)" [clickable]="true" linkTitle="Filter by tag" i18n-title [hideIfHidden]="true"></pngx-tag>
+                        <!-- /end RKC edit -->
                       }
                     }
                     @case (DisplayField.DOCUMENT_TYPE) {

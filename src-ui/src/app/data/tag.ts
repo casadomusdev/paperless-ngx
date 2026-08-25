@@ -7,6 +7,10 @@ export interface Tag extends MatchingModel {
 
   is_inbox_tag?: boolean
 
+  // RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0)
+  is_hidden?: boolean
+  // /end RKC edit
+
   parent?: number // Tag ID
 
   children?: Tag[] // read-only

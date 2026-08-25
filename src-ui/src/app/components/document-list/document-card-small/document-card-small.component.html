@@ -17,7 +17,9 @@
       @if (document && displayFields?.includes(DisplayField.TAGS)) {
         <div class="tags d-flex flex-column text-end position-absolute me-1 fs-6">
           @for (tagID of tagIDs; track tagID) {
-            <pngx-tag [tagID]="tagID" (click)="clickTag.emit(tagID);$event.stopPropagation()" [clickable]="true" linkTitle="Toggle tag filter" i18n-linkTitle></pngx-tag>
+            <!-- RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0) -->
+            <pngx-tag [tagID]="tagID" (click)="clickTag.emit(tagID);$event.stopPropagation()" [clickable]="true" linkTitle="Toggle tag filter" i18n-linkTitle [hideIfHidden]="true"></pngx-tag>
+            <!-- /end RKC edit -->
           }
           @if (moreTags) {
             <div>

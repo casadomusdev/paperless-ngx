@@ -112,6 +112,17 @@ class Tag(MatchingModel, TreeNodeModel):
         ),
     )
 
+    # RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0)
+    is_hidden = models.BooleanField(
+        _("is hidden"),
+        default=False,
+        help_text=_(
+            "Marks this tag as hidden: the tag remains assigned to "
+            "documents but its badge is not shown in list views.",
+        ),
+    )
+    # /end RKC edit
+
     class Meta(MatchingModel.Meta, TreeNodeModel.Meta):
         verbose_name = _("tag")
         verbose_name_plural = _("tags")

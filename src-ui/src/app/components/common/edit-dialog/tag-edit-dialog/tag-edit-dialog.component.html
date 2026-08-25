@@ -15,6 +15,9 @@
     <pngx-input-select i18n-title title="Parent" formControlName="parent" [items]="tags" [allowNull]="true" [error]="error?.parent"></pngx-input-select>
 
     <pngx-input-check i18n-title title="Inbox tag" formControlName="is_inbox_tag" i18n-hint hint="Inbox tags are automatically assigned to all consumed documents."></pngx-input-check>
+    <!-- RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0) -->
+    <pngx-input-check i18n-title title="Hide in list views" formControlName="is_hidden" i18n-hint hint="The tag stays on documents but its badge is hidden in card and table views."></pngx-input-check>
+    <!-- /end RKC edit -->
     <pngx-input-select i18n-title title="Matching algorithm" [items]="getMatchingAlgorithms()" formControlName="matching_algorithm"></pngx-input-select>
     @if (patternRequired) {
       <pngx-input-text i18n-title title="Matching pattern" formControlName="match" [error]="error?.match"></pngx-input-text>

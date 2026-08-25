@@ -1,4 +1,8 @@
-@if (tag) {
+<!-- RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0) -->
+@if (tag && hideIfHidden && tag.is_hidden) {
+  <!-- hidden tag: render nothing -->
+} @else if (tag) {
+<!-- /end RKC edit -->
   @if (showParents && tag.parent) {
     <pngx-tag [tagID]="tag.parent" [clickable]="clickable" [linkTitle]="linkTitle"></pngx-tag>
       &nbsp;&gt;&nbsp;

@@ -54,6 +54,13 @@ export class TagListComponent extends ManagementListComponent<Tag> {
           return `<span class="badge" style="color: ${t.text_color}; background-color: ${t.color}">${t.color}</span>`
         },
       },
+      // RKC: Hidden tags — suppress badge rendering in document list views (v1.6.0)
+      {
+        key: 'is_hidden',
+        name: $localize`Hidden`,
+        valueFn: (t: Tag) => (t.is_hidden ? $localize`Yes` : ''),
+      },
+      // /end RKC edit
     ]
   }
 
