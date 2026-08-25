@@ -208,10 +208,13 @@ bypassed. Always configure via the model list approach above.
   in the paperless-ngx Docker image.
 - **Graceful failures**: if the document MIME type starts with `message/`
   (email documents), the script exits with code 0 and logs the skip reason.
-  If the archive path is missing for any other document type, the script also
-  exits with code 0 and logs clearly (no error; paperless continues normally).
-  If the OCR returns empty content, the script exits with code 0 (no-op),
-  preserving Tesseract output.
+  If the archive path is missing for any other document type, the script
+  falls back to the original document file (`DOCUMENT_SOURCE_PATH`).  This
+  handles encrypted/signed PDFs and other cases where paperless-ngx cannot
+  create an archive.  If neither archive nor source file is available, the
+  script exits with code 0 and logs clearly (no error; paperless continues
+  normally).  If the OCR returns empty content, the script exits with code 0
+  (no-op), preserving Tesseract output.
 - **Large file handling**: the script base64-encodes the whole PDF in memory.
   For most scanned documents (< 50 MB) this is fine. Very large multi-hundred-
   page PDFs may hit LiteLLM or provider upload limits.

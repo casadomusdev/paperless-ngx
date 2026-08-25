@@ -397,6 +397,13 @@ class RasterisedDocumentParser(DocumentParser):
             )
             if original_has_text:
                 self.text = text_original
+            # RKC: Copy original as archive for encrypted/signed PDFs so
+            # downstream features (download, AI OCR, bulk export) work.
+            import shutil
+
+            shutil.copy2(document_path, archive_path)
+            self.archive_path = archive_path
+            # /end RKC edit
         except SubprocessOutputError as e:
             if "Ghostscript PDF/A rendering" in str(e):
                 self.log.warning(

@@ -49,6 +49,7 @@ Injected by paperless-ngx automatically:
 
   DOCUMENT_ID              - Database ID of the consumed document
   DOCUMENT_ARCHIVE_PATH    - Filesystem path to the archived (OCRed) PDF
+  DOCUMENT_SOURCE_PATH     - Fallback: original document file (used when archive is missing)
   DOCUMENT_MIME_TYPE       - MIME type of the document (e.g. "application/pdf")
 
 Usage with paperless-ngx:
@@ -279,8 +280,16 @@ def main():
 
     # ── 4. Read document file ──────────────────────────────────────────────────
     if not archive_path or not os.path.exists(archive_path):
-        _log(f"No archive file at '{archive_path}' — skipping AI OCR")
-        sys.exit(0)
+        # RKC: Fall back to original document when archive is missing
+        # (e.g., encrypted/signed PDFs where OCRmyPDF cannot create an archive).
+        source_path = os.getenv("DOCUMENT_SOURCE_PATH", "")
+        if source_path and os.path.exists(source_path):
+            _log(f"No archive file at '{archive_path}' — falling back to original document at '{source_path}'")
+            archive_path = source_path
+        else:
+            _log(f"No archive file at '{archive_path}' and no source file available — skipping AI OCR")
+            sys.exit(0)
+        # /end RKC edit
 
     with open(archive_path, "rb") as fh:
         file_bytes = fh.read()

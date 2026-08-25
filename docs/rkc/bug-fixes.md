@@ -108,3 +108,20 @@ This ensures that WebSocket progress messages with no owner restriction (`owner_
 ## Correspondent Matching Algorithm (v1.0.28)
 
 See [Mail System](mail-system.md#5-smart-correspondent-matching-v1027) for details on the matching algorithm fix.
+
+## Encrypted/Signed PDF Archive Creation (v1.5.3)
+
+### Problem
+When paperless-ngx consumes an encrypted or digitally signed PDF, OCRmyPDF raises `DigitalSignatureError` or `EncryptedPdfError`. The tesseract parser catches these exceptions and extracts any embedded text from the original, but never sets `self.archive_path`. As a result, `document.archive_filename` stays `None`, `has_archive_version` returns `False`, and all archive-dependent features fail:
+
+- Archive download dropdown hidden in UI
+- Bulk download (archive-only) silently skips the document
+- AI OCR post-consume script skips (`archive=None`)
+- Document metadata missing archive info
+- Exporter skips archive export
+
+### Solution
+In the `except (DigitalSignatureError, EncryptedPdfError)` handler, the original PDF is now copied as the archive file. This ensures `archive_path` is set, the consumer creates `archive_filename`, and `has_archive_version` returns `True`. The archive is identical to the original (no OCR text layer added), which is the best possible outcome for encrypted/signed documents.
+
+### File Modified
+- `src/paperless_tesseract/parsers.py` — Copy original as archive in `DigitalSignatureError`/`EncryptedPdfError` handler

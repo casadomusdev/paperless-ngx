@@ -1,12 +1,14 @@
 # TODO.md
 
-## Current Task: Sidebar Saved Views Drag-Drop Bug Fix
+## Current Task: Encrypted/Signed PDF Archive Fix + AI OCR Fallback
 
-- [x] Analysis: identified index mismatch in `onDrop` handler
-- [x] Fix `onDrop` in `app-frame.component.ts` — use `userSidebarViews` instead of full `sidebarViews`
-- [x] Update test data in `app-frame.component.spec.ts` with `owner` fields + fix mock + expectations
-- [ ] Verify tests pass (node_modules not installed — needs `npm install` in src-ui)
+- [x] Analysis: identified root cause in tesseract parser and AI OCR script
+- [x] Fix 1: Modify `parsers.py` exception handler to copy original as archive
+- [x] Fix 2: Modify `ai_ocr_post_consume.py` to fall back to `DOCUMENT_SOURCE_PATH`
+- [x] Update `docs/rkc/ai-ocr.md` — document fallback behavior
+- [x] Update `docs/rkc/bug-fixes.md` — document encrypted/signed PDF fix
+- [x] Verify syntax (ast.parse) on changed Python files
 
 ## Future Improvements
 
-- None for this task
+- Consider adding a `PAPERLESS_OCR_ARCHIVE_FALLBACK_COPY` env var to control whether original is copied as archive (opt-in for safety)
