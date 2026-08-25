@@ -72,13 +72,16 @@ def main():
         _print(f"Error: could not reach {paperless_url} — {exc.reason}", error=True)
         sys.exit(1)
 
+    # RKC: Downgrade hard error to warning — the download logic below already
+    # handles missing archives via 404 fallback to the original file.  This
+    # allows re-running AI OCR on documents that were never archived (e.g.,
+    # encrypted/signed PDFs consumed before the archive-copy fix).
     if not doc.get("archived_file_name"):
         _print(
-            f"Error: document {doc_id} has no archived file "
-            f"(document may not be a PDF or has not been archived yet).",
-            error=True,
+            f"Document {doc_id} has no archived file — "
+            f"will attempt to download the original file instead.",
         )
-        sys.exit(1)
+    # /end RKC edit
 
     # ── Download the archived PDF via the API ──────────────────────────────────
     # Try archive first (?original=false), fall back to original (?original=true)
