@@ -12,28 +12,19 @@ Replaces Tesseract OCR output with higher-quality text from an AI OCR provider
 2. **The post-consumption script fires** — paperless-ngx calls
    `PAPERLESS_POST_CONSUME_SCRIPT` once the document is fully indexed.
 
-3. **The script checks the document MIME type** — email documents
-   (`message/rfc822` and other `message/*` subtypes) are skipped immediately
-   with exit code 0.  They are archived as PDF by Paperless, but AI OCR adds no
-   value for structured email text.  More importantly, skipping prevents a race
-   condition with the send-mail pipeline: if OCR ran on an email document it
-   would PATCH `document_updated` before `patchCustomFields` (e.g., Email
-   Subject) has been set, causing a Jinja2 `UndefinedError` in any workflow
-   email template that references those custom fields.
-
-4. **The script calls the LiteLLM `/v1/ocr` endpoint** — the document's
+3. **The script calls the LiteLLM `/v1/ocr` endpoint** — the document's
    archived PDF is base64-encoded and sent as a `data:application/pdf;base64,…`
    data URL in the request body.
 
-5. **LiteLLM routes the request to the configured provider** — Mistral OCR,
+4. **LiteLLM routes the request to the configured provider** — Mistral OCR,
    Azure Document Intelligence, or another provider with OCR capability. Cost
    tracking works via the native `/v1/ocr` endpoint (unlike the pass-through at
    `/mistral/v1/ocr` which bypasses accounting).
 
-6. **The script PATCHes the `content` field** — the AI's markdown text is
+5. **The script PATCHes the `content` field** — the AI's markdown text is
    written to the document via `PATCH /api/documents/{id}/`.
 
-7. **The search index auto-updates** — the `post_save` signal in
+6. **The search index auto-updates** — the `post_save` signal in
    `documents/signals/handlers.py` fires when the API persists the PATCH,
    so full-text search reflects the new content immediately.
 
@@ -206,15 +197,13 @@ bypassed. Always configure via the model list approach above.
   `os`, `sys`, `urllib`, `subprocess`, `glob`, `shutil`).  Rasterization uses
   `pdftoppm` (poppler-utils) and `convert` (ImageMagick), both already installed
   in the paperless-ngx Docker image.
-- **Graceful failures**: if the document MIME type starts with `message/`
-  (email documents), the script exits with code 0 and logs the skip reason.
-  If the archive path is missing for any other document type, the script
-  falls back to the original document file (`DOCUMENT_SOURCE_PATH`).  This
-  handles encrypted/signed PDFs and other cases where paperless-ngx cannot
-  create an archive.  If neither archive nor source file is available, the
-  script exits with code 0 and logs clearly (no error; paperless continues
-  normally).  If the OCR returns empty content, the script exits with code 0
-  (no-op), preserving Tesseract output.
+- **Graceful failures**: if the archive path is missing, the script falls back
+  to the original document file (`DOCUMENT_SOURCE_PATH`).  This handles
+  encrypted/signed PDFs and other cases where paperless-ngx cannot create an
+  archive.  If neither archive nor source file is available, the script exits
+  with code 0 and logs clearly (no error; paperless continues normally).  If
+  the OCR returns empty content, the script exits with code 0 (no-op),
+  preserving Tesseract output.
 - **Large file handling**: the script base64-encodes the whole PDF in memory.
   For most scanned documents (< 50 MB) this is fine. Very large multi-hundred-
   page PDFs may hit LiteLLM or provider upload limits.
@@ -483,8 +472,7 @@ AI OCR [  7.5s]: OCR completed in 1.2s — 4 page(s), 3945 chars
 
 Soft skips (exit 0, paperless continues silently):
 ```
-AI OCR [  0.0s]: Skipping AI OCR for email document (MIME type: message/rfc822)
-AI OCR [  0.0s]: No archive file at '' — skipping AI OCR
+AI OCR [  0.0s]: No archive file at '' and no source file available — skipping AI OCR
 ```
 
 ### Finding Errors in the Paperless Log

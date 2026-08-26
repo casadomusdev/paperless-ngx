@@ -241,44 +241,7 @@ def main():
         _log(f"Missing required configuration: {', '.join(missing)}", error=True)
         sys.exit(1)
 
-    # ── 3. Skip non-OCR document types ────────────────────────────────────────
-    doc_mime = os.getenv("DOCUMENT_MIME_TYPE", "").lower().strip()
-    if doc_mime.startswith("message/"):
-        _log(f"Skipping AI OCR for email document (MIME type: {doc_mime})")
-        if ai_ocr_tag_id is not None:
-            _log(f"Applying OCR-finished tag {ai_ocr_tag_id} to skipped email document {document_id}...")
-            tag_patch: dict = {}
-            get_req = urllib.request.Request(
-                f"{paperless_url}/api/documents/{document_id}/",
-                headers={"Authorization": f"Token {paperless_tok}"},
-                method="GET",
-            )
-            try:
-                with urllib.request.urlopen(get_req, timeout=30) as resp:
-                    doc_data = json.loads(resp.read())
-                current_tags: list = doc_data.get("tags", [])
-                if ai_ocr_tag_id not in current_tags:
-                    current_tags.append(ai_ocr_tag_id)
-                    tag_patch["tags"] = current_tags
-                    patch_req = urllib.request.Request(
-                        f"{paperless_url}/api/documents/{document_id}/",
-                        data=json.dumps(tag_patch).encode("utf-8"),
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Token {paperless_tok}",
-                        },
-                        method="PATCH",
-                    )
-                    with urllib.request.urlopen(patch_req, timeout=30) as resp:
-                        resp.read()
-                    _log(f"Tag {ai_ocr_tag_id} applied to email document {document_id}")
-                else:
-                    _log(f"Tag {ai_ocr_tag_id} already present on document {document_id}")
-            except (urllib.error.URLError, urllib.error.HTTPError) as exc:
-                _log(f"Could not apply tag to skipped email document — {exc}", error=True)
-        sys.exit(0)
-
-    # ── 4. Read document file ──────────────────────────────────────────────────
+    # ── 3. Read document file ──────────────────────────────────────────────────
     if not archive_path or not os.path.exists(archive_path):
         # RKC: Fall back to original document when archive is missing
         # (e.g., encrypted/signed PDFs where OCRmyPDF cannot create an archive).
@@ -298,7 +261,7 @@ def main():
     ext = os.path.splitext(archive_path)[1].lower()
     mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
 
-    # ── 5. Rasterize upfront if "always" mode ────────────────────────────────
+    # ── 4. Rasterize upfront if "always" mode ────────────────────────────────
     rasterized_tmpdir = None
     if rasterize_mode == "always" and mime == "application/pdf":
         _log("Rasterize mode=always — converting PDF to pixel-based format before OCR...")
@@ -311,7 +274,7 @@ def main():
         else:
             _log("Rasterization failed — falling back to original PDF", error=True)
 
-    # ── 6. OCR with retry ─────────────────────────────────────────────────────
+    # ── 5. OCR with retry ─────────────────────────────────────────────────────
     b64 = base64.b64encode(file_bytes).decode("utf-8")
     data_url = f"data:{mime};base64,{b64}"
 
@@ -554,7 +517,7 @@ def main():
         _log("Content is empty after quality processing — leaving Tesseract output intact", error=True)
         sys.exit(0)
 
-    # ── 8. LLM quality check (optional) ────────────────────────────────────────
+    # ── 9. LLM quality check (optional) ────────────────────────────────────────
     # Only fires when deterministic checks passed clean, the feature is enabled,
     # and we haven't already rasterized (no point checking twice).
     if (quality_model and rasterize_mode != "never"
@@ -602,7 +565,7 @@ def main():
         else:
             _log("LLM quality check returned invalid response — skipping")
 
-    # ── 9. Debug mode ──────────────────────────────────────────────────────────
+    # ── 10. Debug mode ─────────────────────────────────────────────────────────
     if debug_mode:
         _log("DEBUG MODE — OCR output follows (document NOT updated):")
         separator = "─" * 72
@@ -612,7 +575,7 @@ def main():
         _log(f"DEBUG MODE done — {page_count} page(s), {len(content)} chars")
         sys.exit(0)
 
-    # ── 8. Build PATCH payload ─────────────────────────────────────────────────
+    # ── 11. Build PATCH payload ────────────────────────────────────────────────
     patch_payload: dict = {"content": content}
 
     if ai_ocr_tag_id is not None:
@@ -638,7 +601,7 @@ def main():
                 error=True,
             )
 
-    # ── 9. PATCH document content ──────────────────────────────────────────────
+    # ── 12. PATCH document content ─────────────────────────────────────────────
     _log(
         f"Sending PATCH to {paperless_url}/api/documents/{document_id}/ "
         f"(content={len(content)} chars, fields={list(patch_payload.keys())}, timeout=60s)..."
@@ -667,7 +630,7 @@ def main():
         _log(f"PATCH failed — {exc}", error=True)
         sys.exit(1)
 
-    # ── 10. Cleanup + stats + done ─────────────────────────────────────────────
+    # ── 13. Cleanup + stats + done ────────────────────────────────────────────
     if rasterized_tmpdir:
         shutil.rmtree(rasterized_tmpdir, ignore_errors=True)
 
