@@ -1266,13 +1266,33 @@ def run_workflows(
                 f"Email not sent for document '{title}'.",
                 extra={"group": logging_group},
             )
-            # Apply error_tag if configured
-            if action.email.error_tag and not use_overrides:
-                document.tags.add(action.email.error_tag)
-                logger.info(
-                    f"Applied error tag '{action.email.error_tag.name}' to document '{title}'",
-                    extra={"group": logging_group},
-                )
+            # Apply error_tag if configured (mutate doc_tag_ids, not document.tags —
+            # the enclosing .set(doc_tag_ids) at the end of the workflow loop would
+            # overwrite any direct .add() call).
+            if not use_overrides and isinstance(document, Document):
+                if action.email.error_tag:
+                    if action.email.error_tag.pk not in doc_tag_ids:
+                        doc_tag_ids.append(action.email.error_tag.pk)
+                    logger.info(
+                        f"Applied error tag '{action.email.error_tag.name}' to document '{title}'",
+                        extra={"group": logging_group},
+                    )
+                # Apply global failure/success tags (same pattern as recipient
+                # verification failure and send failure paths).
+                if settings.MAIL_SEND_FAILURE_TAG_ID is not None:
+                    if settings.MAIL_SEND_FAILURE_TAG_ID not in doc_tag_ids:
+                        doc_tag_ids.append(settings.MAIL_SEND_FAILURE_TAG_ID)
+                    logger.info(
+                        f"Validation failure: queued add of tag {settings.MAIL_SEND_FAILURE_TAG_ID} to '{title}'",
+                        extra={"group": logging_group},
+                    )
+                if settings.MAIL_SEND_SUCCESS_TAG_ID is not None:
+                    if settings.MAIL_SEND_SUCCESS_TAG_ID in doc_tag_ids:
+                        doc_tag_ids.remove(settings.MAIL_SEND_SUCCESS_TAG_ID)
+                    logger.info(
+                        f"Validation failure: queued remove of tag {settings.MAIL_SEND_SUCCESS_TAG_ID} from '{title}'",
+                        extra={"group": logging_group},
+                    )
             return
 
         if not to_list:

@@ -60,8 +60,9 @@ Located in `src/documents/signals/handlers.py`, the rewritten `email_action()` u
 
 ### Error Handling
 When email validation fails:
-- If `error_tag` is configured → tag is applied to document, email is skipped
-- If no `error_tag` → warning logged, email is skipped
+- If `error_tag` is configured → tag is applied to document via `doc_tag_ids`, email is skipped
+- If `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` is configured → failure tag applied, success tag removed
+- If no tags configured → warning logged, email is skipped
 - Document processing continues regardless
 
 ### Undefined Custom Field Protection

@@ -720,6 +720,7 @@ PAPERLESS_MAIL_QUEUE_CRON=disable
 
 ## Version History
 
+- **v1.5.5**: Email validation failure tag fix — `error_tag` was silently overwritten by `document.tags.set()` because the email validation failure path used `document.tags.add()` instead of mutating `doc_tag_ids`; fixed to use `doc_tag_ids.append()`. Also added global `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` / `PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID` handling to the email validation failure path for consistency with recipient verification and send failure paths
 - **v1.5.0**: Email send queue with retry — `PendingEmail` model stores failed outgoing emails; `process_pending_emails()` Celery Beat task retries with exponential backoff (5min→24h, up to 50 attempts); templates re-rendered with fresh document context on each retry; inline retry (2×2s/4s) in `send_email()` catches transient blips; admin UI dialog on Mail Settings page; `IsAdminUser` permission
 - **v1.4.0**: Mail send webhook — `fire_mail_send_webhook()` POSTs full JSON payload (all fields + base64 attachments + `document_id` per attachment) to `PAPERLESS_MAIL_SEND_WEBHOOK_URL` after every successful send; outcome appended as second line to send note when `PAPERLESS_MAIL_SEND_ADD_NOTE` is enabled
 - **v1.3.1**: Workflow email notes always attributed to a valid user — `document.owner` or the system `consumer` user for ownerless documents; prevents `GET /api/documents/{id}/` 500 errors in `NotesSerializer`
