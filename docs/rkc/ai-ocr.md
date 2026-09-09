@@ -337,7 +337,7 @@ AI OCR [   1.2s]: Document 19713 updated successfully — 1 page(s), 3025 chars,
 
 ### Debug mode — inspect without modifying
 
-Add `AI_OCR_DEBUG=true` to see the full Mistral response (images stripped)
+Add `AI_OCR_DEBUG=true` to see the full raw OCR response (images stripped)
 and extracted text **without updating the document**:
 
 ```bash
@@ -345,9 +345,9 @@ docker exec -e AI_OCR_DEBUG=true -it casabot-filderbau-paperless \
   python3 /usr/src/paperless/scripts/ai_ocr_rerun.py 19713
 ```
 
-Output includes the raw Mistral response JSON and extracted text:
+Output includes the raw OCR response JSON (with base64 images stripped) and extracted text:
 ```
-AI OCR [   0.9s]: DEBUG MODE — raw Mistral response (images stripped):
+AI OCR [   0.9s]: DEBUG MODE — raw OCR response (images stripped):
 ────────────────────────────────────────────────────────────────────────
 {
   "pages": [
@@ -365,7 +365,7 @@ AI OCR [   0.9s]: DEBUG MODE — extracted text (1 page(s), 3025 chars):
 ────────────────────────────────────────────────────────────────────────
 [extracted text here]
 ────────────────────────────────────────────────────────────────────────
-AI OCR [   0.9s]: DEBUG MODE done — 1 page(s), 3025 chars
+AI OCR [   0.9s]: DEBUG MODE done — document NOT updated
 ```
 
 ### Batch re-run
@@ -377,6 +377,72 @@ for doc_id in 19699 19713 19711; do
     python3 /usr/src/paperless/scripts/ai_ocr_rerun.py $doc_id
 done
 ```
+
+---
+
+## Testing OCR on a PDF File (CLI)
+
+The `ai_ocr_test.py` script sends a PDF directly to the OCR endpoint and
+displays the response.  Unlike `ai_ocr_rerun.py`, it works with local files
+and does not require a running paperless instance.
+
+### Direct file — no paperless needed
+
+```bash
+# Extracted text (default)
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_test.py /path/to/document.pdf
+
+# Full raw response JSON (base64 images stripped)
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_test.py --raw /path/to/document.pdf
+
+# Both raw response and extracted text
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_test.py --raw --text /path/to/document.pdf
+
+# Truncated response summary (structure overview)
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_test.py --summary /path/to/document.pdf
+```
+
+### Document ID mode — download from paperless
+
+```bash
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_test.py --raw --doc-id 19713
+```
+
+### Override model or endpoint
+
+```bash
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_test.py --model azure-doc-intel --raw /path/to/document.pdf
+```
+
+### Rasterize before sending
+
+```bash
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_test.py --rasterize --raw /path/to/document.pdf
+```
+
+### Flags reference
+
+| Flag | Description |
+|------|-------------|
+| `--raw` | Print full OCR response JSON (base64 images stripped) |
+| `--text` | Print extracted text only (default when no output flag given) |
+| `--summary` | Print truncated response structure overview |
+| `--rasterize` | Rasterize PDF via pdftoppm before sending |
+| `--model MODEL` | Override `AI_OCR_MODEL` for this run |
+| `--url URL` | Override `AI_OCR_URL` |
+| `--key KEY` | Override `AI_OCR_KEY` |
+| `--timeout N` | OCR request timeout in seconds (default: 300) |
+| `--doc-id ID` | Download document from paperless API instead of using a local file |
+
+Progress and status messages are printed to stderr; OCR output goes to stdout.
+This makes it easy to pipe: `ai_ocr_test.py --raw file.pdf | jq .pages[0]`
 
 ---
 

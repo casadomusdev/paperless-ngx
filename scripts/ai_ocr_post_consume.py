@@ -438,28 +438,6 @@ def main():
         else:
             _log("Rasterization failed — keeping original content", error=True)
 
-    # ── 9. Debug mode ──────────────────────────────────────────────────────────
-        separator = "─" * 72
-
-        _log("DEBUG MODE — raw Mistral response (images stripped):")
-        print(separator, flush=True)
-        # Deep-copy response and strip base64 image data for readability
-        debug_resp = copy.deepcopy(ocr_result)
-        for p in debug_resp.get("pages", []):
-            if "images" in p:
-                p["images"] = [f"[{len(img)} chars base64]" if isinstance(img, str) else img for img in p["images"]]
-            # Also strip any inline base64 in other fields
-            for k, v in list(p.items()):
-                if isinstance(v, str) and len(v) > 1000 and "base64" in v[:100]:
-                    p[k] = f"[{len(v)} chars base64]"
-        print(json.dumps(debug_resp, indent=2, ensure_ascii=False), flush=True)
-        print(separator, flush=True)
-
-        _log(f"DEBUG MODE — extracted text ({page_count} page(s), {len(raw_content)} chars):")
-        print(separator, flush=True)
-        print(raw_content, flush=True)
-        print(separator, flush=True)
-
     if not is_usable and garbage_pct > 0:
         _log(
             f"Quality check FAILED — {garbage_pct:.0f}% garbage lines detected "
@@ -567,12 +545,28 @@ def main():
 
     # ── 10. Debug mode ─────────────────────────────────────────────────────────
     if debug_mode:
-        _log("DEBUG MODE — OCR output follows (document NOT updated):")
         separator = "─" * 72
+
+        # Raw OCR API response (base64 images stripped for readability)
+        _log("DEBUG MODE — raw OCR response (images stripped):")
+        print(separator, flush=True)
+        debug_resp = copy.deepcopy(ocr_result)
+        for p in debug_resp.get("pages", []):
+            if "images" in p:
+                p["images"] = [f"[{len(img)} chars base64]" if isinstance(img, str) else img for img in p["images"]]
+            for k, v in list(p.items()):
+                if isinstance(v, str) and len(v) > 1000 and "base64" in v[:100]:
+                    p[k] = f"[{len(v)} chars base64]"
+        print(json.dumps(debug_resp, indent=2, ensure_ascii=False), flush=True)
+        print(separator, flush=True)
+
+        # Extracted text
+        _log(f"DEBUG MODE — extracted text ({page_count} page(s), {len(content)} chars):")
         print(separator, flush=True)
         print(content, flush=True)
         print(separator, flush=True)
-        _log(f"DEBUG MODE done — {page_count} page(s), {len(content)} chars")
+
+        _log("DEBUG MODE done — document NOT updated")
         sys.exit(0)
 
     # ── 11. Build PATCH payload ────────────────────────────────────────────────
