@@ -344,6 +344,71 @@ class RasterisedDocumentParser(DocumentParser):
             text_original = None
             original_has_text = False
 
+        # RKC: Pre-rasterize with pdftoppm when the user has configured
+        # continue_on_soft_render_error (indicating known Ghostscript issues)
+        # AND the PDF has embedded text that Ghostscript might corrupt during
+        # PDF/A conversion.  pdftoppm (poppler-utils) renders pages correctly
+        # where Ghostscript fails due to broken font streams.
+        if (
+            original_has_text
+            and self.settings.user_args
+            and self.settings.user_args.get("continue_on_soft_render_error")
+        ):
+            self.log.info(
+                "PDF has text + continue_on_soft_render_error set — "
+                "pre-rasterizing with pdftoppm to bypass Ghostscript "
+                "font issues.",
+            )
+            try:
+                import glob as _glob
+                import subprocess
+
+                raster_dir = Path(self.tempdir) / "pre-raster"
+                raster_dir.mkdir()
+                prefix = str(raster_dir / "page")
+                result = subprocess.run(
+                    ["pdftoppm", "-png", "-r", "300",
+                     str(document_path), prefix],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(f"pdftoppm failed: {result.stderr}")
+                pngs = sorted(
+                    _glob.glob(f"{prefix}-*.png")
+                    + _glob.glob(f"{prefix}.png"),
+                )
+                if not pngs:
+                    raise RuntimeError("pdftoppm produced no output")
+                raster_pdf = raster_dir / "rasterized.pdf"
+                result = subprocess.run(
+                    [settings.CONVERT_BINARY] + pngs + [str(raster_pdf)],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if result.returncode != 0 or not raster_pdf.is_file():
+                    raise RuntimeError(f"convert failed: {result.stderr}")
+                self.log.info(
+                    f"Pre-rasterized {len(pngs)} page(s) — "
+                    f"{raster_pdf.stat().st_size} bytes",
+                )
+                text_raster = self.extract_text(None, raster_pdf)
+                if text_raster and not is_text_garbled(text_raster):
+                    self.log.info(
+                        f"pdftoppm text OK ({len(text_raster.strip())} chars) "
+                        "— using rasterized PDF for OCR.",
+                    )
+                    document_path = raster_pdf
+                    text_original = text_raster
+                else:
+                    self.log.warning(
+                        "pdftoppm text also problematic — "
+                        "falling back to original PDF.",
+                    )
+            except Exception as e:
+                self.log.warning(
+                    f"Pre-rasterization failed: {e} — "
+                    "falling back to original PDF.",
+                )
+
         # If the original has text, and the user doesn't want an archive,
         # we're done here
         skip_archive_for_text = (
