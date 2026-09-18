@@ -389,13 +389,17 @@ class RasterisedDocumentParser(DocumentParser):
             self.text = self.extract_text(sidecar_file, archive_path)
 
             # RKC: Detect Ghostscript PDF/A conversion text corruption.
-            # Some PDFs with corrupted streams get their text layer mangled
-            # during PDF/A conversion (font substitution, garbled output).
-            # When the archive text is significantly worse than the original,
-            # fall back to the original text.  Archive file is still preserved
-            # for downstream features (download, AI OCR, bulk export).
+            # Two failure modes:
+            #   1. Original text was clean but archive text is garbled/shorter
+            #      (skip_text mode with corrupted streams) → use original text
+            #   2. Both original AND archive text are garbled (broken font
+            #      encoding in the PDF itself, redo mode) → try force_ocr
+            #      as fallback, which rasterizes the page differently
+
+            # Mode 1: Archive degraded vs clean original
             if (
                 original_has_text
+                and not is_text_garbled(text_original)
                 and check_for_text_degradation(text_original, self.text)
             ):
                 self.log.warning(
@@ -405,6 +409,63 @@ class RasterisedDocumentParser(DocumentParser):
                     "Falling back to original text (archive PDF preserved).",
                 )
                 self.text = text_original
+
+            # Mode 2: Text from archive (or original) is garbled — try
+            # force_ocr which rasterizes the full page before OCR, bypassing
+            # corrupted text layers and font encoding issues.
+            if self.text and is_text_garbled(self.text):
+                self.log.warning(
+                    "Text appears garbled (possible broken font encoding). "
+                    "Attempting force_ocr fallback...",
+                )
+                try:
+                    archive_path_f = Path(self.tempdir) / "archive-force.pdf"
+                    sidecar_file_f = Path(self.tempdir) / "sidecar-force.txt"
+                    args_f = self.construct_ocrmypdf_parameters(
+                        document_path,
+                        mime_type,
+                        archive_path_f,
+                        sidecar_file_f,
+                        safe_fallback=True,
+                    )
+                    self.log.debug(
+                        f"Force OCR fallback: Calling OCRmyPDF with args: {args_f}",
+                    )
+                    ocrmypdf.ocr(**args_f)
+                    text_force = self.extract_text(
+                        sidecar_file_f,
+                        archive_path_f,
+                    )
+                    if text_force and not is_text_garbled(text_force):
+                        self.log.info(
+                            "Force OCR fallback produced clean text "
+                            f"({len(text_force.strip())} chars).",
+                        )
+                        self.text = text_force
+                        # Use the force_ocr archive as the archive version
+                        if (
+                            self.settings.skip_archive_file
+                            != ArchiveFileChoices.ALWAYS
+                        ):
+                            self.archive_path = archive_path_f
+                    elif original_has_text and not is_text_garbled(
+                        text_original,
+                    ):
+                        self.log.warning(
+                            "Force OCR also garbled; original text was "
+                            "clean — using original.",
+                        )
+                        self.text = text_original
+                    else:
+                        self.log.warning(
+                            "Force OCR also garbled; keeping best "
+                            "available text.",
+                        )
+                except Exception as e:
+                    self.log.warning(
+                        f"Force OCR fallback failed: {e}. "
+                        "Keeping current text.",
+                    )
             # /end RKC edit
 
             if not self.text:
@@ -533,6 +594,27 @@ def check_for_text_degradation(
 
     # Archive text is significantly shorter than original (>50% lost)
     return archive_len < original_len * 0.5
+
+
+def is_text_garbled(text: str | None, threshold: float = 0.40) -> bool:
+    """Detect corrupted text from broken font encoding.
+
+    When a PDF's font encoding is damaged, pdftotext maps character codes
+    to wrong Unicode code points, producing text that is mostly non-
+    alphanumeric (control characters, symbols, random Unicode).  This
+    checks the ratio of alphanumeric characters to total length.
+
+    Returns True when the text looks corrupted and should not be trusted.
+    """
+    if not text or not text.strip():
+        return False
+
+    stripped = text.strip()
+    if len(stripped) < 5:
+        return False  # too short to judge
+
+    alnum_count = sum(1 for c in stripped if c.isalnum() or c.isspace())
+    return (alnum_count / len(stripped)) < threshold
 
 
 # /end RKC edit

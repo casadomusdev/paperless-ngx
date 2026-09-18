@@ -14,6 +14,7 @@ from documents.tests.utils import DirectoriesMixin
 from documents.tests.utils import FileSystemAssertsMixin
 from paperless_tesseract.parsers import RasterisedDocumentParser
 from paperless_tesseract.parsers import check_for_text_degradation
+from paperless_tesseract.parsers import is_text_garbled
 from paperless_tesseract.parsers import post_process_text
 
 
@@ -997,4 +998,61 @@ class TestCheckForTextDegradation(TestCase):
         original = "A" * 1000
         archive = "A" * 499  # 49.9%
         self.assertTrue(check_for_text_degradation(original, archive))
+
+
+# RKC: Tests for garbled text detection (broken font encoding)
+class TestIsTextGarbled(TestCase):
+    """Unit tests for is_text_garbled().
+
+    This function detects when pdftotext output is corrupted due to
+    broken font encoding in the PDF — the extracted text is mostly
+    non-alphanumeric characters.
+    """
+
+    def test_clean_text_not_garbled(self):
+        """Normal readable text is not garbled."""
+        self.assertFalse(
+            is_text_garbled("Invoice from ACME Corp dated 2026-09-18"),
+        )
+
+    def test_none_not_garbled(self):
+        """None is not considered garbled (no text to judge)."""
+        self.assertFalse(is_text_garbled(None))
+
+    def test_empty_not_garbled(self):
+        """Empty string is not considered garbled."""
+        self.assertFalse(is_text_garbled(""))
+
+    def test_short_text_not_garbled(self):
+        """Very short text is not judged (too few chars)."""
+        self.assertFalse(is_text_garbled("AB"))
+
+    def test_garbled_text_detected(self):
+        """Text that is mostly non-alphanumeric is garbled."""
+        # Simulates broken font encoding: character codes mapped to
+        # random Unicode symbols
+        garbled = "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c"
+        self.assertTrue(is_text_garbled(garbled))
+
+    def test_mostly_symbols_garbled(self):
+        """Text with mostly symbols and few alphanum chars is garbled."""
+        garbled = "[]{}|\\~`!@#$%^&*()_+-=[]{}|;':\",./<>?"
+        self.assertTrue(is_text_garbled(garbled))
+
+    def test_german_invoice_not_garbled(self):
+        """A real German invoice is not garbled."""
+        text = (
+            "Rechnung\n"
+            "Athanasios Vassiloudias\n"
+            "Scharr-Technologie GmbH\n"
+            "Rechnungsnummer: 2026-0918\n"
+            "Betrag: EUR 1.234,56\n"
+        )
+        self.assertFalse(is_text_garbled(text))
+
+    def test_mixed_garbled(self):
+        """Text with some alphanum but mostly garbage IS garbled."""
+        # ~25% alphanumeric, rest is symbols/control chars
+        garbled = "AB" + "\x01\x02\x03\x04\x05\x06\x07\x08" * 5
+        self.assertTrue(is_text_garbled(garbled))
 # /end RKC edit
