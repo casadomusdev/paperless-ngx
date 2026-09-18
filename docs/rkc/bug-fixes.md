@@ -125,3 +125,25 @@ In the `except (DigitalSignatureError, EncryptedPdfError)` handler, the original
 
 ### File Modified
 - `src/paperless_tesseract/parsers.py` — Copy original as archive in `DigitalSignatureError`/`EncryptedPdfError` handler
+
+## OCRmyPDF Text Degradation Fallback (v1.6.1)
+
+### Problem
+PDFs with corrupted internal streams (e.g., malformed cross-reference tables, damaged object streams) cause Ghostscript to mangle the text layer during PDF/A conversion. Ghostscript reports `error reading a stream`, replaces original fonts with system substitutes (NimbusSans-Regular), and the resulting archive PDF contains garbled or completely lost text. The `continue_on_soft_render_error: True` flag (via `PAPERLESS_OCR_USER_ARGS`) prevents OCRmyPDF from raising an exception but does not prevent the text corruption — it only allows the process to complete.
+
+The corruption path:
+1. `pdftotext` extracts clean text from the original PDF
+2. OCRmyPDF runs with `skip_text: True` (skip mode) for PDF/A archive creation
+3. Ghostscript PDF/A conversion encounters corrupted streams and mangles the text
+4. Sidecar is discarded (contains `[OCR skipped on page` markers)
+5. `pdftotext` extracts garbled text from the corrupted archive
+6. Garbled text is stored as the document content
+
+### Solution
+After OCRmyPDF produces the archive and text is extracted, compare the archive text against the text originally extracted from the raw input PDF (which is already available — extracted before OCRmyPDF runs). If the archive text is significantly worse (>50% shorter, or empty while original had content), fall back to the original text. The archive PDF is still preserved for downstream features (download, AI OCR, bulk export) since Ghostscript produces a structurally valid PDF/A even when the text layer is garbled.
+
+A new `check_for_text_degradation()` function performs the comparison. The fallback only activates when degradation is actually detected — it is silent for the vast majority of healthy documents.
+
+### Files Modified
+- `src/paperless_tesseract/parsers.py` — Added `check_for_text_degradation()` function and post-OCR comparison in `parse()` method
+- `src/paperless_tesseract/tests/test_parser.py` — Unit tests for degradation detection (12 scenarios)

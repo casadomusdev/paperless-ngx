@@ -124,6 +124,7 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 - **Processed Mail Pagination** — Fixed pagination showing only one page regardless of total count
 - **Bootstrap Tooltip Dark Mode** — Fixed unreadable tooltips in dark mode
 - **SSO UiSettings Auto-Creation** — Prevents login errors for new SSO users
+- **OCRmyPDF Text Degradation Fallback** — PDFs with corrupted internal streams cause Ghostscript to mangle the text layer during PDF/A conversion (font substitution, garbled text). The parser now compares post-OCR text against the original; if >50% of text was lost, it falls back to the original text while preserving the archive PDF for downstream features
 
 → [Details](docs/rkc/bug-fixes.md)
 
@@ -230,6 +231,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.6.1** — OCRmyPDF text degradation fallback: PDFs with corrupted internal streams cause Ghostscript to mangle the text layer during PDF/A conversion (font substitution, garbled text). The tesseract parser now compares post-OCR text against the text originally extracted from the raw PDF; if the archive text is >50% shorter (or empty while original had content), it falls back to the original text. The archive PDF is still preserved for downstream features (download, AI OCR, bulk export).
 - **v1.5.5** — Email validation failure tag fix: `error_tag` was silently overwritten by `document.tags.set()` in the workflow loop; fixed to use `doc_tag_ids.append()`. Added global `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` / `PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID` to email validation failure path
 - **v1.5.4** — AI OCR processes email documents (`message/rfc822`): removed the `message/*` MIME type skip from the post-consume script. Email documents now flow through the same AI OCR pipeline as any other document — the Gotenberg-generated archive PDF is sent to the OCR API, producing high-quality text extraction where Tesseract alone often fails. The v1.4.1 race condition concern (workflow email actions firing before custom fields are set) is already mitigated by `Jinja2 UndefinedError` catching in the workflow email action handler.
 - **v1.5.3** — Encrypted/signed PDF archive creation fix: OCRmyPDF raises `DigitalSignatureError`/`EncryptedPdfError` for signed/encrypted PDFs, but the tesseract parser never set `archive_path`, leaving `has_archive_version = False` and breaking downloads, bulk export, and AI OCR. The original PDF is now copied as the archive file. AI OCR post-consume script falls back to `DOCUMENT_SOURCE_PATH` when archive is missing (safety net for any edge case).
@@ -320,7 +322,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | [`docs/rkc/duplicate-readd.md`](docs/rkc/duplicate-readd.md) | Duplicate document re-add with tagging, notes, trash handling |
 | [`docs/rkc/mail-system.md`](docs/rkc/mail-system.md) | Universal SMTP, Graph API, multi-mailbox, OAuth2, connection pooling, smart correspondents, metadata, processed mail UI |
 | [`docs/rkc/workflow-email.md`](docs/rkc/workflow-email.md) | Dynamic workflow email templates with Jinja2, HTML auto-detection, error tagging |
-| [`docs/rkc/bug-fixes.md`](docs/rkc/bug-fixes.md) | Webhook hostname fix, dashboard race condition, card date format, tooltip dark mode, pagination |
+| [`docs/rkc/bug-fixes.md`](docs/rkc/bug-fixes.md) | Webhook hostname fix, dashboard race condition, card date format, tooltip dark mode, pagination, text degradation fallback |
 | [`docs/rkc/environment-variables.md`](docs/rkc/environment-variables.md) | Complete reference table of ALL RKC environment variables |
 
 ### Related Documentation

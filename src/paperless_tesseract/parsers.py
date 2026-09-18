@@ -388,6 +388,25 @@ class RasterisedDocumentParser(DocumentParser):
 
             self.text = self.extract_text(sidecar_file, archive_path)
 
+            # RKC: Detect Ghostscript PDF/A conversion text corruption.
+            # Some PDFs with corrupted streams get their text layer mangled
+            # during PDF/A conversion (font substitution, garbled output).
+            # When the archive text is significantly worse than the original,
+            # fall back to the original text.  Archive file is still preserved
+            # for downstream features (download, AI OCR, bulk export).
+            if (
+                original_has_text
+                and check_for_text_degradation(text_original, self.text)
+            ):
+                self.log.warning(
+                    "Text degradation detected after OCRmyPDF processing — "
+                    f"original had {len(text_original.strip())} chars but "
+                    f"archive has {len(self.text.strip()) if self.text else 0}. "
+                    "Falling back to original text (archive PDF preserved).",
+                )
+                self.text = text_original
+            # /end RKC edit
+
             if not self.text:
                 raise NoTextFoundException("No text was found in the original document")
         except (DigitalSignatureError, EncryptedPdfError):
@@ -481,3 +500,39 @@ def post_process_text(text):
     # replace \0 prevents issues with saving to postgres.
     # text may contain \0 when this character is present in PDF files.
     return no_trailing_whitespace.strip().replace("\0", " ")
+
+
+# RKC: Detect Ghostscript PDF/A conversion text corruption
+def check_for_text_degradation(
+    text_original: str | None,
+    text_after_ocr: str | None,
+) -> bool:
+    """Detect when OCRmyPDF's PDF/A conversion has corrupted the text layer.
+
+    Some PDFs with corrupted internal streams cause Ghostscript to mangle
+    the text during PDF/A conversion — font substitution replaces original
+    fonts and the extracted text becomes garbled or disappears entirely.
+
+    This compares the text extracted from the original PDF against the text
+    extracted from OCRmyPDF's archive output.  Returns True when the archive
+    text is significantly worse, indicating the text layer was damaged.
+
+    The caller should fall back to text_original when this returns True.
+    """
+    # If there was no original text, there's nothing to degrade
+    if not text_original or not text_original.strip():
+        return False
+
+    original_len = len(text_original.strip())
+
+    # Archive text is empty or missing while original had substantial content
+    if not text_after_ocr or not text_after_ocr.strip():
+        return True
+
+    archive_len = len(text_after_ocr.strip())
+
+    # Archive text is significantly shorter than original (>50% lost)
+    return archive_len < original_len * 0.5
+
+
+# /end RKC edit

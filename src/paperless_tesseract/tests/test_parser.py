@@ -13,6 +13,7 @@ from documents.parsers import run_convert
 from documents.tests.utils import DirectoriesMixin
 from documents.tests.utils import FileSystemAssertsMixin
 from paperless_tesseract.parsers import RasterisedDocumentParser
+from paperless_tesseract.parsers import check_for_text_degradation
 from paperless_tesseract.parsers import post_process_text
 
 
@@ -911,3 +912,89 @@ class TestParserFileTypes(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
             parser.get_text().lower(),
             r"this is a ?webp document, created 11/14/2022.",
         )
+
+
+# RKC: Tests for Ghostscript PDF/A text degradation detection
+class TestCheckForTextDegradation(TestCase):
+    """Unit tests for check_for_text_degradation().
+
+    This function detects when OCRmyPDF's PDF/A conversion has mangled
+    the text layer of a PDF (e.g., Ghostscript stream errors -> font
+    substitution -> garbled text).
+    """
+
+    def test_normal_no_degradation(self):
+        """Archive text is similar to original -- no degradation."""
+        original = "Invoice from ACME Corp dated 2026-09-18 total EUR 1234.56"
+        archive = "Invoice from ACME Corp dated 2026-09-18 total EUR 1234.56"
+        self.assertFalse(check_for_text_degradation(original, archive))
+
+    def test_archive_text_empty(self):
+        """Original has content, archive is empty -- degradation detected."""
+        original = "Invoice from ACME Corp dated 2026-09-18 total EUR 1234.56"
+        self.assertTrue(check_for_text_degradation(original, ""))
+
+    def test_archive_text_none(self):
+        """Original has content, archive is None -- degradation detected."""
+        original = "Invoice from ACME Corp dated 2026-09-18 total EUR 1234.56"
+        self.assertTrue(check_for_text_degradation(original, None))
+
+    def test_archive_whitespace_only(self):
+        """Original has content, archive is whitespace -- degradation detected."""
+        original = "Invoice from ACME Corp dated 2026-09-18 total EUR 1234.56"
+        self.assertTrue(check_for_text_degradation(original, "   \n  "))
+
+    def test_archive_significantly_shorter(self):
+        """Archive is >50% shorter than original -- degradation detected."""
+        original = "A" * 1000
+        archive = "A" * 400  # 40% of original
+        self.assertTrue(check_for_text_degradation(original, archive))
+
+    def test_archive_slightly_shorter_no_degradation(self):
+        """Archive is ~30% shorter -- within tolerance, no degradation."""
+        original = "A" * 1000
+        archive = "A" * 700  # 70% of original
+        self.assertFalse(check_for_text_degradation(original, archive))
+
+    def test_both_empty(self):
+        """Both empty -- nothing to degrade, no false positive."""
+        self.assertFalse(check_for_text_degradation("", ""))
+        self.assertFalse(check_for_text_degradation(None, None))
+
+    def test_original_empty_archive_has_text(self):
+        """Original was empty but archive got text -- no degradation."""
+        original = ""
+        archive = "Some OCR-extracted text"
+        self.assertFalse(check_for_text_degradation(original, archive))
+
+    def test_original_none_archive_has_text(self):
+        """Original was None but archive got text -- no degradation."""
+        archive = "Some OCR-extracted text"
+        self.assertFalse(check_for_text_degradation(None, archive))
+
+    def test_garbled_text_shorter(self):
+        """Simulates the real scenario: Ghostscript replaces fonts,
+        garbling the text and shortening it significantly."""
+        original = (
+            "Rechnung\n"
+            "Athanasios Vassiloudias\n"
+            "Scharr-Technologie GmbH\n"
+            "Rechnungsnummer: 2026-0918\n"
+            "Betrag: EUR 1.234,56\n"
+        )
+        # Ghostscript garbled version -- much shorter, different content
+        garbled = "R g n g\nA h n  V"
+        self.assertTrue(check_for_text_degradation(original, garbled))
+
+    def test_exact_50_percent_threshold(self):
+        """Archive is exactly 50% -- not strictly less than 50%, no degradation."""
+        original = "A" * 1000
+        archive = "A" * 500  # exactly 50%
+        self.assertFalse(check_for_text_degradation(original, archive))
+
+    def test_just_below_50_percent(self):
+        """Archive is just under 50% -- degradation detected."""
+        original = "A" * 1000
+        archive = "A" * 499  # 49.9%
+        self.assertTrue(check_for_text_degradation(original, archive))
+# /end RKC edit
