@@ -386,23 +386,16 @@ class RasterisedDocumentParser(DocumentParser):
                 )
                 if result.returncode != 0 or not raster_pdf.is_file():
                     raise RuntimeError(f"convert failed: {result.stderr}")
+                if not raster_pdf.is_file() or raster_pdf.stat().st_size == 0:
+                    raise RuntimeError("rasterized PDF is empty")
                 self.log.info(
                     f"Pre-rasterized {len(pngs)} page(s) — "
-                    f"{raster_pdf.stat().st_size} bytes",
+                    f"{raster_pdf.stat().st_size} bytes — "
+                    "using for OCR.",
                 )
-                text_raster = self.extract_text(None, raster_pdf)
-                if text_raster and not is_text_garbled(text_raster):
-                    self.log.info(
-                        f"pdftoppm text OK ({len(text_raster.strip())} chars) "
-                        "— using rasterized PDF for OCR.",
-                    )
-                    document_path = raster_pdf
-                    text_original = text_raster
-                else:
-                    self.log.warning(
-                        "pdftoppm text also problematic — "
-                        "falling back to original PDF.",
-                    )
+                document_path = raster_pdf
+                text_original = None
+                original_has_text = False
             except Exception as e:
                 self.log.warning(
                     f"Pre-rasterization failed: {e} — "
