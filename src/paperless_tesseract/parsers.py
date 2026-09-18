@@ -410,60 +410,114 @@ class RasterisedDocumentParser(DocumentParser):
                 )
                 self.text = text_original
 
-            # Mode 2: Text from archive (or original) is garbled — try
-            # force_ocr which rasterizes the full page before OCR, bypassing
-            # corrupted text layers and font encoding issues.
+            # Mode 2: Text from archive (or original) is garbled — the
+            # PDF's font encoding is broken.  Both redo_ocr and force_ocr
+            # produce garbled output because Ghostscript uses the same
+            # broken font substitution during rasterization.  Fix: rasterize
+            # with pdftoppm (bypasses Ghostscript entirely), build a clean
+            # image-only PDF, then OCR that — no broken fonts to substitute.
             if self.text and is_text_garbled(self.text):
                 self.log.warning(
                     "Text appears garbled (possible broken font encoding). "
-                    "Attempting force_ocr fallback...",
+                    "Attempting pdftoppm rasterization fallback...",
                 )
                 try:
-                    archive_path_f = Path(self.tempdir) / "archive-force.pdf"
-                    sidecar_file_f = Path(self.tempdir) / "sidecar-force.txt"
-                    args_f = self.construct_ocrmypdf_parameters(
-                        document_path,
-                        mime_type,
-                        archive_path_f,
-                        sidecar_file_f,
+                    import glob as _glob
+                    import subprocess
+
+                    raster_dir = Path(self.tempdir) / "raster-repair"
+                    raster_dir.mkdir()
+                    prefix = str(raster_dir / "page")
+
+                    # Step 1: PDF -> PNGs via pdftoppm (bypasses Ghostscript)
+                    result = subprocess.run(
+                        ["pdftoppm", "-png", "-r", "300",
+                         str(document_path), prefix],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    if result.returncode != 0:
+                        raise RuntimeError(
+                            f"pdftoppm failed: {result.stderr}",
+                        )
+
+                    pngs = sorted(
+                        _glob.glob(f"{prefix}-*.png")
+                        + _glob.glob(f"{prefix}.png"),
+                    )
+                    if not pngs:
+                        raise RuntimeError("pdftoppm produced no output")
+
+                    # Step 2: PNGs -> single image-only PDF via convert
+                    raster_pdf = raster_dir / "rasterized.pdf"
+                    result = subprocess.run(
+                        [settings.CONVERT_BINARY] + pngs + [str(raster_pdf)],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    if result.returncode != 0 or not raster_pdf.is_file():
+                        raise RuntimeError(
+                            f"convert failed: {result.stderr}",
+                        )
+
+                    self.log.info(
+                        f"Rasterized {len(pngs)} page(s) to "
+                        f"{raster_pdf.stat().st_size} bytes",
+                    )
+
+                    # Step 3: OCR the clean image-only PDF
+                    # (Ghostscript PDF/A conversion on images only — no
+                    # broken fonts to substitute, text layer is fresh.)
+                    archive_path_r = (
+                        Path(self.tempdir) / "archive-raster.pdf"
+                    )
+                    sidecar_file_r = (
+                        Path(self.tempdir) / "sidecar-raster.txt"
+                    )
+                    args_r = self.construct_ocrmypdf_parameters(
+                        raster_pdf,
+                        "application/pdf",
+                        archive_path_r,
+                        sidecar_file_r,
                         safe_fallback=True,
                     )
                     self.log.debug(
-                        f"Force OCR fallback: Calling OCRmyPDF with args: {args_f}",
+                        f"Raster OCR: Calling OCRmyPDF with args: {args_r}",
                     )
-                    ocrmypdf.ocr(**args_f)
-                    text_force = self.extract_text(
-                        sidecar_file_f,
-                        archive_path_f,
+                    ocrmypdf.ocr(**args_r)
+                    text_raster = self.extract_text(
+                        sidecar_file_r,
+                        archive_path_r,
                     )
-                    if text_force and not is_text_garbled(text_force):
+                    if text_raster and not is_text_garbled(text_raster):
                         self.log.info(
-                            "Force OCR fallback produced clean text "
-                            f"({len(text_force.strip())} chars).",
+                            "Rasterization fallback produced clean text "
+                            f"({len(text_raster.strip())} chars).",
                         )
-                        self.text = text_force
-                        # Use the force_ocr archive as the archive version
+                        self.text = text_raster
                         if (
                             self.settings.skip_archive_file
                             != ArchiveFileChoices.ALWAYS
                         ):
-                            self.archive_path = archive_path_f
+                            self.archive_path = archive_path_r
                     elif original_has_text and not is_text_garbled(
                         text_original,
                     ):
                         self.log.warning(
-                            "Force OCR also garbled; original text was "
+                            "Raster OCR also garbled; original text was "
                             "clean — using original.",
                         )
                         self.text = text_original
                     else:
                         self.log.warning(
-                            "Force OCR also garbled; keeping best "
+                            "Raster OCR also garbled; keeping best "
                             "available text.",
                         )
                 except Exception as e:
                     self.log.warning(
-                        f"Force OCR fallback failed: {e}. "
+                        f"Rasterization fallback failed: {e}. "
                         "Keeping current text.",
                     )
             # /end RKC edit
