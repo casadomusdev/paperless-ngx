@@ -31,9 +31,10 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_REPEAT_MIN        - (optional) Minimum times a line must repeat to count as garbage
                              in the repetition-loop detector (default: 4). Catches
                              interleaved gibberish like "word\nK\nword\nK\n...".
-  AI_OCR_FALLBACK_MODEL   - (optional) Fallback OCR model for table-only failures.
-                             When primary model returns only table blocks, tries this
-                             model on the rasterized PDF. Example: "mistral-ocr-latest"
+  AI_OCR_FALLBACK_MODEL   - (optional) Fallback OCR model tried when the primary output
+                             is degraded (garbage-loop or table-only blocks). Tries the
+                             original PDF first, then the rasterized PDF. Example:
+                             "mistral-ocr-latest" or "azure-ocr".
   AI_OCR_STATS_LOG        - (optional) Path to a JSON-lines stats log file. Each OCR
                              run appends one JSON object with metrics (model, path,
                              rasterized, garbage_pct, content_len, time_s, etc.).
@@ -207,6 +208,36 @@ def _retry_delay(attempt: int, base: int, exc: object = None) -> int:
     return delay
 
 
+_MIN_CANDIDATE_CHARS = 20
+
+
+def _is_better(cand_content, cand_garbage, cand_table_only,
+               cur_content, cur_garbage, cur_usable, cur_table_only):
+    """Decide whether a candidate OCR result (fallback or rasterized) should
+    replace the current text.
+
+    A candidate wins when it is non-empty, is not table-only, and either:
+
+    - is strictly cleaner than the current text (lower garbage %), or
+    - fixes a table-only primary (current was table-only, candidate is not).
+
+    The completeness guard (candidate >= half the current length) is only
+    applied when the *current* text is itself usable.  When the current text is
+    degraded (garbage), comparing its length is meaningless — a clean result is
+    often *shorter* than the garbage it replaces — so the candidate only has to
+    clear a small absolute floor.
+    """
+    if not cand_content:
+        return False
+    if cand_table_only:
+        return False
+    if not (cand_garbage < cur_garbage or cur_table_only):
+        return False
+    if cur_usable:
+        return len(cand_content) >= len(cur_content) * 0.5
+    return len(cand_content) >= _MIN_CANDIDATE_CHARS
+
+
 def main():
     # ── 1. Feature gate ────────────────────────────────────────────────────────
     if os.getenv("AI_OCR_ENABLED", "false").lower() != "true":
@@ -358,13 +389,12 @@ def main():
             table_fb = is_table_only(ocr_fb)
             _log(f"Fallback result: {page_fb} page(s), {len(content_fb)} chars, "
                  f"garbage={garbage_fb:.0f}%, table-only={table_fb}")
+            if not content_fb:
+                for line in _response_summary(ocr_fb):
+                    _log(line, error=True)
 
-            # Use fallback if it's meaningfully better
-            fb_better = (content_fb
-                         and len(content_fb) >= len(content) * 0.5
-                         and not table_fb
-                         and (garbage_fb < garbage_pct or (table_only and not table_fb)))
-            if fb_better:
+            if _is_better(content_fb, garbage_fb, table_fb,
+                          content, garbage_pct, is_usable, table_only):
                 _log(f"Using fallback result ({len(content_fb)} vs {len(content)} chars)")
                 content = content_fb
                 page_count = page_fb
@@ -372,7 +402,7 @@ def main():
                 final_model = fallback_model
                 ocr_path = "fallback_original"
                 is_usable, garbage_pct = check_quality(content, degrade_pct)
-                table_only = False
+                table_only = is_table_only(ocr_result)
                 has_issues = False
             else:
                 _log("Fallback on original not better — will try rasterization")
@@ -395,18 +425,21 @@ def main():
                 ocr_r = _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url)
                 content_r, page_r = _extract_text(ocr_r)
                 _, garbage_r = check_quality(content_r, degrade_pct)
-                _log(f"Rasterized result: {page_r} page(s), {len(content_r)} chars, garbage={garbage_r:.0f}%")
+                table_r = is_table_only(ocr_r)
+                _log(f"Rasterized result: {page_r} page(s), {len(content_r)} chars, "
+                     f"garbage={garbage_r:.0f}%, table-only={table_r}")
 
-                use_rasterized = (content_r
-                                  and len(content_r) >= len(content) * 0.5
-                                  and (garbage_r < garbage_pct or table_only))
-                if use_rasterized:
+                if _is_better(content_r, garbage_r, table_r,
+                              content, garbage_pct, is_usable, table_only):
                     _log(f"Using rasterized result ({len(content_r)} vs {len(content)} chars)")
                     content = content_r
                     page_count = page_r
                     ocr_result = ocr_r
                     ocr_path = "rasterized"
                     rasterized = True
+                    is_usable, garbage_pct = check_quality(content, degrade_pct)
+                    table_only = table_r
+                    has_issues = False
                 elif fallback_model:
                     # Try fallback model on rasterized
                     _log("Rasterized result not better — trying fallback on rasterized PDF...")
@@ -414,12 +447,15 @@ def main():
                         ocr_fb2 = _ocr_request(ai_ocr_url, ai_ocr_key, fallback_model, raster_url)
                         content_fb2, page_fb2 = _extract_text(ocr_fb2)
                         _, garbage_fb2 = check_quality(content_fb2, degrade_pct)
-                        _log(f"Fallback rasterized: {page_fb2} page(s), {len(content_fb2)} chars, garbage={garbage_fb2:.0f}%")
+                        table_fb2 = is_table_only(ocr_fb2)
+                        _log(f"Fallback rasterized: {page_fb2} page(s), {len(content_fb2)} chars, "
+                             f"garbage={garbage_fb2:.0f}%, table-only={table_fb2}")
+                        if not content_fb2:
+                            for line in _response_summary(ocr_fb2):
+                                _log(line, error=True)
 
-                        fb2_better = (content_fb2
-                                      and len(content_fb2) >= len(content) * 0.5
-                                      and (garbage_fb2 < garbage_pct or table_only))
-                        if fb2_better:
+                        if _is_better(content_fb2, garbage_fb2, table_fb2,
+                                      content, garbage_pct, is_usable, table_only):
                             _log(f"Using fallback rasterized result ({len(content_fb2)} vs {len(content)} chars)")
                             content = content_fb2
                             page_count = page_fb2
@@ -427,6 +463,9 @@ def main():
                             final_model = fallback_model
                             ocr_path = "fallback_rasterized"
                             rasterized = True
+                            is_usable, garbage_pct = check_quality(content, degrade_pct)
+                            table_only = table_fb2
+                            has_issues = False
                         else:
                             _log("Fallback rasterized not better — keeping original")
                     except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
@@ -441,54 +480,16 @@ def main():
         else:
             _log("Rasterization failed — keeping original content", error=True)
 
+    # ── 8b. Final quality status (rasterization handled in section 8) ─────────
     if not is_usable and garbage_pct > 0:
         _log(
             f"Quality check FAILED — {garbage_pct:.0f}% garbage lines detected "
             f"(threshold: {degrade_pct:.0f}%)", error=True
         )
-
-        if rasterize_mode != "never" and mime == "application/pdf":
-            _log("Rasterization fallback — converting PDF to pixel-based format...")
-            rasterized_path = None
-            try:
-                rasterized_path = rasterize_pdf(archive_path)
-                if rasterized_path:
-                    with open(rasterized_path, "rb") as fh:
-                        raster_bytes = fh.read()
-                    _log(f"Rasterized PDF: {len(raster_bytes):,} bytes")
-                    raster_b64 = base64.b64encode(raster_bytes).decode("utf-8")
-                    raster_url = f"data:application/pdf;base64,{raster_b64}"
-
-                    ocr_result_2 = _ocr_request(
-                        ai_ocr_url, ai_ocr_key, ai_ocr_model, raster_url
-                    )
-                    content_2, page_count_2 = _extract_text(ocr_result_2)
-                    _log(f"Rasterized retry: {page_count_2} page(s), {len(content_2)} chars")
-
-                    _, garbage_pct_2 = check_quality(content_2, degrade_pct)
-
-                    if content_2 and (garbage_pct_2 == 0 or garbage_pct_2 < garbage_pct):
-                        _log(
-                            f"Rasterized result is better "
-                            f"(garbage: {garbage_pct_2:.0f}% vs {garbage_pct:.0f}%) — using it"
-                        )
-                        content = content_2
-                        page_count = page_count_2
-                    else:
-                        _log("Rasterized result not better — using original")
-                else:
-                    _log("Rasterization failed — using original content", error=True)
-            except (urllib.error.HTTPError, urllib.error.URLError, Exception) as exc:
-                _log(f"Rasterized retry failed: {exc} — using original", error=True)
-            finally:
-                if rasterized_path:
-                    shutil.rmtree(os.path.dirname(rasterized_path), ignore_errors=True)
-        else:
-            if mime != "application/pdf":
-                _log("Non-PDF document — cannot rasterize")
-            else:
-                _log("Rasterization disabled (mode=never)")
-
+        if mime != "application/pdf":
+            _log("Non-PDF document — cannot rasterize")
+        elif rasterize_mode == "never":
+            _log("Rasterization disabled (mode=never)")
     elif garbage_pct > 0:
         _log(f"Minor garbage detected ({garbage_pct:.0f}%) — using content as-is")
     else:
@@ -503,7 +504,7 @@ def main():
     # and we haven't already rasterized (no point checking twice).
     if (quality_model and rasterize_mode != "never"
             and mime == "application/pdf" and garbage_pct == 0
-            and not is_table_only(ocr_result)):
+            and not rasterized and not is_table_only(ocr_result)):
         _log(f"LLM quality check — model={quality_model}, threshold={quality_thresh}...")
         score = llm_quality_score(content, quality_url, quality_key, quality_model)
         if score is not None:
