@@ -165,7 +165,12 @@ def _ocr_request(ai_ocr_url, ai_ocr_key, ai_ocr_model, data_url, timeout=300):
 
 
 def _extract_text(ocr_result):
-    """Extract text from OCR response, merging header/markdown/footer per page."""
+    """Extract text from an OCR response, merging header/markdown/footer per page.
+
+    Falls back to concatenating the page ``blocks[].content`` values when a page
+    has no header/markdown/footer text — some providers (or partial failure
+    modes) return the recognised text only inside the block list.
+    """
     pages = ocr_result.get("pages", [])
 
     def _page_text(p):
@@ -174,6 +179,12 @@ def _extract_text(ocr_result):
             val = (p.get(field) or "").strip()
             if val:
                 parts.append(val)
+        if not parts:
+            # Fallback: use per-page block text when the usual fields are empty
+            for block in p.get("blocks", []):
+                val = block.get("content") if isinstance(block, dict) else None
+                if isinstance(val, str) and val.strip():
+                    parts.append(val.strip())
         return "\n\n".join(parts)
 
     content = "\n\n".join(_page_text(p) for p in pages).strip()

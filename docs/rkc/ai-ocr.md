@@ -170,7 +170,10 @@ All three providers return the same response format:
 }
 ```
 
-The script joins pages with `\n\n` before writing to the `content` field.
+The script joins pages with `\n\n` before writing to the `content` field. For each
+page it reads `header`, `markdown` and `footer`; if all three are empty it falls
+back to concatenating the page's `blocks[].content` values, so providers that
+return the recognised text only inside the block list are still captured.
 
 ---
 
