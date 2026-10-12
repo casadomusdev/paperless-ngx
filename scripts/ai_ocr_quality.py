@@ -35,7 +35,7 @@ def check_quality(content: str, threshold_pct: float = 30.0,
     detected above the threshold, the caller should fall back to another model
     and/or rasterize and retry.
 
-    Two independent signals are combined — the larger garbage share wins:
+    Three independent signals are combined — the largest garbage share wins:
 
     1. **Contiguous garbage runs** — 3+ consecutive very short (≤2 char)
        alphabetic lines, e.g. ``"K\\nK\\nK\\n..."``.
@@ -44,6 +44,10 @@ def check_quality(content: str, threshold_pct: float = 30.0,
        repeated word alternates with a repeated single character.  Such a loop
        never forms a run of 3+ consecutive short lines, so signal 1 alone
        misses it.
+    3. **In-line repetition** — character n-gram distinctness, catching runaway
+       loops that live *inside* a single line with no line breaks (e.g. a JSON
+       caption repeating ``567a/567b/…/567z/`` thousands of times), which both
+       line-based signals miss.
 
     ``repeat_min`` is the recurrence count used by signal 2.  When ``None`` it
     is read from the ``AI_OCR_REPEAT_MIN`` env var (default 4).
@@ -72,8 +76,9 @@ def check_quality(content: str, threshold_pct: float = 30.0,
 
     run_pct = _contiguous_garbage_pct(lines, total_lines)
     repeat_pct = _repetition_garbage_pct(lines, repeat_min)
+    inline_pct = _inline_repetition_pct(content)
 
-    garbage_pct = max(run_pct, repeat_pct)
+    garbage_pct = max(run_pct, repeat_pct, inline_pct)
     is_usable = garbage_pct < threshold_pct
     return is_usable, garbage_pct
 
@@ -137,6 +142,36 @@ def _repetition_garbage_pct(lines: list, repeat_min: int) -> float:
     counts = Counter(stripped)
     repeated = sum(c for c in counts.values() if c >= repeat_min)
     return repeated / len(stripped) * 100
+
+
+_INLINE_REPEAT_MIN_PCT = 60.0
+
+
+def _inline_repetition_pct(content: str, n: int = 20, min_len: int = 500,
+                           floor: float = _INLINE_REPEAT_MIN_PCT) -> float:
+    """Repetitiveness of the content *within* lines, via character n-gram
+    distinctness.
+
+    Line-based detectors cannot see a runaway loop that lives inside a single
+    line (e.g. a JSON caption containing "567a/567b/…/567z/" repeated thousands
+    of times, with no line breaks).  This compares the number of distinct
+    character n-grams to the total number of n-grams: natural text is almost
+    entirely unique (low value), a runaway loop is almost entirely repeated
+    (value near 100, independent of ``n`` because a periodic string has only
+    ~period distinct n-grams).
+
+    Returns 0.0 unless the repetition is severe (``>= floor``).  Ordinary prose
+    and even repetitive tables can reach ~25-30% at small ``n``, so the high
+    floor keeps this signal from ever firing on legitimate content.
+    """
+    if len(content) < min_len:
+        return 0.0
+    total = len(content) - n + 1
+    if total <= 0:
+        return 0.0
+    distinct = len({content[i:i + n] for i in range(total)})
+    pct = (1 - distinct / total) * 100
+    return pct if pct >= floor else 0.0
 
 
 def is_table_only(ocr_result: dict) -> bool:

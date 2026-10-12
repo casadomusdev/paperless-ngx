@@ -223,8 +223,8 @@ this pattern.
 
 ### How Quality Detection Works
 
-After receiving OCR content, the script runs **two independent detection signals**
-and reports the larger garbage share:
+After receiving OCR content, the script runs **three independent detection
+signals** and reports the largest garbage share:
 
 **1. Contiguous garbage runs** — 3+ consecutive very short (≤2 char) alphabetic
 lines such as `"K"`, `"k"`, `"a"`, `"OK"` (empty lines between them are ignored).
@@ -236,6 +236,13 @@ mode where a repeated word alternates with a repeated single character —
 `Bezirkungsbesitz\nK\nBezirkungsbesitz\nK\n…`.  Such a loop never produces a run
 of 3+ consecutive short lines, so signal 1 alone misses it.  Empty lines and
 symbol-only lines (e.g. `-`, `•`) are ignored.
+
+**3. In-line repetition** — character n-gram distinctness.  This catches a
+runaway loop that lives *inside* a single line with no line breaks — e.g. an OCR
+result whose whole body is one JSON string repeating `567a/567b/…/567z/`
+thousands of times.  Natural text has almost all-unique n-grams (low value); a
+runaway loop is almost entirely repeated (value near 100).  Only applied to
+content ≥ 500 chars.
 
 | Garbage % | Outcome |
 |-----------|---------|
