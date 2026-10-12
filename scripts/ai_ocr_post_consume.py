@@ -28,6 +28,9 @@ Configuration (set in your Docker Compose environment / .env):
                              "never"  — never rasterize (old behavior)
   AI_OCR_DEGRADATION_THRESHOLD - Garbage-line percentage above which a rasterized retry is
                              triggered in "auto" mode (default: 30)
+  AI_OCR_REPEAT_MIN        - (optional) Minimum times a line must repeat to count as garbage
+                             in the repetition-loop detector (default: 4). Catches
+                             interleaved gibberish like "word\nK\nword\nK\n...".
   AI_OCR_FALLBACK_MODEL   - (optional) Fallback OCR model for table-only failures.
                              When primary model returns only table blocks, tries this
                              model on the rasterized PDF. Example: "mistral-ocr-latest"

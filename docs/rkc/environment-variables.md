@@ -57,7 +57,8 @@ Complete reference of all environment variables introduced by RKC customizations
 | `AI_OCR_RASTERIZE` | String | `auto` | Rasterization mode: `auto`, `always`, or `never` | [AI OCR](ai-ocr.md) |
 | `AI_OCR_FALLBACK_MODEL` | String | _(none)_ | Fallback OCR model for table-only failures (e.g. `mistral-ocr-latest`) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_STATS_LOG` | String | _(none)_ | Path to JSON-lines stats log (e.g. `/logs/ai_ocr_stats.jsonl`) | [AI OCR](ai-ocr.md) |
-| `AI_OCR_DEGRADATION_THRESHOLD` | Integer | `30` | Garbage-line percentage above which a rasterized retry is triggered | [AI OCR](ai-ocr.md) |
+| `AI_OCR_DEGRADATION_THRESHOLD` | Integer | `30` | Garbage percentage above which a retry (fallback model / rasterization) is triggered | [AI OCR](ai-ocr.md) |
+| `AI_OCR_REPEAT_MIN` | Integer | `4` | Minimum repeat count for the repetition-loop garbage detector (catches interleaved `word`/`K` gibberish) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_QUALITY_MODEL` | String | _(none)_ | Cheap LLM model for quality scoring (disabled if empty) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_QUALITY_KEY` | String | _(none)_ | API key for quality model (falls back to `AI_OCR_KEY`) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_QUALITY_URL` | String | _(none)_ | LiteLLM URL for quality model (falls back to `AI_OCR_URL`) | [AI OCR](ai-ocr.md) |

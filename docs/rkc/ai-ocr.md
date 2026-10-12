@@ -69,7 +69,8 @@ is a no-op when `AI_OCR_ENABLED` is absent or not `"true"`.
 | `AI_OCR_MAX_RETRIES` | `3`                 | Maximum retry attempts on transient failures (empty content, HTTP 429/5xx, connection errors). Set to `0` to disable retries. |
 | `AI_OCR_RETRY_DELAY` | `5`                 | Base retry delay in seconds. Doubles each attempt (5s → 10s → 20s). Respects `Retry-After` header on HTTP 429. |
 | `AI_OCR_RASTERIZE`   | `auto`          | Rasterization mode: `"auto"` (try PDF first, rasterize on quality failure), `"always"` (always rasterize before OCR), `"never"` (no rasterization) |
-| `AI_OCR_DEGRADATION_THRESHOLD` | `30`         | Percentage of garbage lines that triggers a rasterized retry. If the garbage percentage is below this threshold, only the garbage tail is stripped without retrying. |
+| `AI_OCR_DEGRADATION_THRESHOLD` | `30`         | Percentage of garbage lines that triggers a retry. If the garbage percentage is below this threshold, the content is used as-is (the check is detection-only — it never strips content). |
+| `AI_OCR_REPEAT_MIN` | `4`          | Minimum times a line must repeat to count as garbage in the repetition-loop detector. Catches interleaved gibberish like `word`/`K`/`word`/`K`. Lower = more aggressive. |
 | `PAPERLESS_URL`   | `http://localhost:8000` | Internal paperless URL |
 
 ---
@@ -219,19 +220,30 @@ this pattern.
 
 ### How Quality Detection Works
 
-After receiving OCR content, the script scans for **garbage lines** — lines that
-are ≤2 characters and entirely alphabetic (catches `"K"`, `"k"`, `"a"`, `"OK"`,
-etc.).  If 3+ consecutive garbage lines are found (empty lines between them are
-ignored), the script calculates what percentage of total lines are garbage.
+After receiving OCR content, the script runs **two independent detection signals**
+and reports the larger garbage share:
+
+**1. Contiguous garbage runs** — 3+ consecutive very short (≤2 char) alphabetic
+lines such as `"K"`, `"k"`, `"a"`, `"OK"` (empty lines between them are ignored).
+This catches the classic `K\nK\nK\n…` degradation tail.
+
+**2. Repetition loops** — any line whose exact text repeats at least
+`AI_OCR_REPEAT_MIN` times (default 4).  This catches the *interleaved* failure
+mode where a repeated word alternates with a repeated single character —
+`Bezirkungsbesitz\nK\nBezirkungsbesitz\nK\n…`.  Such a loop never produces a run
+of 3+ consecutive short lines, so signal 1 alone misses it.  Empty lines and
+symbol-only lines (e.g. `-`, `•`) are ignored.
 
 | Garbage % | Outcome |
 |-----------|---------|
 | 0% | Content is clean — use as-is |
 | Below threshold (default 30%) | Minor garbage — use content as-is |
-| Above threshold | Significant degradation — trigger rasterization fallback |
+| Above threshold | Significant degradation — trigger fallback model / rasterization |
 
 The check is **detection-only** — it never strips or modifies content.  When
-degradation is detected, the only remedy is rasterization.
+degradation is detected, the script first tries the fallback model
+(`AI_OCR_FALLBACK_MODEL`, if set) on the original PDF, then falls back to
+rasterization.
 
 ### How Rasterization Works
 
@@ -266,6 +278,7 @@ Rasterization is most effective for PDFs with:
 | `AI_OCR_QUALITY_URL` | _(empty)_ | LiteLLM URL for quality model. Falls back to `AI_OCR_URL`. |
 | `AI_OCR_QUALITY_THRESHOLD` | `70` | Minimum quality score (0-100). Below this, rasterization is triggered. |
 | `AI_OCR_DEGRADATION_THRESHOLD` | `30` | Percentage of garbage lines that triggers retry. Increase for stricter detection, decrease to retry more aggressively. |
+| `AI_OCR_REPEAT_MIN` | `4` | Minimum times a line must repeat before it counts as garbage in the repetition-loop detector (catches interleaved `word`/`K` gibberish). Lower = more aggressive. |
 
 ### LLM Quality Check (optional)
 

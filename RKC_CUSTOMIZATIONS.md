@@ -205,6 +205,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `AI_OCR_RETRY_DELAY` | Int | `5` | Base retry delay in seconds; doubles each attempt |
 | `AI_OCR_RASTERIZE_FALLBACK` | Bool | `true` | Rasterize PDF and retry when quality check detects degraded output |
 | `AI_OCR_DEGRADATION_THRESHOLD` | Int | `30` | Garbage-line percentage above which rasterized retry triggers |
+| `AI_OCR_REPEAT_MIN` | Int | `4` | Minimum repeat count for the repetition-loop garbage detector |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless API token for AI OCR script |
 | `PAPERLESS_CONSUMER_READD_DOCUMENTS` | Bool | `false` | Enable duplicate re-add |
 | `PAPERLESS_CONSUMER_READD_TAG_ID` | Int | None | Tag ID for re-added documents |
@@ -231,6 +232,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.6.2** — AI OCR repetition-loop detection: the quality check now also flags *interleaved* gibberish (a repeated word alternating with a repeated single character, e.g. `Bezirkungsbesitz`/`K`) in addition to contiguous `K\nK\nK` runs, so the fallback model / rasterization engages on this failure mode instead of passing it through as "clean". New env var: `AI_OCR_REPEAT_MIN` (default 4).
 - **v1.6.1** — OCRmyPDF text degradation fallback: PDFs with corrupted internal streams cause Ghostscript to mangle the text layer during PDF/A conversion (font substitution, garbled text). The tesseract parser now compares post-OCR text against the text originally extracted from the raw PDF; if the archive text is >50% shorter (or empty while original had content), it falls back to the original text. The archive PDF is still preserved for downstream features (download, AI OCR, bulk export).
 - **v1.5.5** — Email validation failure tag fix: `error_tag` was silently overwritten by `document.tags.set()` in the workflow loop; fixed to use `doc_tag_ids.append()`. Added global `PAPERLESS_MAIL_SEND_FAILURE_TAG_ID` / `PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID` to email validation failure path
 - **v1.5.4** — AI OCR processes email documents (`message/rfc822`): removed the `message/*` MIME type skip from the post-consume script. Email documents now flow through the same AI OCR pipeline as any other document — the Gotenberg-generated archive PDF is sent to the OCR API, producing high-quality text extraction where Tesseract alone often fails. The v1.4.1 race condition concern (workflow email actions firing before custom fields are set) is already mitigated by `Jinja2 UndefinedError` catching in the workflow email action handler.
