@@ -42,6 +42,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         ui_settings_user: str | None = None,
         dry_run: bool = False,
         keep_enabled: bool = False,
+        preserve_ids: bool = True,
         no_progress_bar: bool = False,
         stdout=None,
     ) -> None:
@@ -50,6 +51,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         self.ui_settings_user = ui_settings_user
         self.dry_run = dry_run
         self.keep_enabled = keep_enabled
+        self.preserve_ids = preserve_ids
         self.no_progress_bar = no_progress_bar
         self.stdout = stdout
 
@@ -209,3 +211,4 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
             else:
                 self._import_upsert(cm)
             self._log(f"Imported {cm.key}")
+        self._reset_sequences()

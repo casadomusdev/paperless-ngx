@@ -195,6 +195,21 @@ class TestConfigExchange(DirectoriesMixin, TestCase):
         self.assertTrue(Workflow.objects.get(name="Workflow 1").enabled)
         self.assertTrue(MailRule.objects.get(name="From ACME").enabled)
 
+    def test_source_ids_are_preserved(self) -> None:
+        """Exported ids are reused so id-based tooling keeps working."""
+        Tag.objects.create(id=4242, name="pinned")
+        self._export()
+        self._wipe_config()
+        self._import()
+        self.assertEqual(Tag.objects.get(name="pinned").pk, 4242)
+
+    def test_no_preserve_ids_assigns_new_ids(self) -> None:
+        Tag.objects.create(id=4242, name="pinned")
+        self._export()
+        self._wipe_config()
+        self._import(preserve_ids=False)
+        self.assertNotEqual(Tag.objects.get(name="pinned").pk, 4242)
+
     def test_collision_is_merged(self) -> None:
         self._export()
         # existing object with the same natural key but different attributes

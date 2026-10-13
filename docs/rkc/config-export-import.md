@@ -101,6 +101,7 @@ python3 manage.py config_importer /path/to/export
 | `--ui-settings-user USERNAME` | Apply imported UI settings to this user (default: match by username) |
 | `--dry-run` | Validate and report, then roll back everything |
 | `--keep-enabled` | Keep workflows and mail rules in their exported enabled state (default: both are imported **disabled**) |
+| `--no-preserve-ids` | Let the database assign new primary keys instead of reusing the exported ids |
 | `--no-progress-bar` | Suppress progress output |
 
 ### Merge semantics
@@ -130,6 +131,37 @@ Records whose **required** foreign keys cannot be resolved are skipped with a
 warning; individual unresolvable references are dropped.
 
 Running the same import twice causes no duplicates.
+
+### Id preservation
+
+External tooling addresses paperless objects by id — for example
+`AI_OCR_TAG_ID`, `PAPERLESS_CONSUMER_READD_TAG_ID`,
+`PAPERLESS_MAIL_SEND_SUCCESS_TAG_ID` and the scripts in `scripts/`. To keep those
+working after a migration, **newly created rows reuse the id from the export**
+wherever that id is still free. Database sequences are realigned afterwards so
+later inserts cannot collide with a reused id.
+
+Rules and limits:
+
+- Ids are only reused for rows that are **created**. If an object with the same
+  name already exists on the target it is merged into, keeping *its* existing id.
+- If the exported id is already taken by a different object, a warning is printed
+  and a new id is assigned for that record.
+- `--no-preserve-ids` disables the behaviour and lets the database assign ids.
+- Saved-view filter rules and workflow triggers/actions also keep their ids;
+  `ApplicationConfiguration` is the singleton with id `1` either way.
+
+Consequently, to reproduce the source ids exactly you need a target where those
+ids are free. On a target that already holds config with different ids, clear the
+configuration objects first (only safe when no documents depend on them — deleting
+a tag also removes it from any documents) and then re-import.
+
+To see the mapping between names and current ids, e.g.:
+
+```shell
+docker compose exec webserver python3 manage.py shell -c \
+  "from documents.models import Tag; print(list(Tag.objects.values_list('name','id')))"
+```
 
 ## Examples
 

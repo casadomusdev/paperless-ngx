@@ -60,6 +60,19 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "--no-preserve-ids",
+            dest="preserve_ids",
+            default=True,
+            action="store_false",
+            help=(
+                "Let the database assign new primary keys instead of reusing "
+                "the ids from the export. By default exported ids are reused "
+                "wherever they are free, so tooling that addresses objects by "
+                "id (e.g. AI_OCR_TAG_ID) keeps working."
+            ),
+        )
+
+        parser.add_argument(
             "--no-progress-bar",
             dest="no_progress_bar",
             default=False,
@@ -74,6 +87,7 @@ class Command(BaseCommand):
             ui_settings_user=options.get("ui_settings_user"),
             dry_run=options["dry_run"],
             keep_enabled=options["keep_enabled"],
+            preserve_ids=options["preserve_ids"],
             no_progress_bar=options["no_progress_bar"],
             stdout=self.stdout,
         )

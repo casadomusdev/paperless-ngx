@@ -12,8 +12,11 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.core import serializers
+from django.core.management.color import no_style
+from django.db import connection
 
 from documents.config_exchange.exporter import ASSETS_DIR_NAME
+from documents.config_exchange.registry import CONFIG_MODELS
 from documents.config_exchange.remap import relation_fields
 from documents.config_exchange.remap import remap_fields
 from documents.config_exchange.remap import resolve_deferred
@@ -54,7 +57,7 @@ class MergeStrategyMixin:
                 # before an admin has reviewed them.
                 remapped.scalars[cm.disable_field] = False
             scalars = clean_scalars(cm.model, remapped.scalars)
-            instance = self._match_or_create(cm, scalars)
+            instance = self._match_or_create(cm, scalars, record["pk"])
             apply_m2m(instance, remapped.m2m)
             model_map[record["pk"]] = instance
             if remapped.deferred_self:
@@ -74,16 +77,35 @@ class MergeStrategyMixin:
                     setattr(instance, attname, value)
                 instance.save()
 
-    def _match_or_create(self, cm: ConfigModel, scalars: dict):
+    def _match_or_create(self, cm: ConfigModel, scalars: dict, old_pk: int | None):
         if cm.natural_key:
             lookup = {key: scalars.get(key) for key in cm.natural_key}
             if all(value is not None for value in lookup.values()):
                 existing = cm.model.objects.filter(**lookup).first()
                 if existing is not None:
                     return self._update(existing, scalars)
-        instance = cm.model(**scalars)
+        instance = cm.model(**scalars, **self._pk_kwargs(cm, old_pk))
         instance.save()
         return instance
+
+    def _pk_kwargs(self, cm: ConfigModel, old_pk: int | None) -> dict:
+        """
+        Reuse an exported primary key when it is free.
+
+        External tooling often addresses paperless objects by id (for example
+        ``AI_OCR_TAG_ID`` or ``PAPERLESS_CONSUMER_READD_TAG_ID``), so keeping the
+        source ids stable across an import avoids having to reconfigure it.
+        """
+        if not self.preserve_ids or old_pk is None:
+            return {}
+        pk_attname = cm.model._meta.pk.attname
+        if cm.model._default_manager.filter(**{pk_attname: old_pk}).exists():
+            self._warn(
+                f"{cm.model._meta.label_lower}: id {old_pk} is already in use, "
+                "creating with a new id",
+            )
+            return {}
+        return {pk_attname: old_pk}
 
     @staticmethod
     def _update(instance, scalars: dict):
@@ -123,6 +145,7 @@ class MergeStrategyMixin:
                 model_map[record["pk"]] = existing
                 continue
             scalars = clean_scalars(cm.model, remapped.scalars)
+            scalars.update(self._pk_kwargs(cm, record["pk"]))
             instance = cm.model(**scalars)
             instance.save()
             apply_m2m(instance, remapped.m2m)
@@ -163,6 +186,7 @@ class MergeStrategyMixin:
                     saved_view=parent,
                     rule_type=fields["rule_type"],
                     value=value,
+                    **self._pk_kwargs(cm, record["pk"]),
                 )
         self.maps[cm.model] = {}
 
@@ -172,7 +196,13 @@ class MergeStrategyMixin:
         model_map: dict = {}
         for record in self._records_for(cm):
             fields = record["fields"]
-            group, _ = Group.objects.get_or_create(name=fields["name"])
+            group = Group.objects.filter(name=fields["name"]).first()
+            if group is None:
+                group = Group(
+                    name=fields["name"],
+                    **self._pk_kwargs(cm, record["pk"]),
+                )
+                group.save()
             permission_pks = []
             for pk in fields.get("permissions") or []:
                 key = permission_refs.get(str(pk))
@@ -187,6 +217,25 @@ class MergeStrategyMixin:
             group.permissions.set(permission_pks)
             model_map[record["pk"]] = group
         self.maps[cm.model] = model_map
+
+    def _reset_sequences(self) -> None:
+        """
+        Realign database sequences after rows were inserted with explicit ids.
+
+        Without this the next ordinary insert could try to reuse a pinned id and
+        fail with a unique violation.
+        """
+        if not self.preserve_ids:
+            return
+        statements = connection.ops.sequence_reset_sql(
+            no_style(),
+            [cm.model for cm in CONFIG_MODELS],
+        )
+        if not statements:
+            return
+        with connection.cursor() as cursor:
+            for statement in statements:
+                cursor.execute(statement)
 
     def _import_ui_settings(self, cm: ConfigModel) -> None:
         user_refs = self.references.get("auth.user", {})
