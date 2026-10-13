@@ -1,6 +1,9 @@
 # TODO: (cleared)
 
 ## Future improvements
+- Config export/import: REST API endpoints + Angular UI (currently CLI only).
+- Config export/import: a destructive `replace` (wipe) import mode.
+- Config export/import: emit an env-variable reference file alongside the export.
 - Operator: re-run `ai_ocr_rerun.py` on a gibberish doc with
   `AI_OCR_FALLBACK_MODEL=azure-ocr` and confirm the fallback engages.
 - Consider a dedicated `AI_OCR_FALLBACK_EXTRA_PARAMS` so Mistral-only params

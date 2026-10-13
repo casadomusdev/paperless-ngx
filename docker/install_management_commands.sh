@@ -5,6 +5,8 @@
 set -eu
 
 for command in decrypt_documents \
+	config_exporter \
+	config_importer \
 	document_archiver \
 	document_exporter \
 	document_importer \

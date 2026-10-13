@@ -111,6 +111,11 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 **Custom Field Filter Buttons** — Quick filter buttons for custom field values on document detail page and card views. Works with all 10 field data types including null/empty values. Card views optionally show "FieldName: Value" format via environment variable.
 → [Details](docs/rkc/custom-field-filters.md)
 
+### Configuration Management
+
+**Instance-to-Instance Configuration Export/Import** — Two management commands (`config_exporter`, `config_importer`) move the complete configuration (correspondents, tags, document types, storage paths, custom fields, saved views, workflows, mail accounts/rules, all UI Settings including default permissions, and the whole ApplicationConfiguration) between instances without documents. Excludes users, groups and SSO apps/tokens (per-instance); ownership and default-permission references are remapped by username/group name with graceful fallback. The importer is idempotent and safe on both empty and populated instances: records are matched by name (or field signature) and updated in place, with full PK remapping of foreign keys, many-to-many relations and embedded ids (filter-rule values, custom-field queries). Supports `--passphrase` encryption of mail secrets, `--dry-run`, `--owner` and `--ui-settings-user`.
+→ [Details](docs/rkc/config-export-import.md)
+
 ### Troubleshooting & Debugging
 
 **SSO Debug Logging** — Verbose django-allauth debug logging via `PAPERLESS_DEBUG_SSO` without full DEBUG mode. Includes automatic UiSettings creation for new SSO users (post_save signal) to prevent login errors.
@@ -232,6 +237,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.7.0** — Instance-to-instance configuration export/import: `config_exporter` and `config_importer` management commands (registered in Docker) backed by `documents/config_exchange/`. Exports all configuration except documents (and excludes users/groups/SSO as per-instance). Idempotent natural-key/signature merge with full PK remapping, `--passphrase` encryption of mail secrets, `--dry-run`, `--owner`, `--ui-settings-user`.
 - **v1.6.5** — AI OCR in-line repetition detection: `check_quality()` gains a third signal (character n-gram distinctness) that catches runaway loops living *inside* a single line with no line breaks — e.g. an OCR result whose whole body is one JSON string repeating `567a/567b/…/567z/` thousands of times. Both line-based signals previously missed this and the result was accepted as "clean", overwriting document content.
 - **v1.6.4** — AI OCR response parsing hardening: `_extract_text()` now falls back to concatenating a page's `blocks[].content` when `header`/`markdown`/`footer` are all empty, so OCR text returned only inside the block list is still captured (applied to both the post-consume script and the `ai_ocr_test.py` CLI).
 - **v1.6.3** — AI OCR decision-logic fix: a fallback / rasterized result is now accepted when the primary output is degraded (comparing garbage %, not length against garbage — a clean result is often shorter than the junk it replaces), rasterized results apply immediately instead of being retried by a redundant second rasterize pass (≈5 OCR calls → 3), empty fallback responses are logged, and the optional LLM quality check now skips already-rasterized documents. New shared `_is_better()` decision helper.
@@ -329,6 +335,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | [`docs/rkc/workflow-email.md`](docs/rkc/workflow-email.md) | Dynamic workflow email templates with Jinja2, HTML auto-detection, error tagging |
 | [`docs/rkc/bug-fixes.md`](docs/rkc/bug-fixes.md) | Webhook hostname fix, dashboard race condition, card date format, tooltip dark mode, pagination, text degradation fallback |
 | [`docs/rkc/environment-variables.md`](docs/rkc/environment-variables.md) | Complete reference table of ALL RKC environment variables |
+| [`docs/rkc/config-export-import.md`](docs/rkc/config-export-import.md) | Instance-to-instance configuration export/import commands, merge semantics, options, limitations |
 
 ### Related Documentation
 

@@ -21,6 +21,7 @@ paperless-ngx/
 │   │   ├── ui-defaults.md
 │   │   ├── sso-debug.md
 │   │   ├── custom-field-filters.md
+│   │   ├── config-export-import.md
 │   │   ├── duplicate-readd.md
 │   │   ├── mail-system.md
 │   │   ├── workflow-email.md
@@ -44,6 +45,14 @@ paperless-ngx/
 │   │   ├── mail.py                 # RKC: unified email sending with inline retry
 │   │   ├── email_queue.py          # RKC: email send queue processing with retry (NEW)
 │   │   ├── email_queue_api.py      # RKC: PendingEmail REST API (NEW)
+│   │   ├── config_exchange/        # RKC: instance-to-instance config export/import (NEW)
+│   │   │   ├── registry.py         # Declarative config-model registry + strategies
+│   │   │   ├── remap.py            # FK / M2M PK remapping helpers
+│   │   │   ├── rules.py            # Embedded-id remap (filter rules, CF queries, ordering)
+│   │   │   ├── exporter.py         # ConfigExporter (config-only bundle)
+│   │   │   ├── importer.py         # ConfigImporter loader/orchestrator (idempotent merge)
+│   │   │   └── strategies.py       # MergeStrategyMixin (upsert/signature/children/...)
+│   │   ├── management/commands/    # config_exporter.py, config_importer.py (NEW)
 │   │   ├── serialisers.py          # RKC: workflow email serializers
 │   │   ├── signals/handlers.py     # RKC: SSO, webhooks, email action
 │   │   ├── data_models.py          # RKC: ConsumableDocument metadata fields
@@ -108,8 +117,9 @@ RKC_CUSTOMIZATIONS.md (232 lines)
   ├── Maintenance Notes
   └── Links to detailed docs ↓
 
-docs/rkc/ (12 files)
+docs/rkc/ (13 files)
   ├── ai-ocr.md                     — Processing: AI OCR post-consumption hook
+  ├── config-export-import.md       — Config: instance-to-instance export/import
   ├── orphaned-files-recovery.md    — Troubleshooting: recovering missing/moved files
   ├── pdf-editor-restriction.md     — Security: PDF editor access control
   ├── global-saved-views.md         — Collaborative: shared views system
