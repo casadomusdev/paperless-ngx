@@ -100,6 +100,7 @@ python3 manage.py config_importer /path/to/export
 | `--owner USERNAME` | Force all imported objects to be owned by this user |
 | `--ui-settings-user USERNAME` | Apply imported UI settings to this user (default: match by username) |
 | `--dry-run` | Validate and report, then roll back everything |
+| `--keep-enabled` | Keep workflows and mail rules in their exported enabled state (default: both are imported **disabled**) |
 | `--no-progress-bar` | Suppress progress output |
 
 ### Merge semantics
@@ -113,6 +114,9 @@ instance:
   otherwise created.
 - Groups are matched by name; their Django permissions are replaced with the
   exported set (members are left untouched).
+- **Workflows and mail rules are imported disabled** so they cannot start firing
+  or fetching mail before an admin has reviewed them. Pass `--keep-enabled` to
+  preserve the enabled state recorded in the export.
 - Workflow triggers/actions have no natural name and are matched by their full
   field signature: an identical row is reused, otherwise a new one is created.
 - Saved-view filter rules are replaced wholesale for every saved view present
@@ -154,6 +158,9 @@ docker compose exec webserver config_importer ../export --dry-run
   `assign_view_users`, `assign_change_users`, `default_*_users` and saved-view
   owner rules end up empty rather than blocking the import. Group references
   resolve, because groups *are* imported.
+- Imported workflows and mail rules arrive **disabled** by design (see merge
+  semantics); re-enable them deliberately once you have reviewed them, or use
+  `--keep-enabled` if the export's state should be trusted verbatim.
 - Encrypted mail secrets require the export passphrase; there is no key escrow.
 - Because users are per-instance, personal saved views and per-user UI settings
   only transfer to a target user with the **same username** (override with

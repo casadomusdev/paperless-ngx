@@ -48,6 +48,18 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "--keep-enabled",
+            dest="keep_enabled",
+            default=False,
+            action="store_true",
+            help=(
+                "Keep imported workflows and mail rules in the enabled state "
+                "from the export. By default both are imported disabled so they "
+                "cannot run before they have been reviewed."
+            ),
+        )
+
+        parser.add_argument(
             "--no-progress-bar",
             dest="no_progress_bar",
             default=False,
@@ -61,6 +73,7 @@ class Command(BaseCommand):
             owner=options.get("owner"),
             ui_settings_user=options.get("ui_settings_user"),
             dry_run=options["dry_run"],
+            keep_enabled=options["keep_enabled"],
             no_progress_bar=options["no_progress_bar"],
             stdout=self.stdout,
         )

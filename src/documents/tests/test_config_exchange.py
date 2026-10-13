@@ -180,6 +180,21 @@ class TestConfigExchange(DirectoriesMixin, TestCase):
             1,
         )
 
+    def test_import_disables_workflows_and_mail_rules(self) -> None:
+        """Imported automations must not run until they have been reviewed."""
+        self._export()
+        self._wipe_config()
+        self._import()
+        self.assertFalse(Workflow.objects.get(name="Workflow 1").enabled)
+        self.assertFalse(MailRule.objects.get(name="From ACME").enabled)
+
+    def test_keep_enabled_preserves_export_state(self) -> None:
+        self._export()
+        self._wipe_config()
+        self._import(keep_enabled=True)
+        self.assertTrue(Workflow.objects.get(name="Workflow 1").enabled)
+        self.assertTrue(MailRule.objects.get(name="From ACME").enabled)
+
     def test_collision_is_merged(self) -> None:
         self._export()
         # existing object with the same natural key but different attributes

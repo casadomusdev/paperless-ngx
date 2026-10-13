@@ -41,6 +41,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         owner: str | None = None,
         ui_settings_user: str | None = None,
         dry_run: bool = False,
+        keep_enabled: bool = False,
         no_progress_bar: bool = False,
         stdout=None,
     ) -> None:
@@ -48,6 +49,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         self.owner_username = owner
         self.ui_settings_user = ui_settings_user
         self.dry_run = dry_run
+        self.keep_enabled = keep_enabled
         self.no_progress_bar = no_progress_bar
         self.stdout = stdout
 

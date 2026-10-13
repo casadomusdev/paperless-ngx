@@ -56,6 +56,10 @@ class ConfigModel:
     secret_fields: tuple[str, ...] = ()
     strategy: str = UPSERT
     parent_field: str | None = None
+    # Boolean field forced to False on import so that imported automations do
+    # not start running before they have been reviewed (opt out with
+    # --keep-enabled).
+    disable_field: str | None = None
     remap_hook: Callable | None = dataclass_field(default=None, compare=False)
 
 
@@ -75,7 +79,13 @@ CONFIG_MODELS: list[ConfigModel] = [
         owner_field="owner",
         secret_fields=("password", "refresh_token", "smtp_password"),
     ),
-    ConfigModel(MailRule, "mail_rules", ("name",), owner_field="owner"),
+    ConfigModel(
+        MailRule,
+        "mail_rules",
+        ("name",),
+        owner_field="owner",
+        disable_field="enabled",
+    ),
     ConfigModel(SavedView, "saved_views", ("name",), owner_field="owner"),
     ConfigModel(
         SavedViewFilterRule,
@@ -97,7 +107,7 @@ CONFIG_MODELS: list[ConfigModel] = [
         strategy=SIGNATURE,
         remap_hook=hook_workflow_action,
     ),
-    ConfigModel(Workflow, "workflows", ("name",)),
+    ConfigModel(Workflow, "workflows", ("name",), disable_field="enabled"),
     ConfigModel(UiSettings, "ui_settings", strategy=UI_SETTINGS),
     ConfigModel(
         ApplicationConfiguration,

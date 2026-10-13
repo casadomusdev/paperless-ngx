@@ -49,6 +49,10 @@ class MergeStrategyMixin:
                 continue
             if cm.remap_hook is not None:
                 cm.remap_hook(remapped.scalars, self.maps)
+            if cm.disable_field and not self.keep_enabled:
+                # Imported automations start disabled so they cannot fire
+                # before an admin has reviewed them.
+                remapped.scalars[cm.disable_field] = False
             scalars = clean_scalars(cm.model, remapped.scalars)
             instance = self._match_or_create(cm, scalars)
             apply_m2m(instance, remapped.m2m)
@@ -56,6 +60,8 @@ class MergeStrategyMixin:
             if remapped.deferred_self:
                 deferred.append((remapped.deferred_self, instance))
         self.maps[cm.model] = model_map
+        if cm.disable_field and not self.keep_enabled:
+            self._log(f"Imported {cm.key} disabled - review before enabling")
         for deferred_fields, instance in deferred:
             resolved = resolve_deferred(
                 cm.model,
