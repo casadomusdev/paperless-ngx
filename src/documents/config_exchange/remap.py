@@ -100,7 +100,10 @@ def remap_fields(
                     resolve_user,
                     resolve_group,
                 )
-                if result is MISSING:
+                # Users and groups are per-instance and never imported, so an
+                # unresolved entry resolves to None and must be dropped rather
+                # than inserted as a NULL join row.
+                if result is MISSING or result is None:
                     missing.append(f"{name}[{value}]")
                 else:
                     new_values.append(result)

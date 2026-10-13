@@ -55,11 +55,16 @@ class ConfigExporter(CryptMixin):
             self.stdout.write(message)
 
     def run(self, target: Path) -> None:
-        target = Path(target).resolve()
-        if not target.exists():
-            raise CommandError("That path doesn't exist")
-        if not target.is_dir():
-            raise CommandError("That path isn't a directory")
+        given = Path(target)
+        resolved = given.expanduser().resolve()
+        if not resolved.exists():
+            raise CommandError(
+                f"That path doesn't exist: {resolved} "
+                f"(argument '{given}', current directory '{Path.cwd()}')",
+            )
+        if not resolved.is_dir():
+            raise CommandError(f"That path isn't a directory: {resolved}")
+        target = resolved
 
         temp_dir = None
         original_target = target

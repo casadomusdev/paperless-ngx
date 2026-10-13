@@ -33,6 +33,22 @@ they own or reference is handled as follows:
   references that cannot be resolved are dropped.
 - Saved-view filter rules that reference users (owner rules) are dropped.
 
+## Path resolution
+
+Relative paths are resolved against the **current working directory**. In Docker
+the management-command wrappers `cd` into `${PAPERLESS_SRC_DIR}`
+(`/usr/src/paperless/src`) before running Django — so a relative path is taken
+relative to *that* directory, not to the folder your shell was in. Use the
+container's `../export` mount:
+
+```bash
+docker compose exec webserver config_exporter ../export --zip
+docker compose exec webserver config_importer ../export/config-export-2026-10-13.zip
+```
+
+When a path does not exist the command reports the resolved absolute path and
+the current working directory, which makes this immediate to spot.
+
 ## Exporting
 
 ```bash
@@ -125,6 +141,11 @@ docker compose exec webserver config_importer ../export --dry-run
 
 - Import is a merge, not a mirror: objects that exist on the target but not in
   the export are left untouched. A destructive "replace" mode does not exist.
+- References to **users and groups that do not exist on the target** are dropped
+  with a warning — the objects themselves are never imported. This means workflow
+  action permission assignments (`assign_view_groups`, `assign_view_users`, …)
+  and `owner` fields referencing missing users/groups end up empty rather than
+  blocking the import.
 - Encrypted mail secrets require the export passphrase; there is no key escrow.
 - Because users are per-instance, personal saved views and per-user UI settings
   only transfer to a target user with the **same username** (override with

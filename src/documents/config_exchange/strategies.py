@@ -251,7 +251,10 @@ def clean_scalars(model, scalars: dict) -> dict:
 
 def apply_m2m(instance, m2m: dict[str, list]) -> None:
     for name, values in m2m.items():
-        getattr(instance, name).set(values)
+        # A NULL pk can never form a valid join row (the through column is
+        # NOT NULL), so defensively drop any that slipped through remapping —
+        # e.g. an unresolvable user/group reference.
+        getattr(instance, name).set([value for value in values if value is not None])
 
 
 def signature_fields(model, scalars: dict, m2m: dict) -> dict:

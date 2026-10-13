@@ -69,9 +69,14 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
             self.stdout.write(self.stdout.style.WARNING(message))
 
     def run(self, source: Path) -> None:
-        source = Path(source).resolve()
-        if not source.exists():
-            raise CommandError("That path doesn't exist")
+        given = Path(source)
+        resolved = given.expanduser().resolve()
+        if not resolved.exists():
+            raise CommandError(
+                f"That path doesn't exist: {resolved} "
+                f"(argument '{given}', current directory '{Path.cwd()}')",
+            )
+        source = resolved
 
         temp_dir = None
         try:

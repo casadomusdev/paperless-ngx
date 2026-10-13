@@ -5,6 +5,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from django.contrib.auth.models import Group
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.test import TestCase
@@ -185,6 +186,20 @@ class TestConfigExchange(DirectoriesMixin, TestCase):
         self._import()
         self.assertEqual(Tag.objects.filter(name="child").count(), 1)
         self.assertEqual(Tag.objects.get(name="child").color, "#112233")
+
+    def test_unresolvable_group_refs_are_dropped(self) -> None:
+        """Groups are per-instance; M2M refs to missing groups must not crash."""
+        group = Group.objects.create(name="cfg_group")
+        self.action.assign_view_groups.add(group)
+        self._export()
+        self._wipe_config()
+        Group.objects.filter(name="cfg_group").delete()
+
+        self._import()
+
+        action = WorkflowAction.objects.get(assign_title="new title")
+        self.assertEqual(action.assign_view_groups.count(), 0)
+        self.assertIn(Tag.objects.get(name="child"), action.assign_tags.all())
 
     def test_dry_run_changes_nothing(self) -> None:
         self._export()
