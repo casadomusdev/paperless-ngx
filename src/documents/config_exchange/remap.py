@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from typing import Any
 
-from django.contrib.auth.models import Group
 from django.contrib.auth.models import User
 
 if TYPE_CHECKING:
@@ -76,7 +75,6 @@ def remap_fields(
     fields: dict,
     maps: dict[type[Model], dict[int, Model]],
     resolve_user,
-    resolve_group,
 ) -> Remapped:
     """Translate all relation ids in ``fields`` using previously built maps."""
     scalars = dict(fields)
@@ -93,16 +91,10 @@ def remap_fields(
         if f.many_to_many:
             new_values = []
             for value in fields.get(name) or []:
-                result = _remap_single(
-                    related,
-                    value,
-                    maps,
-                    resolve_user,
-                    resolve_group,
-                )
-                # Users and groups are per-instance and never imported, so an
-                # unresolved entry resolves to None and must be dropped rather
-                # than inserted as a NULL join row.
+                result = _remap_single(related, value, maps, resolve_user)
+                # Users are per-instance and never imported, so an unresolved
+                # user entry resolves to None and must be dropped rather than
+                # inserted as a NULL join row.
                 if result is MISSING or result is None:
                     missing.append(f"{name}[{value}]")
                 else:
@@ -116,13 +108,7 @@ def remap_fields(
             deferred[f.attname] = fields.get(name)
             scalars[f.attname] = None
         else:
-            result = _remap_single(
-                related,
-                fields.get(name),
-                maps,
-                resolve_user,
-                resolve_group,
-            )
+            result = _remap_single(related, fields.get(name), maps, resolve_user)
             # FK values are assigned by attname (owner -> owner_id) so they can
             # be passed straight to the model constructor.
             scalars.pop(name, None)
@@ -142,47 +128,39 @@ def resolve_deferred(
     deferred: dict[str, Any],
     maps: dict[type[Model], dict[int, Model]],
     resolve_user,
-    resolve_group,
 ) -> dict[str, Any]:
     resolved = {}
     for name, value in deferred.items():
         if value is None:
             continue
-        result = _remap_single(model, value, maps, resolve_user, resolve_group)
+        result = _remap_single(model, value, maps, resolve_user)
         if result is not MISSING:
             resolved[name] = result
     return resolved
 
 
-def _remap_single(related, value, maps, resolve_user, resolve_group):
+def _remap_single(related, value, maps, resolve_user):
+    """Resolve a single reference to a target pk, or ``MISSING``."""
     if value is None:
         return None
     if related is User:
+        # Users are per-instance; only a same-named existing user can be used.
         return resolve_user(value)
-    if related is Group:
-        return resolve_group(value)
     model_map = maps.get(related)
     if model_map is not None and value in model_map:
         return model_map[value].pk
     return MISSING
 
 
-def iter_user_group_refs(
-    model: type[Model],
-    fields: dict,
-) -> Iterable[tuple[type, Any]]:
-    """Yield (User|Group, pk) pairs referenced by a serialized record."""
+def iter_user_refs(model: type[Model], fields: dict) -> Iterable[int]:
+    """Yield user pks referenced by a serialized record (for name mapping)."""
     for f in relation_fields(model):
-        related = f.related_model
-        if related not in (User, Group):
-            continue
-        if f.name not in fields:
+        if f.related_model is not User or f.name not in fields:
             continue
         value = fields.get(f.name)
         if value is None:
             continue
         if f.many_to_many:
-            for entry in value:
-                yield related, entry
+            yield from value
         else:
-            yield related, value
+            yield value

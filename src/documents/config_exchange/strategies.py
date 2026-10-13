@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.contrib.auth.models import Group
 from django.core import serializers
 
 from documents.config_exchange.exporter import ASSETS_DIR_NAME
@@ -37,7 +38,6 @@ class MergeStrategyMixin:
                 record["fields"],
                 self.maps,
                 self.resolve_user,
-                self.resolve_group,
             )
             if remapped.missing:
                 self._warn(f"{label}: unresolved references {remapped.missing}")
@@ -62,7 +62,6 @@ class MergeStrategyMixin:
                 deferred_fields,
                 self.maps,
                 self.resolve_user,
-                self.resolve_group,
             )
             if resolved:
                 for attname, value in resolved.items():
@@ -101,7 +100,6 @@ class MergeStrategyMixin:
                 record["fields"],
                 self.maps,
                 self.resolve_user,
-                self.resolve_group,
             )
             if remapped.missing_required:
                 self._warn(
@@ -162,6 +160,28 @@ class MergeStrategyMixin:
                 )
         self.maps[cm.model] = {}
 
+    def _import_groups(self, cm: ConfigModel) -> None:
+        """Import groups by name with their Django permissions (no members)."""
+        permission_refs = self.references.get("auth.permission", {})
+        model_map: dict = {}
+        for record in self._records_for(cm):
+            fields = record["fields"]
+            group, _ = Group.objects.get_or_create(name=fields["name"])
+            permission_pks = []
+            for pk in fields.get("permissions") or []:
+                key = permission_refs.get(str(pk))
+                target_pk = self.target_permissions.get(tuple(key)) if key else None
+                if target_pk is None:
+                    self._warn(
+                        f"{cm.key}: permission '{key}' is not on this instance, "
+                        "skipping",
+                    )
+                    continue
+                permission_pks.append(target_pk)
+            group.permissions.set(permission_pks)
+            model_map[record["pk"]] = group
+        self.maps[cm.model] = model_map
+
     def _import_ui_settings(self, cm: ConfigModel) -> None:
         user_refs = self.references.get("auth.user", {})
         for record in self._records_for(cm):
@@ -196,12 +216,11 @@ class MergeStrategyMixin:
                     for mapped in (self.resolve_user(p) for p in permissions[key])
                     if mapped is not None
                 ]
+        group_map = self.maps.get(Group, {})
         for key in ("default_view_groups", "default_change_groups"):
             if isinstance(permissions.get(key), list):
                 updated[key] = [
-                    mapped
-                    for mapped in (self.resolve_group(p) for p in permissions[key])
-                    if mapped is not None
+                    group_map[p].pk for p in permissions[key] if p in group_map
                 ]
         settings_data["permissions"] = updated
         return settings_data
@@ -214,7 +233,6 @@ class MergeStrategyMixin:
                 record["fields"],
                 self.maps,
                 self.resolve_user,
-                self.resolve_group,
             )
             if cm.remap_hook is not None:
                 cm.remap_hook(remapped.scalars, self.maps)

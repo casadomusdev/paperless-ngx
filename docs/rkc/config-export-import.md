@@ -13,6 +13,7 @@ workflow runs, processed mail and pending emails are **never** exported.
 
 | Area | Models |
 |------|--------|
+| Groups | Groups with their Django permissions (members are **not** transferred) |
 | Content | Correspondents, Tags (incl. hierarchy), Document Types, Storage Paths, Custom Fields |
 | Saved views | Saved Views and their filter rules |
 | Workflows | Workflows, triggers, actions, email actions, webhook actions |
@@ -22,16 +23,20 @@ workflow runs, processed mail and pending emails are **never** exported.
 
 ### Deliberately excluded (per-instance)
 
-Users, groups, permissions and SSO apps/tokens are **not** exported. Anything
-they own or reference is handled as follows:
+Users and SSO apps/tokens are **not** exported. Anything they own or reference is
+handled as follows:
 
 - Object ownership (`owner`) is exported as a **username** and re-resolved on
   the target. If the username does not exist there, the object becomes
   ownerless (which, in this fork, means visible and editable by all users).
   `--owner USERNAME` forces a single owner for everything.
-- Default permissions in `UiSettings` are remapped by username/group name;
+- Default permissions in `UiSettings` are remapped by username and group name;
   references that cannot be resolved are dropped.
 - Saved-view filter rules that reference users (owner rules) are dropped.
+- Group **members** are not transferred — groups arrive without users. Their
+  Django permissions **are** transferred, matched by
+  `(app_label, model, codename)` so they map onto the target's own permission
+  rows. Importing a group replaces its permission set with the exported one.
 
 ## Path resolution
 
@@ -102,9 +107,12 @@ python3 manage.py config_importer /path/to/export
 The importer is **idempotent** and works against an empty *or* populated
 instance:
 
-- Records with a name (tags, document types, storage paths, correspondents,
-  custom fields, mail accounts, mail rules, saved views, workflows) are matched
-  by name and **updated in place** if they already exist, otherwise created.
+- Records with a name (groups, tags, document types, storage paths,
+  correspondents, custom fields, mail accounts, mail rules, saved views,
+  workflows) are matched by name and **updated in place** if they already exist,
+  otherwise created.
+- Groups are matched by name; their Django permissions are replaced with the
+  exported set (members are left untouched).
 - Workflow triggers/actions have no natural name and are matched by their full
   field signature: an identical row is reused, otherwise a new one is created.
 - Saved-view filter rules are replaced wholesale for every saved view present
@@ -141,11 +149,11 @@ docker compose exec webserver config_importer ../export --dry-run
 
 - Import is a merge, not a mirror: objects that exist on the target but not in
   the export are left untouched. A destructive "replace" mode does not exist.
-- References to **users and groups that do not exist on the target** are dropped
-  with a warning — the objects themselves are never imported. This means workflow
-  action permission assignments (`assign_view_groups`, `assign_view_users`, …)
-  and `owner` fields referencing missing users/groups end up empty rather than
-  blocking the import.
+- References to **users that do not exist on the target** are dropped with a
+  warning — users are never imported. This means `owner`, `assign_owner`,
+  `assign_view_users`, `assign_change_users`, `default_*_users` and saved-view
+  owner rules end up empty rather than blocking the import. Group references
+  resolve, because groups *are* imported.
 - Encrypted mail secrets require the export passphrase; there is no key escrow.
 - Because users are per-instance, personal saved views and per-user UI settings
   only transfer to a target user with the **same username** (override with

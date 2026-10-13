@@ -9,6 +9,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.models import Group
+from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
 from django.core import serializers
 from django.core.management.base import CommandError
@@ -18,7 +19,7 @@ from documents.config_exchange.registry import CONFIG_MODELS
 from documents.config_exchange.registry import CONFIG_MODELS_BY_LABEL
 from documents.config_exchange.remap import RULE_USER_MULTI
 from documents.config_exchange.remap import RULE_USER_SINGLE
-from documents.config_exchange.remap import iter_user_group_refs
+from documents.config_exchange.remap import iter_user_refs
 from documents.management.commands.mixins import CryptMixin
 from documents.models import SavedViewFilterRule
 from paperless import version
@@ -47,7 +48,7 @@ class ConfigExporter(CryptMixin):
         self.no_progress_bar = no_progress_bar
         self.stdout = stdout
         self.records: list[dict] = []
-        self.references: dict[str, dict] = {"auth.user": {}, "auth.group": {}}
+        self.references: dict[str, dict] = {}
         self.assets: dict[str, str] = {}
 
     def _log(self, message: str) -> None:
@@ -104,17 +105,31 @@ class ConfigExporter(CryptMixin):
 
     def _collect_references(self) -> None:
         user_pks: set[int] = set()
-        group_pks: set[int] = set()
         for record in self.records:
             cm = CONFIG_MODELS_BY_LABEL[record["model"]]
-            for related, pk in iter_user_group_refs(cm.model, record["fields"]):
-                if related is User:
-                    user_pks.add(pk)
-                else:
-                    group_pks.add(pk)
+            user_pks.update(iter_user_refs(cm.model, record["fields"]))
         user_pks.update(self._filter_rule_user_pks())
         self.references["auth.user"] = self._user_names(user_pks)
-        self.references["auth.group"] = self._group_names(group_pks)
+        self.references["auth.permission"] = self._permission_keys()
+
+    def _permission_keys(self) -> dict[str, list[str]]:
+        """Map exported group permission pks to (app_label, model, codename)."""
+        pks: set[int] = set()
+        label = Group._meta.label_lower
+        for record in self.records:
+            if record["model"] == label:
+                pks.update(record["fields"].get("permissions") or [])
+        return {
+            str(pk): [app_label, model, codename]
+            for pk, app_label, model, codename in Permission.objects.filter(
+                pk__in=pks,
+            ).values_list(
+                "pk",
+                "content_type__app_label",
+                "content_type__model",
+                "codename",
+            )
+        }
 
     def _filter_rule_user_pks(self) -> set[int]:
         pks: set[int] = set()
@@ -138,13 +153,6 @@ class ConfigExporter(CryptMixin):
                 "pk",
                 "username",
             )
-        }
-
-    @staticmethod
-    def _group_names(pks: set[int]) -> dict[str, str]:
-        return {
-            str(pk): name
-            for pk, name in Group.objects.filter(pk__in=pks).values_list("pk", "name")
         }
 
     def _encrypt_secrets(self) -> None:

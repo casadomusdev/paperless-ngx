@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from django.contrib.auth.models import Group
+from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.test import TestCase
@@ -187,9 +188,16 @@ class TestConfigExchange(DirectoriesMixin, TestCase):
         self.assertEqual(Tag.objects.filter(name="child").count(), 1)
         self.assertEqual(Tag.objects.get(name="child").color, "#112233")
 
-    def test_unresolvable_group_refs_are_dropped(self) -> None:
-        """Groups are per-instance; M2M refs to missing groups must not crash."""
+    def test_groups_are_imported_with_permissions(self) -> None:
+        """Groups (name + Django permissions, no members) transfer across."""
         group = Group.objects.create(name="cfg_group")
+        group.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="documents",
+                content_type__model="tag",
+                codename="view_tag",
+            ),
+        )
         self.action.assign_view_groups.add(group)
         self._export()
         self._wipe_config()
@@ -197,8 +205,24 @@ class TestConfigExchange(DirectoriesMixin, TestCase):
 
         self._import()
 
+        imported = Group.objects.get(name="cfg_group")
+        self.assertIn("view_tag", {p.codename for p in imported.permissions.all()})
         action = WorkflowAction.objects.get(assign_title="new title")
-        self.assertEqual(action.assign_view_groups.count(), 0)
+        self.assertIn(imported, action.assign_view_groups.all())
+        self.assertIn(Tag.objects.get(name="child"), action.assign_tags.all())
+
+    def test_unresolvable_user_refs_are_dropped(self) -> None:
+        """Users are per-instance; M2M refs to missing users must not crash."""
+        other = User.objects.create(username="cfg_other")
+        self.action.assign_view_users.add(other)
+        self._export()
+        self._wipe_config()
+        User.objects.filter(username="cfg_other").delete()
+
+        self._import()
+
+        action = WorkflowAction.objects.get(assign_title="new title")
+        self.assertEqual(action.assign_view_users.count(), 0)
         self.assertIn(Tag.objects.get(name="child"), action.assign_tags.all())
 
     def test_dry_run_changes_nothing(self) -> None:

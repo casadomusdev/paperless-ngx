@@ -10,15 +10,17 @@ from pathlib import Path
 from zipfile import ZipFile
 from zipfile import is_zipfile
 
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
 from django.core.management.base import CommandError
+from django.core.management.color import color_style
 from django.db import transaction
 
 from documents.config_exchange.exporter import CONFIG_FILE_NAME
 from documents.config_exchange.exporter import METADATA_FILE_NAME
 from documents.config_exchange.registry import CHILDREN
 from documents.config_exchange.registry import CONFIG_MODELS
+from documents.config_exchange.registry import GROUP
 from documents.config_exchange.registry import SIGNATURE
 from documents.config_exchange.registry import SINGLETON
 from documents.config_exchange.registry import UI_SETTINGS
@@ -50,11 +52,11 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         self.stdout = stdout
 
         self.records: list[dict] = []
-        self.references: dict[str, dict] = {"auth.user": {}, "auth.group": {}}
+        self.references: dict[str, dict] = {"auth.user": {}}
         self.assets: dict[str, str] = {}
         self.maps: dict = {}
         self.target_users: dict[str, User] = {}
-        self.target_groups: dict[str, Group] = {}
+        self.target_permissions: dict[tuple[str, str, str], int] = {}
         self.owner_override_id: int | None = None
         self._signature_index: dict[str, dict[str, object]] = {}
         self._cleared_rule_views: set = set()
@@ -66,7 +68,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
 
     def _warn(self, message: str) -> None:
         if self.stdout is not None:
-            self.stdout.write(self.stdout.style.WARNING(message))
+            self.stdout.write(color_style().WARNING(message))
 
     def run(self, source: Path) -> None:
         given = Path(source)
@@ -157,7 +159,18 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
 
     def _build_resolvers(self) -> None:
         self.target_users = {u.username: u for u in User.objects.all()}
-        self.target_groups = {g.name: g for g in Group.objects.all()}
+        # Permissions are per-instance rows; identify them by their stable
+        # (app_label, model, codename) triple so group permissions can be
+        # remapped across instances.
+        self.target_permissions = {
+            (app_label, model, codename): pk
+            for pk, app_label, model, codename in Permission.objects.values_list(
+                "pk",
+                "content_type__app_label",
+                "content_type__model",
+                "codename",
+            )
+        }
         if self.owner_username:
             user = self.target_users.get(self.owner_username)
             if user is None:
@@ -175,13 +188,6 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         user = self.target_users.get(username) if username else None
         return user.pk if user is not None else None
 
-    def resolve_group(self, pk) -> int | None:
-        if pk is None:
-            return None
-        name = self.references.get("auth.group", {}).get(str(pk))
-        group = self.target_groups.get(name) if name else None
-        return group.pk if group is not None else None
-
     def _records_for(self, cm: ConfigModel) -> list[dict]:
         label = cm.model._meta.label_lower
         return [r for r in self.records if r["model"] == label]
@@ -196,6 +202,8 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
                 self._import_ui_settings(cm)
             elif cm.strategy == SINGLETON:
                 self._import_singleton(cm, source)
+            elif cm.strategy == GROUP:
+                self._import_groups(cm)
             else:
                 self._import_upsert(cm)
             self._log(f"Imported {cm.key}")

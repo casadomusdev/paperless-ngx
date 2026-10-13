@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
     from django.db.models import Model
 
+from django.contrib.auth.models import Group
+
 from documents.config_exchange.rules import hook_application_config
 from documents.config_exchange.rules import hook_workflow_action
 from documents.config_exchange.rules import hook_workflow_trigger
@@ -40,6 +42,7 @@ SIGNATURE = "signature"  # match by full field signature, reuse identical row
 CHILDREN = "children"  # owned by a parent, rules are replaced on import
 UI_SETTINGS = "ui_settings"  # handled specially (keyed by username)
 SINGLETON = "singleton"  # single global row (ApplicationConfiguration)
+GROUP = "group"  # name + Django permissions, but not members (handled specially)
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,8 @@ class ConfigModel:
 
 # Order matters: dependencies must be imported before their dependents.
 CONFIG_MODELS: list[ConfigModel] = [
+    # Groups are imported first: workflow actions and UI settings reference them.
+    ConfigModel(Group, "groups", ("name",), strategy=GROUP),
     ConfigModel(Correspondent, "correspondents", ("name",), owner_field="owner"),
     ConfigModel(Tag, "tags", ("name",), owner_field="owner"),
     ConfigModel(DocumentType, "document_types", ("name",), owner_field="owner"),
