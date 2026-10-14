@@ -210,6 +210,30 @@ class TestConfigExchange(DirectoriesMixin, TestCase):
         self._import(preserve_ids=False)
         self.assertNotEqual(Tag.objects.get(name="pinned").pk, 4242)
 
+    def test_clear_removes_config_absent_from_export(self) -> None:
+        """--clear makes the target match the export rather than merging."""
+        self._export()
+        Tag.objects.create(name="local-only")
+        self._import()
+        self.assertTrue(Tag.objects.filter(name="local-only").exists())
+
+        self._import(clear=True)
+
+        self.assertFalse(Tag.objects.filter(name="local-only").exists())
+        self.assertTrue(Tag.objects.filter(name="child").exists())
+
+    def test_clear_restores_source_ids(self) -> None:
+        tag_pk = self.tag.pk
+        self._export()
+        self._import(clear=True)
+        self.assertEqual(Tag.objects.get(name="child").pk, tag_pk)
+
+    def test_dry_run_with_clear_changes_nothing(self) -> None:
+        self._export()
+        Tag.objects.create(name="local-only")
+        self._import(clear=True, dry_run=True)
+        self.assertTrue(Tag.objects.filter(name="local-only").exists())
+
     def test_collision_is_merged(self) -> None:
         self._export()
         # existing object with the same natural key but different attributes

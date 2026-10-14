@@ -43,6 +43,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         dry_run: bool = False,
         keep_enabled: bool = False,
         preserve_ids: bool = True,
+        clear: bool = False,
         no_progress_bar: bool = False,
         stdout=None,
     ) -> None:
@@ -52,6 +53,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
         self.dry_run = dry_run
         self.keep_enabled = keep_enabled
         self.preserve_ids = preserve_ids
+        self.clear = clear
         self.no_progress_bar = no_progress_bar
         self.stdout = stdout
 
@@ -98,6 +100,13 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
             self._build_resolvers()
 
             with transaction.atomic():
+                if self.clear and not self.dry_run:
+                    self._warn(
+                        "Clearing existing configuration objects first: tags are "
+                        "detached from documents and group memberships are lost",
+                    )
+                if self.clear:
+                    self._clear_config()
                 self._import_all(source)
                 if self.dry_run:
                     transaction.set_rollback(True)
@@ -198,6 +207,7 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
 
     def _import_all(self, source: Path) -> None:
         for cm in CONFIG_MODELS:
+            record_count = len(self._records_for(cm))
             if cm.strategy == CHILDREN:
                 self._import_children(cm)
             elif cm.strategy == SIGNATURE:
@@ -210,5 +220,8 @@ class ConfigImporter(MergeStrategyMixin, CryptMixin):
                 self._import_groups(cm)
             else:
                 self._import_upsert(cm)
-            self._log(f"Imported {cm.key}")
+            if record_count == 0:
+                self._log(f"{cm.key}: no records in export, nothing to do")
+            else:
+                self._log(f"{cm.key}: {record_count} record(s) processed")
         self._reset_sequences()

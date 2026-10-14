@@ -102,6 +102,7 @@ python3 manage.py config_importer /path/to/export
 | `--dry-run` | Validate and report, then roll back everything |
 | `--keep-enabled` | Keep workflows and mail rules in their exported enabled state (default: both are imported **disabled**) |
 | `--no-preserve-ids` | Let the database assign new primary keys instead of reusing the exported ids |
+| `--clear` | Delete existing configuration objects first so the target matches the export exactly (see below) |
 | `--no-progress-bar` | Suppress progress output |
 
 ### Merge semantics
@@ -132,6 +133,37 @@ warning; individual unresolvable references are dropped.
 
 Running the same import twice causes no duplicates.
 
+### Clearing the target first (`--clear`)
+
+A plain import is a **merge** — objects that exist on the target but are absent
+from the export stay behind, and objects present in both are merged by name. If
+you want the target to match the export exactly (for example after a few
+experimental imports left duplicates behind, or to get the original ids back),
+import with `--clear`:
+
+```bash
+docker compose exec webserver config_importer ../export/config-export-2026-10-14.zip --clear
+```
+
+`--clear` deletes the target's tags, document types, correspondents, storage
+paths, custom fields, saved views, workflows, mail accounts, mail rules and
+groups *before* importing, using Django's ORM (so cascades, join tables and
+denormalised columns stay consistent) plus the guardian object-permission rows
+for those models. It runs **inside the same transaction as the import**, so a
+failure — or `--dry-run` — leaves the instance untouched.
+
+Two caveats, both consequences of paperless's data model:
+
+- **Tags are detached from documents.** Deleting a tag removes it from every
+  document that used it. On an instance that already holds documents, that
+  tagging information cannot be restored by the import.
+- **Group memberships are lost.** Users are never imported (they are
+  per-instance), so groups are re-created empty.
+
+`UiSettings` (per-user preferences, incl. default permissions) and the
+`ApplicationConfiguration` singleton are deliberately **not** cleared — the
+import overwrites them anyway.
+
 ### Id preservation
 
 External tooling addresses paperless objects by id — for example
@@ -152,9 +184,8 @@ Rules and limits:
   `ApplicationConfiguration` is the singleton with id `1` either way.
 
 Consequently, to reproduce the source ids exactly you need a target where those
-ids are free. On a target that already holds config with different ids, clear the
-configuration objects first (only safe when no documents depend on them — deleting
-a tag also removes it from any documents) and then re-import.
+ids are free. Use `--clear` (below) to remove the target's existing configuration
+in the same transaction, then everything is created fresh with the exported ids.
 
 To see the mapping between names and current ids, e.g.:
 
@@ -184,7 +215,7 @@ docker compose exec webserver config_importer ../export --dry-run
 ## Notes and limitations
 
 - Import is a merge, not a mirror: objects that exist on the target but not in
-  the export are left untouched. A destructive "replace" mode does not exist.
+  the export are left untouched unless `--clear` is given.
 - References to **users that do not exist on the target** are dropped with a
   warning — users are never imported. This means `owner`, `assign_owner`,
   `assign_view_users`, `assign_change_users`, `default_*_users` and saved-view

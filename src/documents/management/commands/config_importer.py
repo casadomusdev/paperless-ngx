@@ -73,6 +73,22 @@ class Command(BaseCommand):
         )
 
         parser.add_argument(
+            "--clear",
+            dest="clear",
+            default=False,
+            action="store_true",
+            help=(
+                "Delete existing configuration objects before importing so the "
+                "target matches the export exactly. Removes tags, document "
+                "types, correspondents, storage paths, custom fields, saved "
+                "views, workflows, mail accounts/rules and groups that are not "
+                "in the export. Note: tags are detached from documents and "
+                "group memberships are lost. Runs in the same transaction as "
+                "the import, so --dry-run rolls it back."
+            ),
+        )
+
+        parser.add_argument(
             "--no-progress-bar",
             dest="no_progress_bar",
             default=False,
@@ -88,6 +104,7 @@ class Command(BaseCommand):
             dry_run=options["dry_run"],
             keep_enabled=options["keep_enabled"],
             preserve_ids=options["preserve_ids"],
+            clear=options["clear"],
             no_progress_bar=options["no_progress_bar"],
             stdout=self.stdout,
         )

@@ -11,12 +11,17 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.contrib.auth.models import Group
+from django.contrib.contenttypes.models import ContentType
 from django.core import serializers
 from django.core.management.color import no_style
 from django.db import connection
+from guardian.models import GroupObjectPermission
+from guardian.models import UserObjectPermission
 
 from documents.config_exchange.exporter import ASSETS_DIR_NAME
 from documents.config_exchange.registry import CONFIG_MODELS
+from documents.config_exchange.registry import SINGLETON
+from documents.config_exchange.registry import UI_SETTINGS
 from documents.config_exchange.remap import relation_fields
 from documents.config_exchange.remap import remap_fields
 from documents.config_exchange.remap import resolve_deferred
@@ -218,6 +223,27 @@ class MergeStrategyMixin:
             model_map[record["pk"]] = group
         self.maps[cm.model] = model_map
 
+    def _clear_config(self) -> None:
+        """
+        Delete configuration objects so the import starts from a clean slate.
+
+        Goes through the ORM rather than raw SQL so cascades, many-to-many rows
+        and denormalised columns are handled by Django. ``UiSettings`` and
+        ``ApplicationConfiguration`` are kept: per-user preferences belong to the
+        instance and the singleton is overwritten by the import anyway. Guardian
+        object-permission rows for the cleared models are removed too, so a
+        re-created row cannot inherit stale permissions.
+        """
+        models = [
+            cm.model
+            for cm in reversed(CONFIG_MODELS)
+            if cm.strategy not in (UI_SETTINGS, SINGLETON)
+        ]
+        for model in models:
+            model._default_manager.all().delete()
+        _drop_object_permissions(models)
+        self._log(f"Cleared configuration for {len(models)} model(s)")
+
     def _reset_sequences(self) -> None:
         """
         Realign database sequences after rows were inserted with explicit ids.
@@ -309,6 +335,13 @@ class MergeStrategyMixin:
         destination = Path(settings.MEDIA_ROOT) / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(asset, destination)
+
+
+def _drop_object_permissions(models) -> None:
+    """Delete guardian object permissions belonging to the given models."""
+    content_types = ContentType.objects.get_for_models(*models).values()
+    for manager in (UserObjectPermission, GroupObjectPermission):
+        manager.objects.filter(content_type__in=content_types).delete()
 
 
 def clean_scalars(model, scalars: dict) -> dict:
