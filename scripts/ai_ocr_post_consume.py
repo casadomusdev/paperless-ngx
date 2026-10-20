@@ -26,6 +26,18 @@ Configuration (set in your Docker Compose environment / .env):
                              "auto"   — try PDF first, rasterize if quality check fails
                              "always" — always rasterize before OCR (skip PDF attempt)
                              "never"  — never rasterize (old behavior)
+  AI_OCR_MIN_PAGE_PX       - (optional) Skip AI OCR entirely when the smaller
+                             page/image dimension is below this many pixels
+                             (default: 100). Set to 0 to disable the dimension
+                             check. Tiny icons are still consumed and stored as
+                             documents — they would only return empty OCR and
+                             burn pointless empty-content retries.
+  AI_OCR_MIN_FILE_BYTES    - (optional) Size-only fallback for images when the
+                             page geometry cannot be probed: images below this
+                             many bytes are treated as non-text (default: 2048).
+  AI_OCR_EMPTY_RETRIES     - (optional) Cap on retries triggered specifically
+                             by empty OCR content. Defaults to AI_OCR_MAX_RETRIES
+                             so the spurious-empty recovery is unchanged.
   AI_OCR_DEGRADATION_THRESHOLD - Garbage-line percentage above which a rasterized retry is
                              triggered in "auto" mode (default: 30)
   AI_OCR_REPEAT_MIN        - (optional) Minimum times a line must repeat to count as garbage
@@ -81,6 +93,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ai_ocr_quality import check_quality, is_table_only, llm_quality_score, rasterize_pdf
 from ai_ocr_http import http_request, retry_delay
+from ai_ocr_preflight import should_skip_ocr
 
 
 _SCRIPT_START = time.monotonic()
@@ -275,6 +288,12 @@ def main():
     quality_thresh = int(os.getenv("AI_OCR_QUALITY_THRESHOLD", "70"))
     tag_id_str    = os.getenv("AI_OCR_TAG_ID", "").strip()
     ai_ocr_tag_id = int(tag_id_str) if tag_id_str.isdigit() else None
+    # RKC: Pre-flight skip + optional empty-retry cap configuration
+    min_page_px    = int(os.getenv("AI_OCR_MIN_PAGE_PX", "100"))
+    min_file_bytes = int(os.getenv("AI_OCR_MIN_FILE_BYTES", "2048"))
+    _empty_retries_cfg = os.getenv("AI_OCR_EMPTY_RETRIES", "").strip()
+    empty_retries  = int(_empty_retries_cfg) if _empty_retries_cfg.isdigit() else max_retries
+    # /end RKC edit
 
     total_attempts = 1 + max_retries
     _log(f"Starting — doc={document_id}, model={ai_ocr_model}, archive={archive_path}")
@@ -304,6 +323,22 @@ def main():
         file_bytes = fh.read()
     _log(f"Read archive file: {len(file_bytes):,} bytes")
 
+    # RKC: Pre-flight skip — tiny images / icon-sized pages are consumed as
+    # normal documents but cannot contain text, so the OCR call (and its
+    # empty-content retries) is skipped entirely, avoiding wasted API cost
+    # and pipeline delay.
+    # ── 3b. Pre-flight skip ──────────────────────────────────────────────────
+    source_path = os.getenv("DOCUMENT_SOURCE_PATH", "")
+    skip, skip_reason = should_skip_ocr(
+        archive_path, source_path,
+        min_px=min_page_px, min_bytes=min_file_bytes,
+    )
+    if skip:
+        _log(f"Pre-flight skip — {skip_reason}; leaving Tesseract output intact")
+        sys.exit(0)
+    _log(f"Pre-flight OK — {skip_reason}")
+    # /end RKC edit
+
     ext = os.path.splitext(archive_path)[1].lower()
     mime = "application/pdf" if ext == ".pdf" else "image/jpeg"
 
@@ -328,6 +363,7 @@ def main():
     page_count = 0
     ocr_result: dict = {}
     ocr_path = "primary"  # tracks which path produced the final result
+    empty_attempt = 0  # counts retries triggered specifically by empty content
     final_model = ai_ocr_model  # tracks which model actually produced the result
     rasterized = False
 
@@ -366,14 +402,16 @@ def main():
         for line in _response_summary(ocr_result):
             _log(line, error=True)
 
-        if attempt < total_attempts:
+        # RKC: cap empty-content retries via AI_OCR_EMPTY_RETRIES
+        empty_attempt += 1
+        if empty_attempt <= empty_retries and attempt < total_attempts:
             delay = retry_delay(attempt, retry_base)
             _log(f"Attempt {attempt}/{total_attempts} — empty content. Retrying in {delay}s...")
             time.sleep(delay)
 
     if not content:
         _log(
-            f"All {total_attempts} attempts returned empty content — "
+            f"OCR returned empty content after {attempt} attempt(s) — "
             f"leaving Tesseract output intact",
             error=True,
         )

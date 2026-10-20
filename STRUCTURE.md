@@ -98,9 +98,11 @@ paperless-ngx/
 │   ├── ai_ocr_post_consume.py      # RKC: AI OCR post-consumption hook (LiteLLM /v1/ocr)
 │   ├── ai_ocr_quality.py           # RKC: OCR quality detection + PDF rasterization fallback
 │   ├── ai_ocr_http.py              # RKC: shared HTTP helper with retry/backoff for the OCR scripts
+│   ├── ai_ocr_preflight.py         # RKC: Pre-flight skip for non-text inputs (geometry probe)
 │   ├── ai_ocr_rerun.py             # RKC: Re-run logic (runs inside container, all env vars present)
 │   ├── ai_ocr_test.py              # RKC: Standalone CLI tool for testing OCR on a PDF file
 │   ├── test_ai_ocr_helpers.py      # RKC: offline unit tests for the AI OCR helpers
+│   ├── test_ai_ocr_preflight.py    # RKC: Offline unit tests for ai_ocr_preflight.py
 │   ├── check_smtp_port25.py        # RKC: Admin utility to test outbound SMTP port 25 reachability (v1.2.9)
 │   ├── post-consumption-example.sh # Upstream example post-consumption script
 │   ├── start_services.sh           # Service startup script

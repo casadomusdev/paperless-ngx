@@ -67,8 +67,11 @@ is a no-op when `AI_OCR_ENABLED` is absent or not `"true"`.
 | `AI_OCR_DEBUG`    | `false`                 | Set to `"true"` to print the extracted OCR text to stdout and skip writing to the document. Useful for inspecting OCR quality without modifying any data. |
 | `AI_OCR_LOG_FILE` | _(none)_                | Absolute path to a log file inside the container, e.g. `/logs/ai_ocr.log`. When set, every log line is appended to this file with a wallclock datetime prefix. Opt-in — no log file is written when unset. |
 | `AI_OCR_MAX_RETRIES` | `3`                 | Maximum retry attempts on transient failures (empty content, HTTP 429/5xx, connection errors). Set to `0` to disable retries. |
+| `AI_OCR_EMPTY_RETRIES` | `AI_OCR_MAX_RETRIES` | Cap on retries triggered specifically by empty OCR content. Defaults to `AI_OCR_MAX_RETRIES` so the spurious-empty recovery is unchanged. Set lower to bound cost on blank inputs. |
 | `AI_OCR_RETRY_DELAY` | `5`                 | Base retry delay in seconds. Doubles each attempt (5s → 10s → 20s). Respects `Retry-After` header on HTTP 429. |
 | `AI_OCR_RASTERIZE`   | `auto`          | Rasterization mode: `"auto"` (try PDF first, rasterize on quality failure), `"always"` (always rasterize before OCR), `"never"` (no rasterization) |
+| `AI_OCR_MIN_PAGE_PX` | `100` | Skip AI OCR entirely when the smaller page/image dimension is below this many pixels. Icon-sized images are still consumed and stored — they would only return empty OCR and burn retries. Set to `0` to disable. |
+| `AI_OCR_MIN_FILE_BYTES` | `2048` | Size-only fallback when the page geometry cannot be probed: images below this many bytes are treated as non-text. Set to `0` to disable. |
 | `AI_OCR_DEGRADATION_THRESHOLD` | `30`         | Percentage of garbage lines that triggers a retry. If the garbage percentage is below this threshold, the content is used as-is (the check is detection-only — it never strips content). |
 | `AI_OCR_REPEAT_MIN` | `4`          | Minimum times a line must repeat to count as garbage in the repetition-loop detector. Catches interleaved gibberish like `word`/`K`/`word`/`K`. Lower = more aggressive. |
 | `AI_OCR_PAPERLESS_URL` | _(falls back to `PAPERLESS_URL`)_ | Internal paperless API base URL used for the tag fetch and content PATCH, e.g. `http://webserver:8000`. Recommended: set this so the script talks to the webserver container directly — no external DNS or reverse-proxy round-trip. |
@@ -219,6 +222,40 @@ bypassed. Always configure via the model list approach above.
 - **Large file handling**: the script base64-encodes the whole PDF in memory.
   For most scanned documents (< 50 MB) this is fine. Very large multi-hundred-
   page PDFs may hit LiteLLM or provider upload limits.
+- **Pre-flight skip**: icon-sized inputs are detected before the OCR request
+  and skipped (see [Pre-flight Skip](#pre-flight-skip-non-text-inputs)); the
+  document is still stored - only the AI OCR step is skipped.
+
+---
+
+## Pre-flight Skip (Non-Text Inputs)
+
+Paperless wraps image documents (`.png`, `.jpg`, ...) into a PDF archive, so
+the post-consume hook would otherwise send them through the OCR pipeline like
+any other document. Icon-sized images (favicons, thumbnails, spurious `.png`
+files) cannot contain text, so the provider returns an empty response - which
+then triggers the empty-content retry loop, wasting paid API calls and
+holding up consumption.
+
+Before any OCR request the hook probes the input geometry and skips documents
+whose smaller page/image dimension is below `AI_OCR_MIN_PAGE_PX` (default
+`100`). Such documents are still consumed and stored normally - only the AI
+OCR step is skipped, leaving the Tesseract output intact.
+
+- Geometry comes from the original image (`DOCUMENT_SOURCE_PATH`) when it is
+  an image - exact pixel size via ImageMagick `identify`.
+- Otherwise it falls back to the archive PDF first-page size via poppler
+  `pdfinfo`. Both tools already ship in the paperless-ngx image.
+- **Fails open**: if the geometry cannot be probed the document is *not*
+  skipped, so a missing tool can never drop a real document. When geometry
+  is unavailable and the file is an image below `AI_OCR_MIN_FILE_BYTES`
+  (default `2048`), the size-only fallback treats it as non-text.
+- Set both `AI_OCR_MIN_PAGE_PX=0` and `AI_OCR_MIN_FILE_BYTES=0` to disable
+  the pre-flight check entirely.
+
+```
+AI OCR [  0.0s]: Pre-flight skip — icon.png is 57x57 - smaller than the 100px OCR floor; no text to OCR; leaving Tesseract output intact
+```
 
 ---
 
@@ -570,6 +607,7 @@ AI OCR [  7.5s]: OCR completed in 1.2s — 4 page(s), 3945 chars
 Soft skips (exit 0, paperless continues silently):
 ```
 AI OCR [  0.0s]: No archive file at '' and no source file available — skipping AI OCR
+AI OCR [  0.0s]: Pre-flight skip — icon.png is 57x57 - smaller than the 100px OCR floor; no text to OCR; leaving Tesseract output intact
 ```
 
 ### Finding Errors in the Paperless Log

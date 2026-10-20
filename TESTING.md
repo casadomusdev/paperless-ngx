@@ -26,6 +26,26 @@ Covered:
 These tests need only the Python standard library. Run them before every
 commit that touches `scripts/ai_ocr_*.py`.
 
+### AI OCR pre-flight skip
+
+The pre-flight skip logic (`scripts/ai_ocr_preflight.py`) has its own offline
+tests — no server, network, ImageMagick or poppler required (the geometry
+probes are mocked).
+
+```bash
+python3 scripts/test_ai_ocr_preflight.py
+```
+
+Expected: `Ran 18 tests ... OK`.
+
+Covered:
+- `identify` / `pdfinfo` output parsing (including multi-page and malformed output).
+- Skip decisions: tiny image/page skipped, normal image/page not skipped.
+- Fail-open behaviour when geometry cannot be probed.
+- Size-only fallback for images when geometry is unavailable.
+- Source image preferred over the archive; archive used when no source exists.
+- Both checks disabled (`min_px=0`, `min_bytes=0`) never skips.
+
 ## Syntax / import check
 
 ```bash
@@ -80,3 +100,29 @@ failure. A single momentary DNS blip should instead recover on its own.
 With `AI_OCR_PAPERLESS_URL=http://webserver:8000` set in the compose env, a
 normal consume should show `GET ... HTTP 200` and `PATCH ... HTTP 200` with no
 external hostname involved.
+
+### 5. Pre-flight skip fires on a known icon-sized document
+
+Re-run AI OCR on a document that is an icon/thumbnail:
+
+```bash
+docker exec -it casabot-filderbau-paperless \
+  python3 /usr/src/paperless/scripts/ai_ocr_rerun.py <icon_document_id>
+```
+
+Expected:
+```
+AI OCR [  0.0s]: Pre-flight skip — ... is 57x57 - smaller than the 100px OCR floor; no text to OCR; leaving Tesseract output intact
+```
+and **no** `/v1/ocr` request appears in the LiteLLM logs. Exit code 0.
+
+### 6. Normal documents are unaffected
+
+Re-run AI OCR on a regular scanned PDF; expect
+`Pre-flight OK — ... is W x H - above the 100px OCR floor` followed by a normal
+OCR run and PATCH.
+
+### 7. Disable the pre-flight check
+
+Set `AI_OCR_MIN_PAGE_PX=0` and `AI_OCR_MIN_FILE_BYTES=0` and re-run scenario 5.
+Expected: the document is OCR-OCRed as before (no skip line).
