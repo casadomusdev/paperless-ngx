@@ -2,6 +2,32 @@
 
 Upstream bug fixes and minor enhancements that don't fall under a specific feature category.
 
+## Malformed Email `From` Header (v1.7.3)
+
+### Problem
+Paperless-ngx aborts consumption of an `.eml` with `Missing 'from'` when
+`imap_tools` cannot derive a sender address from the `From` header. That happens
+whenever the display name is unquoted and contains square brackets in front of
+the angle-addr — for example
+`E-Rechnung [Schaal & Mueller] <e-rechnung@schaal-mueller.de>` - because
+`email.utils.getaddresses()` then collapses the value to `('', '')`. E-invoicing
+senders emit exactly this shape (often with an unencoded 8-bit umlaut), so those
+mails never consume.
+
+### Solution
+`src/paperless_mail/eml_parsing.py` parses the raw file and, when
+`MailMessage.from_values` is missing, extracts a sender from `From` → `Sender`
+→ `Reply-To` → `Return-Path`. It tries `getaddresses` first and falls back to a
+tolerant regex, then synthesizes an `imap_tools.EmailAddress` (also used for
+`MailMessage.from_`) so the message still consumes and the formatted text, HTML
+template and correspondent matching keep working. A message carrying no address
+in any of those headers still raises `ParseError`.
+
+### Files Modified
+- `src/paperless_mail/eml_parsing.py` — tolerant .eml parsing module
+- `src/paperless_mail/parsers.py` — `parse_file_to_message` delegates to it
+- `src/paperless_mail/tests/test_parsers.py` — tests for both malformed variants
+
 ## Webhook Docker Hostname Fix (v1.1.1)
 
 ### Problem

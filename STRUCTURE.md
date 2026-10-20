@@ -62,6 +62,7 @@ paperless-ngx/
 │   └── paperless_mail/             # Mail system app
 │       ├── models.py               # RKC: SMTP fields, FROM_SMART, PROCESS_ALL
 │       ├── mail.py                 # RKC: smart matching, pooling, metadata
+│       ├── eml_parsing.py          # RKC: tolerant .eml parsing (malformed From)
 │       ├── mail_oauth.py           # RKC: unified email backend
 │       ├── mail_graph.py           # RKC: Graph API sending (NEW)
 │       ├── mail_graph_retrieval.py # RKC: Graph API retrieval, multi-mailbox

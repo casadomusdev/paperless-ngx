@@ -22,6 +22,9 @@ from documents.parsers import DocumentParser
 from documents.parsers import ParseError
 from documents.parsers import make_thumbnail_from_pdf
 from paperless.models import OutputTypeChoices
+# RKC: Tolerant .eml parsing so emails with malformed From headers still consume
+from paperless_mail.eml_parsing import parse_eml_to_message
+# /end RKC edit
 from paperless_mail.models import MailRule
 
 
@@ -198,19 +201,9 @@ class MailDocumentParser(DocumentParser):
         """
         Parses the given .eml file into a MailMessage object
         """
-        try:
-            with filepath.open("rb") as eml:
-                parsed = MailMessage.from_bytes(eml.read())
-                if parsed.from_values is None:
-                    raise ParseError(
-                        f"Could not parse {filepath}: Missing 'from'",
-                    )
-        except Exception as err:
-            raise ParseError(
-                f"Could not parse {filepath}: {err}",
-            ) from err
-
-        return parsed
+        # RKC: Tolerant .eml parsing so emails with malformed From headers still consume
+        return parse_eml_to_message(filepath)
+        # /end RKC edit
 
     def tika_parse(self, html: str):
         self.log.info("Sending content to Tika server")

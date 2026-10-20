@@ -87,3 +87,13 @@ def live_mail_account() -> Generator[MailAccount, None, None]:
 @pytest.fixture()
 def mail_account_handler() -> MailAccountHandler:
     return MailAccountHandler()
+
+
+@pytest.fixture(scope="session")
+def malformed_from_brackets_file(sample_dir: Path) -> Path:
+    return sample_dir / "malformed_from_brackets.eml"
+
+
+@pytest.fixture(scope="session")
+def malformed_from_8bit_file(sample_dir: Path) -> Path:
+    return sample_dir / "malformed_from_8bit.eml"

@@ -131,6 +131,11 @@ Bug fixes only get their own version entry when they address **upstream Paperles
 - **SSO UiSettings Auto-Creation** — Prevents login errors for new SSO users
 - **OCRmyPDF Text Degradation Fallback** — PDFs with corrupted internal streams cause Ghostscript to mangle the text layer during PDF/A conversion (font substitution, garbled text). The parser now compares post-OCR text against the original; if >50% of text was lost, it falls back to the original text while preserving the archive PDF for downstream features
 
+- **Malformed Email `From` Header** — Emails whose `From` display name
+  has unquoted square brackets (`E-Rechnung [Schaal & Mueller] <...>`) are no
+  longer rejected with `Missing 'from'`; the sender is recovered from `Sender`
+  / `Reply-To` / `Return-Path` or a tolerant regex
+
 → [Details](docs/rkc/bug-fixes.md)
 
 ---
@@ -247,6 +252,13 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.7.3** — Tolerant .eml parsing: emails whose `From` header carries
+  an unquoted display name with square brackets (e.g.
+  `E-Rechnung [Schaal & Mueller] <e-rechnung@schaal-mueller.de>`) were rejected
+  with `Missing 'from'` because `email.utils.getaddresses()` returns nothing
+  for that shape. The parser now falls back to `Sender` / `Reply-To` /
+  `Return-Path` and a tolerant regex, synthesizing the sender so the mail
+  consumes. New module `src/paperless_mail/eml_parsing.py`.
 - **v1.7.2** — AI OCR pre-flight skip for non-text inputs: before any OCR request the post-consume script probes the input geometry (ImageMagick `identify` for images, poppler `pdfinfo` for PDFs) and skips documents whose smaller dimension is below `AI_OCR_MIN_PAGE_PX` (default 100) — e.g. icon-sized `.png` files that paperless wraps into a PDF archive. Such documents are still consumed and stored; only the AI OCR step is skipped, avoiding wasted API calls and the empty-content retry loop that held up consumption. Fails open when geometry cannot be probed. New env vars: `AI_OCR_MIN_PAGE_PX`, `AI_OCR_MIN_FILE_BYTES`, `AI_OCR_EMPTY_RETRIES`. New module `scripts/ai_ocr_preflight.py`.
 - **v1.7.1** — AI OCR transient-failure hardening: the paperless API tag `GET` and content `PATCH` now retry with exponential backoff (reusing `AI_OCR_MAX_RETRIES` / `AI_OCR_RETRY_DELAY`), so a momentary DNS/connection hiccup no longer fails an entire document consumption. New `AI_OCR_PAPERLESS_URL` env var lets the script call the internal webserver URL (`http://webserver:8000`) instead of the public domain, removing the external-DNS dependency. Persistent failures still exit non-zero (loud fail). Shared retry helper in `scripts/ai_ocr_http.py`.
 - **v1.7.0** — Instance-to-instance configuration export/import: `config_exporter` and `config_importer` management commands (registered in Docker) backed by `documents/config_exchange/`. Exports all configuration except documents; excludes users and SSO as per-instance, but imports groups with their Django permissions (members excluded). Idempotent natural-key/signature merge with full PK remapping; exported ids are reused for newly created rows (sequences realigned) so id-based integrations keep working, opt out with `--no-preserve-ids`; `--clear` wipes the target's existing configuration first (same transaction) for an exact match; imported workflows and mail rules arrive disabled (opt out with `--keep-enabled`); `--passphrase` encryption of mail secrets, `--dry-run`, `--owner`, `--ui-settings-user`.
@@ -318,7 +330,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 ### When Upgrading Paperless-ngx
 
 1. **Search for `RKC:` markers** before applying updates — all custom code is tagged
-2. **Review key files**: `src/documents/views.py`, `src/documents/signals/handlers.py`, `src/documents/consumer.py`, `src/paperless_mail/mail.py`, `src/paperless_mail/mail_oauth.py`, `src/paperless_mail/mail_graph.py`, `src/paperless_mail/mail_graph_retrieval.py`
+2. **Review key files**: `src/documents/views.py`, `src/documents/signals/handlers.py`, `src/documents/consumer.py`, `src/paperless_mail/mail.py`, `src/paperless_mail/mail_oauth.py`, `src/paperless_mail/mail_graph.py`, `src/paperless_mail/mail_graph_retrieval.py`, `src/paperless_mail/parsers.py`, `src/paperless_mail/eml_parsing.py`
 3. **Test customizations** after upgrade (PDF editor, saved views, mail system, workflow emails)
 4. **Update this documentation** if customizations change
 
@@ -345,7 +357,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | [`docs/rkc/duplicate-readd.md`](docs/rkc/duplicate-readd.md) | Duplicate document re-add with tagging, notes, trash handling |
 | [`docs/rkc/mail-system.md`](docs/rkc/mail-system.md) | Universal SMTP, Graph API, multi-mailbox, OAuth2, connection pooling, smart correspondents, metadata, processed mail UI |
 | [`docs/rkc/workflow-email.md`](docs/rkc/workflow-email.md) | Dynamic workflow email templates with Jinja2, HTML auto-detection, error tagging |
-| [`docs/rkc/bug-fixes.md`](docs/rkc/bug-fixes.md) | Webhook hostname fix, dashboard race condition, card date format, tooltip dark mode, pagination, text degradation fallback |
+| [`docs/rkc/bug-fixes.md`](docs/rkc/bug-fixes.md) | Webhook hostname fix, dashboard race condition, card date format, tooltip dark mode, pagination, text degradation fallback, malformed email From header |
 | [`docs/rkc/environment-variables.md`](docs/rkc/environment-variables.md) | Complete reference table of ALL RKC environment variables |
 | [`docs/rkc/config-export-import.md`](docs/rkc/config-export-import.md) | Instance-to-instance configuration export/import commands, merge semantics, options, limitations |
 

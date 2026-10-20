@@ -26,6 +26,13 @@
 - [x] `scripts/test_ai_ocr_preflight.py` (offline unit tests) + TESTING.md
 - [x] docs/rkc/ai-ocr.md, RKC_CUSTOMIZATIONS.md, STRUCTURE.md
 
+## Tolerant .eml parsing (v1.7.3)
+- [x] New `src/paperless_mail/eml_parsing.py` (tolerant From/Sender/Reply-To/Return-Path)
+- [x] `src/paperless_mail/parsers.py` delegates `parse_file_to_message`
+- [x] Sample fixtures + unit tests in `paperless_mail/tests/`
+- [x] docs/rkc/bug-fixes.md, RKC_CUSTOMIZATIONS.md, STRUCTURE.md
+- [ ] Optional: run the real pytest suite (needs `uv sync`)
+
 ## Future improvements
 - Offline unit tests for `rasterize_pdf()` (needs poppler/ImageMagick).
 - Consider retry for the downloads in `ai_ocr_rerun.py` / `ai_ocr_test.py`.

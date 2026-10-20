@@ -11,6 +11,7 @@ from pytest_httpx import HTTPXMock
 from pytest_mock import MockerFixture
 
 from documents.parsers import ParseError
+from paperless_mail.eml_parsing import tolerant_from_values
 from paperless_mail.parsers import MailDocumentParser
 
 
@@ -86,6 +87,108 @@ class TestEmailFileParsing:
         assert parsed_msg.subject == "Simple Text Mail"
         assert parsed_msg.text == "This is just a simple Text Mail.\n"
         assert parsed_msg.to == ("some@one.de",)
+
+
+    def test_parse_malformed_from_brackets(
+        self,
+        mail_parser: MailDocumentParser,
+        malformed_from_brackets_file: Path,
+    ):
+        """
+        GIVEN:
+            - An .eml whose From display name has unquoted square brackets
+        WHEN:
+            - The file is parsed
+        THEN:
+            - The sender address is still recovered
+        """
+        parsed = mail_parser.parse_file_to_message(malformed_from_brackets_file)
+
+        assert parsed.from_ == "e-rechnung@schaal-mueller.de"
+        assert parsed.from_values is not None
+        assert parsed.from_values.email == "e-rechnung@schaal-mueller.de"
+        assert parsed.from_values.name == "E-Rechnung [Schaal & Mueller]"
+
+    def test_parse_malformed_from_8bit(
+        self,
+        mail_parser: MailDocumentParser,
+        malformed_from_8bit_file: Path,
+    ):
+        """
+        GIVEN:
+            - An .eml with a raw 8-bit umlaut and square brackets in From
+        WHEN:
+            - The file is parsed
+        THEN:
+            - The sender address is still recovered
+        """
+        parsed = mail_parser.parse_file_to_message(malformed_from_8bit_file)
+
+        assert parsed.from_ == "e-rechnung@schaal-mueller.de"
+        assert parsed.from_values is not None
+        assert parsed.from_values.email == "e-rechnung@schaal-mueller.de"
+        assert "E-Rechnung" in parsed.from_values.name
+
+    def test_parse_malformed_from_builds_formatted_text(
+        self,
+        mocker: MockerFixture,
+        mail_parser: MailDocumentParser,
+        malformed_from_brackets_file: Path,
+    ):
+        """
+        GIVEN:
+            - An .eml whose From display name has unquoted square brackets
+        WHEN:
+            - The full parse runs
+        THEN:
+            - The formatted text carries the recovered sender
+        """
+        mocker.patch(
+            "paperless_mail.parsers.MailDocumentParser.generate_pdf",
+        )
+
+        mail_parser.parse(malformed_from_brackets_file, "message/rfc822")
+
+        assert "From: E-Rechnung [Schaal & Mueller]" in mail_parser.text
+
+
+class TestTolerantFromValues:
+    """
+    Tests for the tolerant sender extraction helper
+    """
+
+    def test_falls_back_to_sender(self):
+        """
+        GIVEN:
+            - An .eml whose From header carries no address
+        WHEN:
+            - The sender is extracted tolerantly
+        THEN:
+            - The Sender header is used
+        """
+        raw = (
+            b"From: Rechnung [Schaal]\r\n"
+            b"Sender: <sender@example.org>\r\n"
+            b"Subject: Test\r\n"
+            b"\r\n"
+            b"body\r\n"
+        )
+
+        address = tolerant_from_values(raw)
+
+        assert address is not None
+        assert address.email == "sender@example.org"
+
+    def test_returns_none_without_address(self):
+        """
+        GIVEN:
+            - A file that is not a valid email
+        WHEN:
+            - The sender is extracted tolerantly
+        THEN:
+            - No address is returned
+        """
+        assert tolerant_from_values(b"This is not a valid eml.") is None
 
 
 class TestEmailMetadataExtraction:
