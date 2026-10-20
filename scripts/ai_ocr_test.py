@@ -152,7 +152,9 @@ def main():
             "  AI_OCR_URL    LiteLLM proxy base URL (required)\n"
             "  AI_OCR_KEY    LiteLLM virtual API key (required)\n"
             "  AI_OCR_MODEL  Default OCR model (default: mistral-ocr-latest)\n"
-            "  PAPERLESS_URL           Paperless URL for --doc-id mode\n"
+            "  AI_OCR_PAPERLESS_URL    Internal paperless URL for --doc-id mode\n"
+            "                          (falls back to PAPERLESS_URL)\n"
+            "  PAPERLESS_URL           Public paperless URL (fallback)\n"
             "  PAPERLESS_API_TOKEN     Paperless API token for --doc-id mode\n"
         ),
     )
@@ -192,7 +194,11 @@ def main():
 
     # ── Get file bytes ─────────────────────────────────────────────────────────
     if args.doc_id:
-        paperless_url = os.getenv("PAPERLESS_URL", "http://localhost:8000").rstrip("/")
+        # RKC: prefer the internal URL; falls back to PAPERLESS_URL when unset.
+        paperless_url = (
+            os.getenv("AI_OCR_PAPERLESS_URL", "").strip()
+            or os.getenv("PAPERLESS_URL", "http://localhost:8000")
+        ).rstrip("/")
         paperless_tok = os.getenv("PAPERLESS_API_TOKEN", "")
         if not paperless_tok:
             print("Error: PAPERLESS_API_TOKEN not set for --doc-id mode.", file=sys.stderr)

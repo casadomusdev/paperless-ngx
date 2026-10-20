@@ -63,10 +63,11 @@ Complete reference of all environment variables introduced by RKC customizations
 | `AI_OCR_QUALITY_KEY` | String | _(none)_ | API key for quality model (falls back to `AI_OCR_KEY`) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_QUALITY_URL` | String | _(none)_ | LiteLLM URL for quality model (falls back to `AI_OCR_URL`) | [AI OCR](ai-ocr.md) |
 | `AI_OCR_QUALITY_THRESHOLD` | Integer | `70` | Minimum quality score (0-100) to accept without rasterizing | [AI OCR](ai-ocr.md) |
-| `PAPERLESS_URL` | String | `http://localhost:8000` | Internal paperless URL (used by OCR script) | [AI OCR](ai-ocr.md) |
+| `AI_OCR_PAPERLESS_URL` | String | _(falls back to `PAPERLESS_URL`)_ | Internal paperless API base URL for the OCR tag GET / content PATCH (e.g. `http://webserver:8000`) | [AI OCR](ai-ocr.md) |
+| `PAPERLESS_URL` | String | `http://localhost:8000` | Public paperless URL; fallback for `AI_OCR_PAPERLESS_URL` (also a core paperless-ngx setting) | [AI OCR](ai-ocr.md) |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless superuser API token for OCR script | [AI OCR](ai-ocr.md) |
 
-> Note: `PAPERLESS_URL` and `PAPERLESS_API_TOKEN` are used exclusively by the AI OCR post-consumption script. They are not consumed by paperless-ngx itself.
+> Note: `AI_OCR_PAPERLESS_URL` (or its `PAPERLESS_URL` fallback) and `PAPERLESS_API_TOKEN` are consumed by the AI OCR post-consumption script. `PAPERLESS_URL` is additionally a core paperless-ngx setting (CSRF/CORS/host, email links, OAuth callbacks) — prefer `AI_OCR_PAPERLESS_URL` for the script so it reaches the internal webserver directly.
 
 ## Document Processing
 

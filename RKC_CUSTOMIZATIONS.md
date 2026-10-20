@@ -206,11 +206,18 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 | `AI_OCR_KEY` | String | — | LiteLLM virtual API key |
 | `AI_OCR_MODEL` | String | `mistral-ocr-latest` | OCR model name |
 | `AI_OCR_TAG_ID` | Int | None | Tag ID to apply on successful AI OCR |
-| `AI_OCR_MAX_RETRIES` | Int | `3` | Max retries on transient OCR failures (empty content, HTTP 429/5xx) |
+| `AI_OCR_MAX_RETRIES` | Int | `3` | Max retries on transient failures (OCR + paperless API calls: empty content, DNS/connection errors, HTTP 429/5xx) |
 | `AI_OCR_RETRY_DELAY` | Int | `5` | Base retry delay in seconds; doubles each attempt |
-| `AI_OCR_RASTERIZE_FALLBACK` | Bool | `true` | Rasterize PDF and retry when quality check detects degraded output |
-| `AI_OCR_DEGRADATION_THRESHOLD` | Int | `30` | Garbage-line percentage above which rasterized retry triggers |
+| `AI_OCR_RASTERIZE` | String | `auto` | Rasterization mode: `auto`, `always`, or `never` |
+| `AI_OCR_DEGRADATION_THRESHOLD` | Int | `30` | Garbage-line percentage above which a fallback/rasterized retry triggers |
 | `AI_OCR_REPEAT_MIN` | Int | `4` | Minimum repeat count for the repetition-loop garbage detector |
+| `AI_OCR_FALLBACK_MODEL` | String | — | Fallback OCR model for degraded output |
+| `AI_OCR_STATS_LOG` | String | — | Path to JSON-lines stats log |
+| `AI_OCR_QUALITY_MODEL` | String | — | Cheap LLM model for quality scoring (disabled if empty) |
+| `AI_OCR_QUALITY_KEY` | String | — | API key for the quality model (falls back to `AI_OCR_KEY`) |
+| `AI_OCR_QUALITY_URL` | String | — | LiteLLM URL for quality model (falls back to `AI_OCR_URL`) |
+| `AI_OCR_QUALITY_THRESHOLD` | Int | `70` | Minimum quality score (0-100) to accept without rasterizing |
+| `AI_OCR_PAPERLESS_URL` | String | — | Internal paperless API URL for the OCR tag GET / content PATCH (falls back to `PAPERLESS_URL`) |
 | `PAPERLESS_API_TOKEN` | String | — | Paperless API token for AI OCR script |
 | `PAPERLESS_CONSUMER_READD_DOCUMENTS` | Bool | `false` | Enable duplicate re-add |
 | `PAPERLESS_CONSUMER_READD_TAG_ID` | Int | None | Tag ID for re-added documents |
@@ -237,6 +244,7 @@ Complete reference with types and defaults. → [Full details](docs/rkc/environm
 
 ## Version History
 
+- **v1.7.1** — AI OCR transient-failure hardening: the paperless API tag `GET` and content `PATCH` now retry with exponential backoff (reusing `AI_OCR_MAX_RETRIES` / `AI_OCR_RETRY_DELAY`), so a momentary DNS/connection hiccup no longer fails an entire document consumption. New `AI_OCR_PAPERLESS_URL` env var lets the script call the internal webserver URL (`http://webserver:8000`) instead of the public domain, removing the external-DNS dependency. Persistent failures still exit non-zero (loud fail). Shared retry helper in `scripts/ai_ocr_http.py`.
 - **v1.7.0** — Instance-to-instance configuration export/import: `config_exporter` and `config_importer` management commands (registered in Docker) backed by `documents/config_exchange/`. Exports all configuration except documents; excludes users and SSO as per-instance, but imports groups with their Django permissions (members excluded). Idempotent natural-key/signature merge with full PK remapping; exported ids are reused for newly created rows (sequences realigned) so id-based integrations keep working, opt out with `--no-preserve-ids`; `--clear` wipes the target's existing configuration first (same transaction) for an exact match; imported workflows and mail rules arrive disabled (opt out with `--keep-enabled`); `--passphrase` encryption of mail secrets, `--dry-run`, `--owner`, `--ui-settings-user`.
 - **v1.6.5** — AI OCR in-line repetition detection: `check_quality()` gains a third signal (character n-gram distinctness) that catches runaway loops living *inside* a single line with no line breaks — e.g. an OCR result whose whole body is one JSON string repeating `567a/567b/…/567z/` thousands of times. Both line-based signals previously missed this and the result was accepted as "clean", overwriting document content.
 - **v1.6.4** — AI OCR response parsing hardening: `_extract_text()` now falls back to concatenating a page's `blocks[].content` when `header`/`markdown`/`footer` are all empty, so OCR text returned only inside the block list is still captured (applied to both the post-consume script and the `ai_ocr_test.py` CLI).

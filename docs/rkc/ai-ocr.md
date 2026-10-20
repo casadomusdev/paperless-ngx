@@ -71,7 +71,8 @@ is a no-op when `AI_OCR_ENABLED` is absent or not `"true"`.
 | `AI_OCR_RASTERIZE`   | `auto`          | Rasterization mode: `"auto"` (try PDF first, rasterize on quality failure), `"always"` (always rasterize before OCR), `"never"` (no rasterization) |
 | `AI_OCR_DEGRADATION_THRESHOLD` | `30`         | Percentage of garbage lines that triggers a retry. If the garbage percentage is below this threshold, the content is used as-is (the check is detection-only — it never strips content). |
 | `AI_OCR_REPEAT_MIN` | `4`          | Minimum times a line must repeat to count as garbage in the repetition-loop detector. Catches interleaved gibberish like `word`/`K`/`word`/`K`. Lower = more aggressive. |
-| `PAPERLESS_URL`   | `http://localhost:8000` | Internal paperless URL |
+| `AI_OCR_PAPERLESS_URL` | _(falls back to `PAPERLESS_URL`)_ | Internal paperless API base URL used for the tag fetch and content PATCH, e.g. `http://webserver:8000`. Recommended: set this so the script talks to the webserver container directly — no external DNS or reverse-proxy round-trip. |
+| `PAPERLESS_URL`   | `http://localhost:8000` | Public paperless URL, used as the fallback for `AI_OCR_PAPERLESS_URL`. Note it is also a core paperless-ngx setting (CSRF/CORS/host, email links, OAuth callbacks), so it often points at the public domain. |
 
 ---
 
@@ -86,7 +87,7 @@ services:
       AI_OCR_URL: "http://litellm:4000"
       AI_OCR_KEY: "sk-your-litellm-virtual-key"
       AI_OCR_MODEL: "mistral-ocr-latest"
-      PAPERLESS_URL: "http://webserver:8000"
+      AI_OCR_PAPERLESS_URL: "http://webserver:8000"
       PAPERLESS_API_TOKEN: "your-paperless-superuser-token"
 
   celery: *paperless   # consumer runs in the celery service
@@ -208,6 +209,13 @@ bypassed. Always configure via the model list approach above.
   with code 0 and logs clearly (no error; paperless continues normally).  If
   the OCR returns empty content, the script exits with code 0 (no-op),
   preserving Tesseract output.
+- **Transient-failure retries**: the tag `GET` and content `PATCH` calls to
+  the paperless API retry on DNS/connection errors, timeouts and HTTP
+  429/5xx with exponential backoff (`AI_OCR_MAX_RETRIES` /
+  `AI_OCR_RETRY_DELAY`).  A momentary resolver blip (e.g. `Name or service
+  not known`) no longer fails an entire document consumption.  Persistent
+  failures still exit non-zero, so the consume task is logged as failed —
+  no silent data loss.
 - **Large file handling**: the script base64-encodes the whole PDF in memory.
   For most scanned documents (< 50 MB) this is fine. Very large multi-hundred-
   page PDFs may hit LiteLLM or provider upload limits.

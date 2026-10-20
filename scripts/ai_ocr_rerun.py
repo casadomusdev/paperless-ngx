@@ -47,7 +47,12 @@ def main():
 
     doc_id = sys.argv[1]
 
-    paperless_url = os.environ.get("PAPERLESS_URL", "http://localhost:8000").rstrip("/")
+    # RKC: prefer the internal URL so no external DNS is needed; falls
+    # back to PAPERLESS_URL (the public URL) when AI_OCR_PAPERLESS_URL is unset.
+    paperless_url = (
+        os.environ.get("AI_OCR_PAPERLESS_URL", "").strip()
+        or os.environ.get("PAPERLESS_URL", "http://localhost:8000")
+    ).rstrip("/")
     paperless_tok = os.environ.get("PAPERLESS_API_TOKEN", "")
 
     if not paperless_tok:

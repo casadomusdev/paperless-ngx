@@ -46,7 +46,12 @@ Configuration (set in your Docker Compose environment / .env):
   AI_OCR_QUALITY_URL      - (optional) LiteLLM URL for quality model. Falls back to AI_OCR_URL.
   AI_OCR_QUALITY_THRESHOLD - Minimum quality score (0-100) to accept (default: 70).
                              Below this, rasterization is triggered.
-  PAPERLESS_URL            - Internal paperless URL, e.g. "http://webserver:8000"
+  AI_OCR_PAPERLESS_URL      - (optional) Internal paperless API base URL used for the
+                              tag GET / content PATCH, e.g. "http://webserver:8000".
+                              Falls back to PAPERLESS_URL when unset. Prefer this so
+                              the script talks to the webserver container directly
+                              (no external DNS needed).
+  PAPERLESS_URL            - Paperless URL; used as the fallback for AI_OCR_PAPERLESS_URL
   PAPERLESS_API_TOKEN      - Paperless superuser API token
 
 Injected by paperless-ngx automatically:
@@ -75,6 +80,7 @@ import urllib.request
 # Add the scripts directory to the path so we can import the quality helper.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ai_ocr_quality import check_quality, is_table_only, llm_quality_score, rasterize_pdf
+from ai_ocr_http import http_request, retry_delay
 
 
 _SCRIPT_START = time.monotonic()
@@ -209,16 +215,6 @@ def _response_summary(raw: dict) -> list[str]:
     return lines
 
 
-def _retry_delay(attempt: int, base: int, exc: object = None) -> int:
-    """Calculate delay for retry attempt (1-indexed). Respects Retry-After on 429."""
-    delay = base * (2 ** (attempt - 1))
-    if exc is not None and getattr(exc, "code", 0) == 429:
-        ra = getattr(getattr(exc, "headers", {}), "get", lambda *_: "")("Retry-After", "")
-        if str(ra).isdigit():
-            delay = max(int(ra), delay)
-    return delay
-
-
 _MIN_CANDIDATE_CHARS = 20
 
 
@@ -258,7 +254,12 @@ def main():
     ai_ocr_url    = os.getenv("AI_OCR_URL", "").rstrip("/")
     ai_ocr_key    = os.getenv("AI_OCR_KEY", "")
     ai_ocr_model  = os.getenv("AI_OCR_MODEL", "mistral-ocr-latest")
-    paperless_url = os.getenv("PAPERLESS_URL", "http://localhost:8000").rstrip("/")
+    # RKC: prefer the internal URL so the tag GET / content PATCH need no
+    # external DNS. PAPERLESS_URL stays the public URL for paperless itself.
+    paperless_url = (
+        os.getenv("AI_OCR_PAPERLESS_URL", "").strip()
+        or os.getenv("PAPERLESS_URL", "http://localhost:8000")
+    ).rstrip("/")
     paperless_tok = os.getenv("PAPERLESS_API_TOKEN", "")
     document_id   = os.getenv("DOCUMENT_ID", "")
     archive_path  = os.getenv("DOCUMENT_ARCHIVE_PATH", "")
@@ -340,7 +341,7 @@ def main():
             body = exc.read().decode("utf-8", errors="replace")
             _log(f"OCR request failed — HTTP {exc.code}: {body[:500]}", error=True)
             if exc.code in (429, 500, 502, 503, 504) and attempt < total_attempts:
-                delay = _retry_delay(attempt, retry_base, exc)
+                delay = retry_delay(attempt, retry_base, exc)
                 _log(f"Attempt {attempt}/{total_attempts} — HTTP {exc.code}. Retrying in {delay}s...")
                 time.sleep(delay)
                 continue
@@ -348,7 +349,7 @@ def main():
         except (urllib.error.URLError, Exception) as exc:
             _log(f"OCR request failed — {exc}", error=True)
             if attempt < total_attempts:
-                delay = _retry_delay(attempt, retry_base)
+                delay = retry_delay(attempt, retry_base)
                 _log(f"Attempt {attempt}/{total_attempts} — {type(exc).__name__}. Retrying in {delay}s...")
                 time.sleep(delay)
                 continue
@@ -366,7 +367,7 @@ def main():
             _log(line, error=True)
 
         if attempt < total_attempts:
-            delay = _retry_delay(attempt, retry_base)
+            delay = retry_delay(attempt, retry_base)
             _log(f"Attempt {attempt}/{total_attempts} — empty content. Retrying in {delay}s...")
             time.sleep(delay)
 
@@ -590,16 +591,15 @@ def main():
     if ai_ocr_tag_id is not None:
         _log(f"Fetching current tags for document {document_id} (tag_id={ai_ocr_tag_id})...")
         t_get = time.monotonic()
-        get_req = urllib.request.Request(
-            f"{paperless_url}/api/documents/{document_id}/",
-            headers={"Authorization": f"Token {paperless_tok}"},
-            method="GET",
-        )
         try:
-            with urllib.request.urlopen(get_req, timeout=30) as resp:
-                doc_data = json.loads(resp.read())
-            _log(f"GET completed in {time.monotonic() - t_get:.1f}s — HTTP {resp.status}")
-            current_tags: list = doc_data.get("tags", [])
+            body, status = http_request(
+                f"{paperless_url}/api/documents/{document_id}/",
+                headers={"Authorization": f"Token {paperless_tok}"},
+                timeout=30, retries=max_retries, retry_base=retry_base,
+                log=_log, label="GET",
+            )
+            _log(f"GET completed in {time.monotonic() - t_get:.1f}s — HTTP {status}")
+            current_tags: list = json.loads(body).get("tags", [])
             if ai_ocr_tag_id not in current_tags:
                 current_tags.append(ai_ocr_tag_id)
             patch_payload["tags"] = current_tags
@@ -617,20 +617,19 @@ def main():
     )
     t_patch = time.monotonic()
 
-    patch_req = urllib.request.Request(
-        f"{paperless_url}/api/documents/{document_id}/",
-        data=json.dumps(patch_payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Token {paperless_tok}",
-        },
-        method="PATCH",
-    )
-
     try:
-        with urllib.request.urlopen(patch_req, timeout=60) as resp:
-            resp.read()
-        _log(f"PATCH completed in {time.monotonic() - t_patch:.1f}s — HTTP {resp.status}")
+        _, status = http_request(
+            f"{paperless_url}/api/documents/{document_id}/",
+            method="PATCH",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Token {paperless_tok}",
+            },
+            data=json.dumps(patch_payload).encode("utf-8"),
+            timeout=60, retries=max_retries, retry_base=retry_base,
+            log=_log, label="PATCH",
+        )
+        _log(f"PATCH completed in {time.monotonic() - t_patch:.1f}s — HTTP {status}")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         _log(f"PATCH failed — HTTP {exc.code}: {body[:500]}", error=True)
